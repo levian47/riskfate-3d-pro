@@ -1,0 +1,69 @@
+name: Godot Web / GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out game
+        uses: actions/checkout@v4
+
+      - name: Download Godot 4.7.2 and matching export templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="4.7.2"
+          release="https://github.com/godotengine/godot-builds/releases/download/${version}-stable"
+          curl -fL --retry 3 -o "$RUNNER_TEMP/godot.zip" "$release/Godot_v${version}-stable_linux.x86_64.zip"
+          curl -fL --retry 3 -o "$RUNNER_TEMP/templates.tpz" "$release/Godot_v${version}-stable_export_templates.tpz"
+          unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP/godot-bin"
+          godot_bin="$RUNNER_TEMP/godot-bin/Godot_v${version}-stable_linux.x86_64"
+          chmod +x "$godot_bin"
+          echo "GODOT_BIN=$godot_bin" >> "$GITHUB_ENV"
+          unzip -q "$RUNNER_TEMP/templates.tpz" -d "$RUNNER_TEMP/godot-export"
+          mkdir -p "$HOME/.local/share/godot/export_templates"
+          mv "$RUNNER_TEMP/godot-export/templates" "$HOME/.local/share/godot/export_templates/${version}.stable"
+          "$godot_bin" --headless --version
+
+      - name: Import project assets
+        run: |
+          "$GODOT_BIN" --headless --path . --editor --quit
+
+      - name: Export Web build
+        run: |
+          mkdir -p dist
+          "$GODOT_BIN" --headless --path . --export-release Web "$PWD/dist/index.html"
+          test -s dist/index.html
+          test -s dist/index.js
+          test -s dist/index.wasm
+          test -s dist/index.pck
+          touch dist/.nojekyll
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
