@@ -48,6 +48,26 @@ https://levian47.github.io/riskfate-3d-pro/
 
 У вихідній папці — 93 файли, приблизно 103 МБ, переважно через великі карти нормалей. Решту **не перенесено**: наразі вони не задіяні в грі, і масове копіювання без оптимізації збільшило б розмір робочих ресурсів.
 
+## Відібрані 3D-моделі (07.11.2026)
+
+За дозволом власника збережено **51 модель формату `.glb`** (5 046 976 байтів) і **одну спільну текстуру** Kenney (`Textures/colormap.png`, 11 143 байти). Файли розміщені у функціональних каталогах без дублювання FBX/OBJ:
+
+- `assets/characters/monsters/` — **Orc** і **Blue Demon** із власними вбудованими анімаціями.
+- `assets/characters/monsters/skeletons/` — **Skeleton_Mage, Skeleton_Minion, Skeleton_Rogue, Skeleton_Warrior** і два окремі набори анімацій у `animations/`. Анімації ще потрібно підключити/протестувати з відповідним ригом.
+- `assets/equipment/weapons/` — **19 моделей** зброї та щитів.
+- `assets/environment/settlement/` — **24 модульні моделі** для майбутнього поселення та оточення, разом із потрібною текстурою `Textures/colormap.png`.
+
+**Не інтегровано до сцени:** ці файли поки є бібліотекою 3D-ресурсів усередині Godot-проєкту. Без окремого завдання не змінювалися сцена, керування, камера, колізії й механіки. Реальний вигляд, масштаби, сумісність анімацій і FPS під час використання ще належить перевірити.
+
+**Автори й ліцензії:**
+
+- [Quaternius Orc (Poly Pizza)](https://poly.pizza/m/5vO2YJsPEf) та [Blue Demon (Poly Pizza)](https://poly.pizza/m/S7jYW6Amye) — **CC0** на сторінках конкретних моделей.
+- [KayKit Skeletons 1.1 FREE](https://kaylousberg.itch.io/kaykit-skeletons) — **CC0**, підтверджено файлом `License.txt` в оригінальному архіві.
+- [Avramania Weapons & Shields FREE](https://www.avramania.com/) — **CC0**, підтверджено файлом `License.txt` в оригінальному архіві.
+- [Kenney Fantasy Town Kit 2.0](https://kenney.nl/assets/fantasy-town-kit) — **CC0**, підтверджено файлом `License.txt` в оригінальному архіві.
+
+**Не перенесено до гри:** Soldier із [Poly Pizza](https://poly.pizza/m/oAArCNHjFB) (ліцензія **Creative Commons Attribution**) та весь Kenney UI Pack. Оригінальні **7 завантажень**, включно з повними архівами, збережено в особистій бібліотеці ChatGPT за шляхом `Riskfate 3D Pro / Asset Library`. Вона не є частиною Web-збірки.
+
 ## Чинна документація
 
 | Файл | Призначення |
