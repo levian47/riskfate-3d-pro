@@ -95,13 +95,46 @@ func _run_checks() -> void:
 		return
 	touch_controls.move_vector = Vector2.ZERO
 
+	# Stationary combat target: front-facing reach, once per swing, HP and reset.
+	var dummy := game.get_node_or_null("Environment/TrainingDummy")
+	if not _require(dummy != null and int(dummy.get("hp")) == 100, "Training dummy must spawn with 100 HP"):
+		return
+	var original_position := hero.global_position
+	var original_rotation := game.get("visual").rotation.y
+	hero.global_position = Vector3(0, 0.2, 5.1)
+	game.get("visual").rotation.y = 0.0
+	game.call("_resolve_training_hit")
+	if not _require(int(dummy.get("hp")) == 75 and dummy.get_node("HealthLabel").text == "HP 75 / 100", "Facing target in reach should lose 25 HP"):
+		return
+	game.get("visual").rotation.y = PI
+	game.call("_resolve_training_hit")
+	if not _require(int(dummy.get("hp")) == 75, "Back-facing attack must not deal damage"):
+		return
+	game.get("visual").rotation.y = 0.0
+	hero.global_position = Vector3(0, 0.2, 0)
+	game.call("_resolve_training_hit")
+	if not _require(int(dummy.get("hp")) == 75, "Out-of-range attack must not deal damage"):
+		return
+	hero.global_position = Vector3(0, 0.2, 5.1)
+	dummy.take_damage(75)
+	if not _require(int(dummy.get("hp")) == 0 and not bool(dummy.get("is_available")), "Target must become inactive at 0 HP"):
+		return
+	game.call("_resolve_training_hit")
+	if not _require(int(dummy.get("hp")) == 0, "Destroyed dummy must not accept additional hits"):
+		return
+	dummy.call("_process", 2.6)
+	if not _require(int(dummy.get("hp")) == 100 and bool(dummy.get("is_available")), "Training dummy must respawn"):
+		return
+	hero.global_position = original_position
+	game.get("visual").rotation.y = original_rotation
+
 	var environment := game.get_node_or_null("Environment/Ground")
 	if not _require(environment is StaticBody3D, "World ground missing"):
 		return
 	var collision := environment.get_node("CollisionShape3D") as CollisionShape3D
 	if not _require(collision != null and (collision.shape as BoxShape3D).size.x >= 200.0, "Expanded terrain missing"):
 		return
-	print("Gameplay smoke test passed: attack overlay, immediate reverse/stop, jump/dash layout and cooldown, world.")
+	print("Gameplay smoke test passed: movement, animation, dash, world, training hits, HP and respawn.")
 	quit(0)
 
 

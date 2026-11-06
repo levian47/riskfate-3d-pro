@@ -2,6 +2,8 @@ extends Node3D
 # Single reusable world component; visuals are generated at runtime.
 # Repeated scenery uses MultiMesh to keep the Web rendering cost low.
 
+const TRAINING_DUMMY_SCRIPT := preload("res://world/training_dummy.gd")
+
 const WORLD_SIZE := 220.0
 const TREE_COUNT := 150
 const ROCK_COUNT := 110
@@ -13,6 +15,15 @@ func _ready() -> void:
 	_build_landscape()
 	_build_ruins()
 	_build_camp()
+	_build_training_area()
+
+
+func _build_training_area() -> void:
+	# One stationary training target close to the player starting position.
+	var target := TRAINING_DUMMY_SCRIPT.new()
+	target.name = "TrainingDummy"
+	target.position = Vector3(0.0, 0.0, 7.0)
+	add_child(target)
 
 
 func _build_ground() -> void:
