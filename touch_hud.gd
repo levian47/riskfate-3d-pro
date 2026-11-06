@@ -4,6 +4,7 @@ extends Control
 
 signal attack_requested
 signal zoom_requested
+signal fullscreen_requested
 
 var move_vector := Vector2.ZERO
 var jump_held := false
@@ -11,6 +12,7 @@ var stick_finger := -1
 var jump_finger := -1
 var attack_finger := -1
 var zoom_finger := -1
+var fullscreen_finger := -1
 var zoom_level := 2
 var stick_thumb := Vector2.ZERO
 var portrait_mode := false
@@ -30,6 +32,7 @@ func _on_resized() -> void:
 		jump_finger = -1
 		attack_finger = -1
 		zoom_finger = -1
+		fullscreen_finger = -1
 		move_vector = Vector2.ZERO
 		stick_thumb = Vector2.ZERO
 		jump_held = false
@@ -42,6 +45,7 @@ func _layout() -> Dictionary:
 	var margin := 36.0 * scale
 	var stick_radius := 107.5 * scale # 86 * 1.25
 	var zoom_radius := 43.0 * scale
+	var fullscreen_radius := 43.0 * scale
 	var attack_radius := 70.0 * scale
 	var jump_radius := 46.0 * scale
 	return {
@@ -52,7 +56,9 @@ func _layout() -> Dictionary:
 		"jump": Vector2(width - margin - attack_radius * 2.30 - jump_radius, height - margin - attack_radius * 2.0 - jump_radius),
 		"jump_radius": jump_radius,
 		"zoom": Vector2(width - margin - zoom_radius, margin + zoom_radius),
-		"zoom_radius": zoom_radius
+		"zoom_radius": zoom_radius,
+		"fullscreen": Vector2(width - margin - zoom_radius * 3.2, margin + fullscreen_radius),
+		"fullscreen_radius": fullscreen_radius
 	}
 
 func _input(event: InputEvent) -> void:
@@ -76,6 +82,10 @@ func _press(finger: int, point: Vector2) -> void:
 		zoom_finger = finger
 		zoom_requested.emit()
 		queue_redraw()
+	elif fullscreen_finger == -1 and point.distance_to(layout["fullscreen"]) <= layout["fullscreen_radius"] * 1.20:
+		fullscreen_finger = finger
+		fullscreen_requested.emit()
+		queue_redraw()
 	elif attack_finger == -1 and point.distance_to(layout["attack"]) <= layout["attack_radius"] * 1.18:
 		attack_finger = finger
 		attack_requested.emit()
@@ -97,6 +107,8 @@ func _release(finger: int) -> void:
 		attack_finger = -1
 	if finger == zoom_finger:
 		zoom_finger = -1
+	if finger == fullscreen_finger:
+		fullscreen_finger = -1
 	queue_redraw()
 
 func _update_stick(point: Vector2) -> void:
@@ -138,6 +150,10 @@ func _draw() -> void:
 	_draw_button(zoom_center, zoom_r, Color(0.15, 0.25, 0.39, 0.94 if zoom_finger != -1 else 0.76), Color(0.76, 0.87, 1.0, 0.92))
 	_draw_label(zoom_center + Vector2(0, -zoom_r * 0.18), "ZOOM", zoom_r * 0.29)
 	_draw_label(zoom_center + Vector2(0, zoom_r * 0.28), "%d/3" % zoom_level, zoom_r * 0.34)
+	var fullscreen_center: Vector2 = layout["fullscreen"]
+	var fullscreen_r: float = layout["fullscreen_radius"]
+	_draw_button(fullscreen_center, fullscreen_r, Color(0.14, 0.31, 0.32, 0.94 if fullscreen_finger != -1 else 0.76), Color(0.77, 0.99, 0.96, 0.92))
+	_draw_label(fullscreen_center, "FULL", fullscreen_r * 0.34)
 
 func _draw_button(center: Vector2, radius: float, inside: Color, outline: Color) -> void:
 	draw_circle(center, radius, inside, true, -1.0, true)

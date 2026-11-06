@@ -152,6 +152,13 @@ func _unhandled_input(event: InputEvent) -> void:
 			camera_zoom = minf(28.0, camera_zoom + 1.0)
 			camera.size = camera_zoom
 
+func _toggle_fullscreen() -> void:
+	# On Web this is called directly from a real button/touch event.
+	var current_mode := DisplayServer.window_get_mode()
+	var is_fullscreen := current_mode == DisplayServer.WINDOW_MODE_FULLSCREEN or current_mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED if is_fullscreen else DisplayServer.WINDOW_MODE_FULLSCREEN)
+
+
 func _cycle_mobile_zoom() -> void:
 	mobile_zoom_index = (mobile_zoom_index + 1) % MOBILE_ZOOM_LEVELS.size()
 	camera_zoom = float(MOBILE_ZOOM_LEVELS[mobile_zoom_index])
@@ -377,6 +384,7 @@ func _build_ui() -> void:
 		touch_hud.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		touch_hud.attack_requested.connect(_start_attack)
 		touch_hud.zoom_requested.connect(_cycle_mobile_zoom)
+		touch_hud.fullscreen_requested.connect(_toggle_fullscreen)
 		touch_hud.zoom_level = mobile_zoom_index + 1
 		return
 	var panel := PanelContainer.new()
@@ -385,3 +393,15 @@ func _build_ui() -> void:
 	var label := Label.new()
 	label.text = "NINJA 3D TEST v7 FIX\nWASD — рух   |   SHIFT — біг\nSPACE — стрибок   |   ЛКМ — удар мечем\nКолесо миші — масштаб"
 	panel.add_child(label)
+	# Also expose fullscreen on desktop without relying on browser controls.
+	var fullscreen_button := Button.new()
+	fullscreen_button.name = "FullscreenButton"
+	fullscreen_button.text = "FULLSCREEN"
+	fullscreen_button.anchor_left = 1.0
+	fullscreen_button.anchor_right = 1.0
+	fullscreen_button.offset_left = -164.0
+	fullscreen_button.offset_right = -18.0
+	fullscreen_button.offset_top = 18.0
+	fullscreen_button.offset_bottom = 62.0
+	fullscreen_button.pressed.connect(_toggle_fullscreen)
+	canvas.add_child(fullscreen_button)
