@@ -22,6 +22,7 @@ func _build_ground() -> void:
 	var shape := BoxShape3D.new()
 	shape.size = Vector3(WORLD_SIZE, 1.0, WORLD_SIZE)
 	var collision := CollisionShape3D.new()
+	collision.name = "CollisionShape3D"
 	collision.shape = shape
 	collision.position.y = -0.5
 	ground.add_child(collision)
