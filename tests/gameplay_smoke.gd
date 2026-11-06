@@ -100,17 +100,18 @@ func _run_checks() -> void:
 	if not _require(dummy != null and int(dummy.get("hp")) == 100, "Training dummy must spawn with 100 HP"):
 		return
 	var original_position := hero.global_position
-	var original_rotation := game.get("visual").rotation.y
+	var visual_node := game.get("visual") as Node3D
+	var original_rotation: float = visual_node.rotation.y
 	hero.global_position = Vector3(0, 0.2, 5.1)
-	game.get("visual").rotation.y = 0.0
+	visual_node.rotation.y = 0.0
 	game.call("_resolve_training_hit")
 	if not _require(int(dummy.get("hp")) == 75 and dummy.get_node("HealthLabel").text == "HP 75 / 100", "Facing target in reach should lose 25 HP"):
 		return
-	game.get("visual").rotation.y = PI
+	visual_node.rotation.y = PI
 	game.call("_resolve_training_hit")
 	if not _require(int(dummy.get("hp")) == 75, "Back-facing attack must not deal damage"):
 		return
-	game.get("visual").rotation.y = 0.0
+	visual_node.rotation.y = 0.0
 	hero.global_position = Vector3(0, 0.2, 0)
 	game.call("_resolve_training_hit")
 	if not _require(int(dummy.get("hp")) == 75, "Out-of-range attack must not deal damage"):
@@ -126,7 +127,7 @@ func _run_checks() -> void:
 	if not _require(int(dummy.get("hp")) == 100 and bool(dummy.get("is_available")), "Training dummy must respawn"):
 		return
 	hero.global_position = original_position
-	game.get("visual").rotation.y = original_rotation
+	visual_node.rotation.y = original_rotation
 
 	var environment := game.get_node_or_null("Environment/Ground")
 	if not _require(environment is StaticBody3D, "World ground missing"):
