@@ -28,7 +28,7 @@ var hero: CharacterBody3D
 var visual: Node3D
 var animator: AnimationPlayer
 var camera: Camera3D
-var camera_distance := 15.0
+var camera_distance := 13.0
 var camera_zoom := 12.0
 # Orthographic camera sizes: lower value = closer view.
 const MOBILE_ZOOM_LEVELS := [8.0, 12.0, 18.0]
