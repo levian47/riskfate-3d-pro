@@ -57,20 +57,35 @@ func _layout() -> Dictionary:
 		"jump_radius": jump_radius,
 		"zoom": Vector2(width - margin - zoom_radius, margin + zoom_radius),
 		"zoom_radius": zoom_radius,
-		"fullscreen": Vector2(width - margin - zoom_radius * 3.2, margin + fullscreen_radius),
+		"fullscreen": Vector2(margin + fullscreen_radius, margin + fullscreen_radius),
 		"fullscreen_radius": fullscreen_radius
 	}
 
 func _input(event: InputEvent) -> void:
-	if portrait_mode:
-		return
 	if event is InputEventScreenTouch:
+		if portrait_mode:
+			# Keep the fullscreen button accessible before turning the phone.
+			if event.pressed:
+				_press_fullscreen(event.index, event.position)
+			else:
+				_release(event.index)
+			return
 		if event.pressed:
 			_press(event.index, event.position)
 		else:
 			_release(event.index)
-	elif event is InputEventScreenDrag and event.index == stick_finger:
+	elif not portrait_mode and event is InputEventScreenDrag and event.index == stick_finger:
 		_update_stick(event.position)
+
+func _press_fullscreen(finger: int, point: Vector2) -> bool:
+	var layout := _layout()
+	if fullscreen_finger == -1 and point.distance_to(layout["fullscreen"]) <= layout["fullscreen_radius"] * 1.25:
+		fullscreen_finger = finger
+		# Browsers require the request to come directly from a press event.
+		fullscreen_requested.emit()
+		queue_redraw()
+		return true
+	return false
 
 func _press(finger: int, point: Vector2) -> void:
 	var layout := _layout()
@@ -82,10 +97,8 @@ func _press(finger: int, point: Vector2) -> void:
 		zoom_finger = finger
 		zoom_requested.emit()
 		queue_redraw()
-	elif fullscreen_finger == -1 and point.distance_to(layout["fullscreen"]) <= layout["fullscreen_radius"] * 1.20:
-		fullscreen_finger = finger
-		fullscreen_requested.emit()
-		queue_redraw()
+	elif _press_fullscreen(finger, point):
+		pass
 	elif attack_finger == -1 and point.distance_to(layout["attack"]) <= layout["attack_radius"] * 1.18:
 		attack_finger = finger
 		attack_requested.emit()
@@ -131,6 +144,7 @@ func _draw() -> void:
 		var font_size := maxi(18, roundi(minf(size.x, size.y) * 0.055))
 		var message_size := font.get_string_size(message, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
 		draw_string(font, (size - message_size) * 0.5 + Vector2(0, message_size.y * 0.7), message, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color.WHITE)
+		_draw_fullscreen_control(_layout())
 		return
 	var layout := _layout()
 	var center: Vector2 = layout["stick"]
@@ -150,9 +164,12 @@ func _draw() -> void:
 	_draw_button(zoom_center, zoom_r, Color(0.15, 0.25, 0.39, 0.94 if zoom_finger != -1 else 0.76), Color(0.76, 0.87, 1.0, 0.92))
 	_draw_label(zoom_center + Vector2(0, -zoom_r * 0.18), "ZOOM", zoom_r * 0.29)
 	_draw_label(zoom_center + Vector2(0, zoom_r * 0.28), "%d/3" % zoom_level, zoom_r * 0.34)
+	_draw_fullscreen_control(layout)
+
+func _draw_fullscreen_control(layout: Dictionary) -> void:
 	var fullscreen_center: Vector2 = layout["fullscreen"]
 	var fullscreen_r: float = layout["fullscreen_radius"]
-	_draw_button(fullscreen_center, fullscreen_r, Color(0.14, 0.31, 0.32, 0.94 if fullscreen_finger != -1 else 0.76), Color(0.77, 0.99, 0.96, 0.92))
+	_draw_button(fullscreen_center, fullscreen_r, Color(0.14, 0.31, 0.32, 0.94 if fullscreen_finger != -1 else 0.85), Color(0.77, 0.99, 0.96, 1.0))
 	_draw_label(fullscreen_center, "FULL", fullscreen_r * 0.34)
 
 func _draw_button(center: Vector2, radius: float, inside: Color, outline: Color) -> void:
