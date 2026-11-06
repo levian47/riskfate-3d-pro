@@ -11,6 +11,12 @@ func _run_checks() -> void:
 	var game := scene.instantiate()
 	root.add_child(game)
 	await process_frame
+	var fps_label := game.get("fps_label") as Label
+	if not _require(fps_label != null and fps_label.text == "FPS: --", "FPS counter should initialize in HUD"):
+		return
+	game.call("_process", 0.51)
+	if not _require(fps_label.text.begins_with("FPS: ") and fps_label.text != "FPS: --", "FPS counter must update from Engine FPS"):
+		return
 	var hero := game.get("hero") as CharacterBody3D
 	var tree := game.get("animation_tree") as AnimationTree
 	if not _require(hero != null and tree != null and tree.active, "Character and AnimationTree must initialize"):

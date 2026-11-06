@@ -52,12 +52,24 @@ var dash_direction := Vector3.FORWARD
 var dash_time_left := 0.0
 var dash_cooldown_left := 0.0
 var touch_hud
+var fps_label: Label
+var fps_update_elapsed := 0.0
 
 func _ready() -> void:
 	_build_environment()
 	_build_hero()
 	_build_camera()
 	_build_ui()
+
+func _process(delta: float) -> void:
+	# Sample twice per second to keep the counter readable and inexpensive.
+	if fps_label == null:
+		return
+	fps_update_elapsed += delta
+	if fps_update_elapsed >= 0.5:
+		fps_label.text = "FPS: %d" % Engine.get_frames_per_second()
+		fps_update_elapsed = 0.0
+
 
 func _physics_process(delta: float) -> void:
 	var grounded_before := hero.is_on_floor()
@@ -444,10 +456,38 @@ func _build_environment() -> void:
 	add_child(environment)
 
 
+func _build_fps_counter(canvas: CanvasLayer) -> void:
+	# Top center stays clear of FULL (top left), ZOOM (top right) and actions.
+	var panel := PanelContainer.new()
+	panel.name = "FPSCounter"
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.anchor_left = 0.5
+	panel.anchor_right = 0.5
+	panel.offset_left = -54.0
+	panel.offset_right = 54.0
+	panel.offset_top = 12.0
+	panel.offset_bottom = 45.0
+	var background := StyleBoxFlat.new()
+	background.bg_color = Color(0.05, 0.08, 0.11, 0.72)
+	background.set_corner_radius_all(8)
+	panel.add_theme_stylebox_override("panel", background)
+	canvas.add_child(panel)
+
+	fps_label = Label.new()
+	fps_label.name = "FPSLabel"
+	fps_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fps_label.text = "FPS: --"
+	fps_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	fps_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	fps_label.add_theme_font_size_override("font_size", 18)
+	panel.add_child(fps_label)
+
+
 func _build_ui() -> void:
 	var canvas := CanvasLayer.new()
 	canvas.name = "HUD"
 	add_child(canvas)
+	_build_fps_counter(canvas)
 	if DisplayServer.is_touchscreen_available():
 		# Multiple fingers are handled independently in touch_hud.gd.
 		touch_hud = TOUCH_HUD_SCRIPT.new()
