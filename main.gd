@@ -15,6 +15,14 @@ const COYOTE_TIME := 0.11
 const JUMP_BUFFER_TIME := 0.13
 const MOVE_ANIMATION_THRESHOLD := 0.45
 const TOUCH_HUD_SCRIPT := preload("res://touch_hud.gd")
+const WORLD_SCRIPT := preload("res://world/environment.gd")
+# The attack runs on the upper body while the legs retain their movement animation.
+const ATTACK_SPEED := 1.65
+const UPPER_BODY_BONES := [
+	"Abdomen", "Torso", "Neck", "Head",
+	"Shoulder.L", "UpperArm.L", "LowerArm.L", "Fist.L",
+	"Shoulder.R", "UpperArm.R", "LowerArm.R", "Fist.R"
+]
 
 var hero: CharacterBody3D
 var visual: Node3D
@@ -25,12 +33,12 @@ var camera_zoom := 12.0
 # Orthographic camera sizes: lower value = closer view.
 const MOBILE_ZOOM_LEVELS := [8.0, 12.0, 18.0]
 var mobile_zoom_index := 1
-var current_animation := ""
+var animation_tree: AnimationTree
+var locomotion_state := ""
 var attack_time_left := 0.0
 var coyote_left := 0.0
 var jump_buffer_left := 0.0
 var jump_was_pressed := false
-var jump_animation_active := false
 var touch_hud
 
 func _ready() -> void:
@@ -43,8 +51,6 @@ func _physics_process(delta: float) -> void:
 	var grounded_before := hero.is_on_floor()
 	if attack_time_left > 0.0:
 		attack_time_left = maxf(0.0, attack_time_left - delta)
-		if attack_time_left <= 0.0:
-			current_animation = ""
 
 	# Keyboard polling is retained for the existing desktop prototype.
 	# Edge detection and input buffering make short taps more reliable.
@@ -94,7 +100,6 @@ func _physics_process(delta: float) -> void:
 		hero.velocity.y = JUMP_SPEED
 		jump_buffer_left = 0.0
 		coyote_left = 0.0
-		jump_animation_active = true
 		launched = true
 	elif not grounded_before:
 		hero.velocity.y -= GRAVITY * delta
@@ -111,33 +116,22 @@ func _physics_process(delta: float) -> void:
 		var facing := atan2(-direction.x, -direction.z) + PI
 		visual.rotation.y = lerp_angle(visual.rotation.y, facing, minf(TURN_SPEED * delta, 1.0))
 
-	# Full attack animation has priority over movement and jumping.
-	if attack_time_left > 0.0:
-		return
-
+	# Locomotion keeps updating throughout the attack (including jumps).
 	if launched:
-		_play_animation("Jump", true)
+		_set_locomotion("Jump", true)
 	elif not hero.is_on_floor():
-		if not jump_animation_active:
-			_play_animation("Jump", true)
-			jump_animation_active = true
+		_set_locomotion("Jump")
 	else:
-		jump_animation_active = false
 		var actual_speed := Vector2(hero.velocity.x, hero.velocity.z).length()
 		if actual_speed < MOVE_ANIMATION_THRESHOLD:
-			_play_animation("Idle")
+			_set_locomotion("Idle")
 		elif actual_speed >= (WALK_SPEED + RUN_SPEED) * 0.5:
-			_play_animation("Run")
+			_set_locomotion("Run")
 		else:
-			_play_animation("Walk")
-		# The animation transitions use crossfades; movement remains responsive.
-		if animator != null:
-			if current_animation == "Walk":
-				animator.speed_scale = clampf(actual_speed / WALK_SPEED, 0.85, 1.25)
-			elif current_animation == "Run":
-				animator.speed_scale = clampf(actual_speed / RUN_SPEED, 0.85, 1.25)
-			else:
-				animator.speed_scale = 1.0
+			_set_locomotion("Walk")
+		if animation_tree != null:
+			animation_tree.set("parameters/WalkSpeed/scale", clampf(actual_speed / WALK_SPEED, 0.85, 1.25))
+			animation_tree.set("parameters/RunSpeed/scale", clampf(actual_speed / RUN_SPEED, 0.85, 1.25))
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -190,17 +184,18 @@ func _build_hero() -> void:
 		# Run/Walk stops moving the legs at the last frame while the body moves.
 		_configure_animation_loops()
 		_attach_simple_sword(model)
-		_play_animation("Idle")
+		_setup_animation_tree(model)
 	else:
 		push_warning("AnimationPlayer not found in imported model")
 
 func _start_attack() -> void:
-	if animator == null or attack_time_left > 0.0:
+	if animation_tree == null or attack_time_left > 0.0:
 		return
-	_play_animation("SwordSlash", true)
-	if current_animation == "SwordSlash":
-		# The actual duration is read from the imported animation.
-		attack_time_left = maxf(0.15, animator.current_animation_length)
+	var clip_name := _find_clip("SwordSlash")
+	if clip_name.is_empty():
+		return
+	attack_time_left = animator.get_animation(clip_name).length / ATTACK_SPEED
+	animation_tree.set("parameters/Attack/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
 
 func _find_skeleton(node: Node) -> Skeleton3D:
 	if node is Skeleton3D:
@@ -267,28 +262,95 @@ func _configure_animation_loops() -> void:
 			# Actions (SwordSlash, Jump, etc.) should play once.
 			animation.loop_mode = Animation.LOOP_NONE
 
-func _play_animation(short_name: String, restart: bool = false) -> void:
+func _find_clip(short_name: String) -> String:
 	if animator == null:
-		return
-	if current_animation == short_name and not restart:
-		return
-	# Imported glTF clips can be named "Idle" or "SomeLibrary/Idle".
-	var clip := ""
+		return ""
 	for name in animator.get_animation_list():
 		var full_name := String(name)
 		if full_name == short_name or full_name.ends_with("/" + short_name):
-			clip = full_name
-			break
-	if clip.is_empty():
-		push_warning("Animation not found: " + short_name)
+			return full_name
+	push_warning("Animation not found: " + short_name)
+	return ""
+
+
+func _setup_animation_tree(model: Node) -> void:
+	var root := AnimationNodeBlendTree.new()
+	var locomotion := AnimationNodeTransition.new()
+	locomotion.input_count = 4
+	locomotion.xfade_time = 0.10
+	root.add_node("Locomotion", locomotion)
+
+	var states := ["Idle", "Walk", "Run", "Jump"]
+	for i in range(states.size()):
+		var state: String = states[i]
+		var clip_name := _find_clip(state)
+		if clip_name.is_empty():
+			push_error("Cannot build locomotion tree without " + state)
+			return
+		locomotion.set_input_name(i, state)
+		var clip_node := AnimationNodeAnimation.new()
+		clip_node.animation = clip_name
+		root.add_node(state, clip_node)
+		if state == "Walk" or state == "Run":
+			var speed_node := AnimationNodeTimeScale.new()
+			root.add_node(state + "Speed", speed_node)
+			root.connect_node(state + "Speed", 0, state)
+			root.connect_node("Locomotion", i, state + "Speed")
+		else:
+			root.connect_node("Locomotion", i, state)
+
+	var attack_clip_name := _find_clip("SwordSlash")
+	if attack_clip_name.is_empty():
+		push_error("SwordSlash clip missing")
 		return
-	# Short blended transitions avoid abrupt pose changes.
-	var fade := 0.10 if short_name == "Jump" else 0.16
-	if short_name == "SwordSlash":
-		fade = 0.08
-	animator.speed_scale = 1.0
-	animator.play(clip, fade)
-	current_animation = short_name
+	var attack_clip := animator.get_animation(attack_clip_name)
+	var attack_node := AnimationNodeAnimation.new()
+	attack_node.animation = attack_clip_name
+	var attack_speed := AnimationNodeTimeScale.new()
+	var attack_layer := AnimationNodeOneShot.new()
+	attack_layer.fadein_time = 0.06
+	attack_layer.fadeout_time = 0.10
+	attack_layer.filter_enabled = true
+	var filtered := 0
+	for track_index in range(attack_clip.get_track_count()):
+		var track_path := attack_clip.track_get_path(track_index)
+		if track_path.get_subname_count() == 0:
+			continue
+		var bone := String(track_path.get_subname(track_path.get_subname_count() - 1))
+		if bone in UPPER_BODY_BONES:
+			attack_layer.set_filter_path(track_path, true)
+			filtered += 1
+	if filtered == 0:
+		push_error("The imported SwordSlash animation has no matching upper-body tracks")
+		return
+
+	root.add_node("SwordSlash", attack_node)
+	root.add_node("AttackSpeed", attack_speed)
+	root.add_node("Attack", attack_layer)
+	root.connect_node("AttackSpeed", 0, "SwordSlash")
+	root.connect_node("Attack", 0, "Locomotion")
+	root.connect_node("Attack", 1, "AttackSpeed")
+	root.connect_node("output", 0, "Attack")
+
+	animation_tree = AnimationTree.new()
+	animation_tree.name = "CharacterAnimationTree"
+	model.add_child(animation_tree)
+	animation_tree.anim_player = animation_tree.get_path_to(animator)
+	animation_tree.tree_root = root
+	animator.stop()
+	animation_tree.active = true
+	animation_tree.set("parameters/AttackSpeed/scale", ATTACK_SPEED)
+	_set_locomotion("Idle")
+
+
+func _set_locomotion(state: String, restart: bool = false) -> void:
+	if animation_tree == null:
+		return
+	if state == locomotion_state and not restart:
+		return
+	animation_tree.set("parameters/Locomotion/transition_request", state)
+	locomotion_state = state
+
 
 func _build_camera() -> void:
 	camera = Camera3D.new()
@@ -317,60 +379,10 @@ func _build_camera() -> void:
 	add_child(world)
 
 func _build_environment() -> void:
-	var ground := StaticBody3D.new()
-	ground.name = "Ground"
-	add_child(ground)
-	var ground_collision := CollisionShape3D.new()
-	var ground_shape := BoxShape3D.new()
-	ground_shape.size = Vector3(70, 1, 70)
-	ground_collision.shape = ground_shape
-	ground_collision.position.y = -0.5
-	ground.add_child(ground_collision)
-	_add_box(ground, Vector3(70, 1, 70), Vector3(0, -0.5, 0), Color("527c45"))
-	for i in range(18):
-		var angle := TAU * i / 18.0
-		var radius := 13.0 + float(i % 4) * 2.3
-		var pos := Vector3(cos(angle) * radius, 0, sin(angle) * radius)
-		_add_tree(pos)
-	for i in range(12):
-		var pos := Vector3(-18 + i * 3.2, 0, -12 + sin(float(i) * 2.1) * 2)
-		_add_box(self, Vector3(0.9, 0.5, 0.8), pos + Vector3(0, 0.25, 0), Color("a4a59a"))
+	var environment := WORLD_SCRIPT.new()
+	environment.name = "Environment"
+	add_child(environment)
 
-func _add_box(parent: Node3D, dimensions: Vector3, at: Vector3, color: Color) -> MeshInstance3D:
-	var instance := MeshInstance3D.new()
-	var mesh := BoxMesh.new()
-	mesh.size = dimensions
-	instance.mesh = mesh
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color
-	instance.material_override = mat
-	instance.position = at
-	parent.add_child(instance)
-	return instance
-
-func _add_tree(at: Vector3) -> void:
-	var trunk := MeshInstance3D.new()
-	var cylinder := CylinderMesh.new()
-	cylinder.top_radius = 0.18
-	cylinder.bottom_radius = 0.27
-	cylinder.height = 2.1
-	trunk.mesh = cylinder
-	trunk.position = at + Vector3(0, 1.05, 0)
-	var bark := StandardMaterial3D.new()
-	bark.albedo_color = Color("75513a")
-	trunk.material_override = bark
-	add_child(trunk)
-	var crown := MeshInstance3D.new()
-	var cone := CylinderMesh.new()
-	cone.top_radius = 0
-	cone.bottom_radius = 1.25
-	cone.height = 3.0
-	crown.mesh = cone
-	crown.position = at + Vector3(0, 3.3, 0)
-	var leaves := StandardMaterial3D.new()
-	leaves.albedo_color = Color("3c8250")
-	crown.material_override = leaves
-	add_child(crown)
 
 func _build_ui() -> void:
 	var canvas := CanvasLayer.new()
