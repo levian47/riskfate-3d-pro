@@ -4,10 +4,11 @@ const MODEL := preload("res://assets/Ninja_Female.gltf")
 # Ninja movement tuning. The approved v4 camera directions stay unchanged.
 const WALK_SPEED := 7.0
 const RUN_SPEED := 12.0
-const GROUND_ACCELERATION := 48.0
-const GROUND_BRAKING := 62.0
-const AIR_ACCELERATION := 15.0
-const TURN_SPEED := 13.0
+# Steering responds directly to the joystick, without acceleration or turning lag.
+# Dash values are provisional until playtested on a real phone.
+const DASH_SPEED := 24.0
+const DASH_DURATION := 0.18
+const DASH_COOLDOWN := 0.85
 const JUMP_SPEED := 8.0
 const GRAVITY := 22.0
 const JUMP_RELEASE_MULTIPLIER := 0.55
@@ -39,6 +40,10 @@ var attack_time_left := 0.0
 var coyote_left := 0.0
 var jump_buffer_left := 0.0
 var jump_was_pressed := false
+var last_move_direction := Vector3.FORWARD
+var dash_direction := Vector3.FORWARD
+var dash_time_left := 0.0
+var dash_cooldown_left := 0.0
 var touch_hud
 
 func _ready() -> void:
@@ -49,6 +54,7 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	var grounded_before := hero.is_on_floor()
+	dash_cooldown_left = maxf(0.0, dash_cooldown_left - delta)
 	if attack_time_left > 0.0:
 		attack_time_left = maxf(0.0, attack_time_left - delta)
 
@@ -76,24 +82,20 @@ func _physics_process(delta: float) -> void:
 	if touch_hud != null and touch_hud.move_vector.length_squared() > 0.0001:
 		input_vector = touch_hud.move_vector
 		mobile_running = input_vector.length() >= 0.77
-	# Movement is always aligned with screen space, not world X/Z axes.
-	var camera_right := camera.global_transform.basis.x
-	camera_right.y = 0.0
-	camera_right = camera_right.normalized()
-	var camera_forward := -camera.global_transform.basis.z
-	camera_forward.y = 0.0
-	camera_forward = camera_forward.normalized()
-	var direction := (camera_right * input_vector.x - camera_forward * input_vector.y)
+	# Ground and air steering match the joystick immediately, including reversals.
+	var direction := _camera_relative_direction(input_vector)
+	if direction.length_squared() > 0.01:
+		last_move_direction = direction.normalized()
 	var target_speed := RUN_SPEED if Input.is_key_pressed(KEY_SHIFT) or mobile_running else WALK_SPEED
-	var target_velocity := direction * target_speed
-
-	var acceleration := AIR_ACCELERATION
-	if grounded_before:
-		acceleration = GROUND_ACCELERATION if direction.length_squared() > 0.01 else GROUND_BRAKING
-	var horizontal := Vector3(hero.velocity.x, 0.0, hero.velocity.z)
-	horizontal = horizontal.move_toward(target_velocity, acceleration * delta)
-	hero.velocity.x = horizontal.x
-	hero.velocity.z = horizontal.z
+	var facing_direction := direction
+	if dash_time_left > 0.0:
+		facing_direction = dash_direction
+		hero.velocity.x = dash_direction.x * DASH_SPEED
+		hero.velocity.z = dash_direction.z * DASH_SPEED
+		dash_time_left = maxf(0.0, dash_time_left - delta)
+	else:
+		hero.velocity.x = direction.x * target_speed
+		hero.velocity.z = direction.z * target_speed
 
 	var launched := false
 	if jump_buffer_left > 0.0 and coyote_left > 0.0:
@@ -111,10 +113,9 @@ func _physics_process(delta: float) -> void:
 
 	hero.move_and_slide()
 
-	if direction.length_squared() > 0.01:
-		# Keep the model-specific 180-degree facing correction from v4.
-		var facing := atan2(-direction.x, -direction.z) + PI
-		visual.rotation.y = lerp_angle(visual.rotation.y, facing, minf(TURN_SPEED * delta, 1.0))
+	if facing_direction.length_squared() > 0.01:
+		# Keep the model-specific 180-degree facing correction without turning lag.
+		visual.rotation.y = atan2(-facing_direction.x, -facing_direction.z) + PI
 
 	# Locomotion keeps updating throughout the attack (including jumps).
 	if launched:
@@ -135,6 +136,9 @@ func _physics_process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_Q:
+		_start_dash()
+		return
 	if event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			_start_attack()
@@ -145,6 +149,29 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			camera_zoom = minf(28.0, camera_zoom + 1.0)
 			camera.size = camera_zoom
+
+func _camera_relative_direction(input_vector: Vector2) -> Vector3:
+	var camera_right := camera.global_transform.basis.x
+	camera_right.y = 0.0
+	camera_right = camera_right.normalized()
+	var camera_forward := -camera.global_transform.basis.z
+	camera_forward.y = 0.0
+	camera_forward = camera_forward.normalized()
+	return camera_right * input_vector.x - camera_forward * input_vector.y
+
+
+func _start_dash() -> void:
+	if dash_cooldown_left > 0.0 or dash_time_left > 0.0:
+		return
+	var intended_direction := Vector3.ZERO
+	if touch_hud != null:
+		intended_direction = _camera_relative_direction(touch_hud.move_vector)
+	if intended_direction.length_squared() < 0.01:
+		intended_direction = last_move_direction
+	dash_direction = intended_direction.normalized()
+	dash_time_left = DASH_DURATION
+	dash_cooldown_left = DASH_COOLDOWN
+
 
 func _toggle_fullscreen() -> void:
 	# On Web this is called directly from a real button/touch event.
@@ -395,6 +422,7 @@ func _build_ui() -> void:
 		canvas.add_child(touch_hud)
 		touch_hud.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		touch_hud.attack_requested.connect(_start_attack)
+		touch_hud.dash_requested.connect(_start_dash)
 		touch_hud.zoom_requested.connect(_cycle_mobile_zoom)
 		touch_hud.fullscreen_requested.connect(_toggle_fullscreen)
 		touch_hud.zoom_level = mobile_zoom_index + 1
@@ -403,7 +431,7 @@ func _build_ui() -> void:
 	panel.position = Vector2(18, 18)
 	canvas.add_child(panel)
 	var label := Label.new()
-	label.text = "NINJA 3D TEST v7 FIX\nWASD — рух   |   SHIFT — біг\nSPACE — стрибок   |   ЛКМ — удар мечем\nКолесо миші — масштаб"
+	label.text = "NINJA 3D TEST\nWASD — рух   |   SHIFT — біг   |   Q — ривок\nSPACE — стрибок   |   ЛКМ — удар мечем\nКолесо миші — масштаб"
 	panel.add_child(label)
 	# Also expose fullscreen on desktop without relying on browser controls.
 	var fullscreen_button := Button.new()

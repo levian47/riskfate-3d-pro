@@ -57,13 +57,51 @@ func _run_checks() -> void:
 	if not _require(String(tree.get("parameters/Locomotion/current_state")) == "Jump", "Jump animation must remain selectable during attack"):
 		return
 
+	# Direction reversal and stopping must be immediate, without braking inertia.
+	var touch_controls = load("res://touch_hud.gd").new()
+	root.add_child(touch_controls)
+	touch_controls.size = Vector2(1280.0, 720.0)
+	game.set("touch_hud", touch_controls)
+	touch_controls.move_vector = Vector2.RIGHT
+	game.call("_physics_process", 1.0 / 60.0)
+	var right_velocity := Vector3(hero.velocity.x, 0.0, hero.velocity.z)
+	touch_controls.move_vector = Vector2.LEFT
+	game.call("_physics_process", 1.0 / 60.0)
+	var left_velocity := Vector3(hero.velocity.x, 0.0, hero.velocity.z)
+	if not _require(right_velocity.length() > 10.0 and left_velocity.distance_to(-right_velocity) < 0.05, "Steering must reverse immediately"):
+		return
+	touch_controls.move_vector = Vector2.ZERO
+	game.call("_physics_process", 1.0 / 60.0)
+	if not _require(Vector2(hero.velocity.x, hero.velocity.z).length() < 0.05, "Releasing joystick must stop immediately"):
+		return
+
+	var layout: Dictionary = touch_controls.call("_layout")
+	var jump_center: Vector2 = layout["jump"]
+	var dash_center: Vector2 = layout["dash"]
+	var attack_center: Vector2 = layout["attack"]
+	if not _require(jump_center.y > dash_center.y and jump_center.y > attack_center.y, "Jump must be below dash and attack"):
+		return
+	touch_controls.dash_requested.connect(Callable(game, "_start_dash"))
+	touch_controls.move_vector = Vector2.RIGHT
+	touch_controls.call("_press", 37, dash_center)
+	if not _require(int(touch_controls.get("dash_finger")) == 37 and float(game.get("dash_time_left")) > 0.0, "Dash button must trigger dash"):
+		return
+	touch_controls.call("_release", 37)
+	if not _require(int(touch_controls.get("dash_finger")) == -1, "Dash touch must release cleanly"):
+		return
+	var original_cooldown := float(game.get("dash_cooldown_left"))
+	game.call("_start_dash")
+	if not _require(is_equal_approx(float(game.get("dash_cooldown_left")), original_cooldown), "Dash cooldown must reject immediate second press"):
+		return
+	touch_controls.move_vector = Vector2.ZERO
+
 	var environment := game.get_node_or_null("Environment/Ground")
 	if not _require(environment is StaticBody3D, "World ground missing"):
 		return
 	var collision := environment.get_node("CollisionShape3D") as CollisionShape3D
 	if not _require(collision != null and (collision.shape as BoxShape3D).size.x >= 200.0, "Expanded terrain missing"):
 		return
-	print("Gameplay smoke test passed: upper-body attack overlay, movement/jump, expanded world.")
+	print("Gameplay smoke test passed: attack overlay, immediate reverse/stop, jump/dash layout and cooldown, world.")
 	quit(0)
 
 

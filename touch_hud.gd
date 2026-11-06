@@ -1,8 +1,9 @@
 extends Control
-# A touch-only overlay: independent multitouch joystick + attack/jump buttons.
+# Touch overlay: independent joystick, attack, jump and dash controls.
 # Position and sizes adapt to viewport aspect ratio (landscape recommended).
 
 signal attack_requested
+signal dash_requested
 signal zoom_requested
 signal fullscreen_requested
 
@@ -10,6 +11,7 @@ var move_vector := Vector2.ZERO
 var jump_held := false
 var stick_finger := -1
 var jump_finger := -1
+var dash_finger := -1
 var attack_finger := -1
 var zoom_finger := -1
 var fullscreen_finger := -1
@@ -30,6 +32,7 @@ func _on_resized() -> void:
 		# Clear held controls when screen orientation changes.
 		stick_finger = -1
 		jump_finger = -1
+		dash_finger = -1
 		attack_finger = -1
 		zoom_finger = -1
 		fullscreen_finger = -1
@@ -48,13 +51,16 @@ func _layout() -> Dictionary:
 	var fullscreen_radius := 43.0 * scale
 	var attack_radius := 70.0 * scale
 	var jump_radius := 46.0 * scale
+	var dash_radius := 46.0 * scale
 	return {
 		"stick": Vector2(maxf(margin + stick_radius, width * 0.17), height - margin - stick_radius),
 		"stick_radius": stick_radius,
 		"attack": Vector2(width - margin - attack_radius, height - margin - attack_radius),
 		"attack_radius": attack_radius,
-		"jump": Vector2(width - margin - attack_radius * 2.30 - jump_radius, height - margin - attack_radius * 2.0 - jump_radius),
+		"jump": Vector2(width - margin - attack_radius * 2.50 - jump_radius, height - margin - jump_radius),
 		"jump_radius": jump_radius,
+		"dash": Vector2(width - margin - attack_radius * 2.30 - dash_radius, height - margin - attack_radius * 2.0 - dash_radius),
+		"dash_radius": dash_radius,
 		"zoom": Vector2(width - margin - zoom_radius, margin + zoom_radius),
 		"zoom_radius": zoom_radius,
 		"fullscreen": Vector2(margin + fullscreen_radius, margin + fullscreen_radius),
@@ -107,6 +113,10 @@ func _press(finger: int, point: Vector2) -> void:
 		jump_finger = finger
 		jump_held = true
 		queue_redraw()
+	elif dash_finger == -1 and point.distance_to(layout["dash"]) <= layout["dash_radius"] * 1.25:
+		dash_finger = finger
+		dash_requested.emit()
+		queue_redraw()
 
 func _release(finger: int) -> void:
 	if finger == stick_finger:
@@ -116,6 +126,8 @@ func _release(finger: int) -> void:
 	if finger == jump_finger:
 		jump_finger = -1
 		jump_held = false
+	if finger == dash_finger:
+		dash_finger = -1
 	if finger == attack_finger:
 		attack_finger = -1
 	if finger == zoom_finger:
@@ -159,6 +171,10 @@ func _draw() -> void:
 	var jump_r: float = layout["jump_radius"]
 	_draw_button(jump_center, jump_r, Color(0.14, 0.38, 0.58, 0.91 if jump_held else 0.73), Color(0.75, 0.91, 1.0, 0.95))
 	_draw_label(jump_center, "JUMP", jump_r * 0.33)
+	var dash_center: Vector2 = layout["dash"]
+	var dash_r: float = layout["dash_radius"]
+	_draw_button(dash_center, dash_r, Color(0.63, 0.40, 0.12, 0.92 if dash_finger != -1 else 0.75), Color(1.0, 0.88, 0.58, 0.95))
+	_draw_label(dash_center, "DASH", dash_r * 0.32)
 	var zoom_center: Vector2 = layout["zoom"]
 	var zoom_r: float = layout["zoom_radius"]
 	_draw_button(zoom_center, zoom_r, Color(0.15, 0.25, 0.39, 0.94 if zoom_finger != -1 else 0.76), Color(0.76, 0.87, 1.0, 0.92))
