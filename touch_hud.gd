@@ -13,11 +13,26 @@ var attack_finger := -1
 var zoom_finger := -1
 var zoom_level := 2
 var stick_thumb := Vector2.ZERO
+var portrait_mode := false
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_process_input(true)
-	resized.connect(queue_redraw)
+	resized.connect(_on_resized)
+	_on_resized()
+
+func _on_resized() -> void:
+	var now_portrait := size.y > size.x
+	if now_portrait != portrait_mode:
+		portrait_mode = now_portrait
+		# Clear held controls when screen orientation changes.
+		stick_finger = -1
+		jump_finger = -1
+		attack_finger = -1
+		zoom_finger = -1
+		move_vector = Vector2.ZERO
+		stick_thumb = Vector2.ZERO
+		jump_held = false
 	queue_redraw()
 
 func _layout() -> Dictionary:
@@ -41,6 +56,8 @@ func _layout() -> Dictionary:
 	}
 
 func _input(event: InputEvent) -> void:
+	if portrait_mode:
+		return
 	if event is InputEventScreenTouch:
 		if event.pressed:
 			_press(event.index, event.position)
@@ -95,6 +112,14 @@ func _update_stick(point: Vector2) -> void:
 	queue_redraw()
 
 func _draw() -> void:
+	if portrait_mode:
+		draw_rect(Rect2(Vector2.ZERO, size), Color(0.05, 0.08, 0.11, 0.86))
+		var message := "Поверни телефон горизонтально"
+		var font := ThemeDB.fallback_font
+		var font_size := maxi(18, roundi(minf(size.x, size.y) * 0.055))
+		var message_size := font.get_string_size(message, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
+		draw_string(font, (size - message_size) * 0.5 + Vector2(0, message_size.y * 0.7), message, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color.WHITE)
+		return
 	var layout := _layout()
 	var center: Vector2 = layout["stick"]
 	var radius: float = layout["stick_radius"]

@@ -319,7 +319,7 @@ func _build_environment() -> void:
 	ground_collision.shape = ground_shape
 	ground_collision.position.y = -0.5
 	ground.add_child(ground_collision)
-	_add_box(ground, Vector3(70, 1, 70), Vector3(0, -0.5, 0), Color("84b96c"))
+	_add_box(ground, Vector3(70, 1, 70), Vector3(0, -0.5, 0), Color("527c45"))
 	for i in range(18):
 		var angle := TAU * i / 18.0
 		var radius := 13.0 + float(i % 4) * 2.3
