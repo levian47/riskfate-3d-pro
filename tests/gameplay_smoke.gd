@@ -155,6 +155,7 @@ func _run_checks() -> void:
 	var neck_pose := locomotion_skeleton.get_bone_global_pose(neck_index).origin
 	var spine_direction := neck_pose - abdomen_pose
 	var forward_lean_degrees := rad_to_deg(atan2(spine_direction.z, spine_direction.y))
+	print("Naruto clean-pose upper-spine tilt: ", forward_lean_degrees)
 	# Lean is measured on the spine, not by tilting the root or the legs.
 	# The entire native lower-body run chain remains the support and foot contact.
 	if not _require(forward_lean_degrees >= 35.0 and forward_lean_degrees <= 70.0, "Naruto upper spine must stay leaned forward"):
@@ -164,6 +165,7 @@ func _run_checks() -> void:
 	# remain in the original Ninja animation.
 	var full_torso_vector := head_pose - hips_pose
 	var full_torso_angle := rad_to_deg(atan2(full_torso_vector.z, full_torso_vector.y))
+	print("Naruto clean-pose full-body tilt: ", full_torso_angle)
 	# Track whole-body lean instead of only the upper spine.
 	# The new Naruto pose aims for a forward ~55-degree head-to-pelvis angle.
 	if not _require(full_torso_angle >= 34.0 and full_torso_angle <= 55.0, "Naruto must hinge its whole upper body from the hips, not just bend the upper spine"):
