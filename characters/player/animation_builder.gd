@@ -57,7 +57,7 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer) -> Anim
 		var clip_name := find_clip(animator, state)
 		if clip_name.is_empty():
 			push_error("Cannot build locomotion tree without " + state)
-			return
+			return null
 		locomotion.set_input_name(i, state)
 		var clip_node := AnimationNodeAnimation.new()
 		clip_node.animation = clip_name
@@ -76,16 +76,16 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer) -> Anim
 	var sweeping_library := AnimationLibrary.new()
 	if standard_library.add_animation("WideSwordSlashMirror", STANDARD_SWORD_CLIP) != OK:
 		push_error("Could not register the Standard sword animation")
-		return
+		return null
 	if sweeping_library.add_animation("SweepingSwordSlash", SWEEPING_SWORD_CLIP) != OK:
 		push_error("Could not register the Sweeping sword animation")
-		return
+		return null
 	if animator.add_animation_library("combat_mirror", standard_library) != OK:
 		push_error("Could not attach Standard sword animation")
-		return
+		return null
 	if animator.add_animation_library("combat_sweeping", sweeping_library) != OK:
 		push_error("Could not attach Sweeping sword animation")
-		return
+		return null
 	var attack_clip_name := "combat_sweeping/SweepingSwordSlash"
 	var attack_clip := animator.get_animation(attack_clip_name)
 	var attack_node := AnimationNodeAnimation.new()
@@ -108,7 +108,7 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer) -> Anim
 			filtered += 1
 	if filtered == 0:
 		push_error("The imported SwordSlash animation has no matching upper-body tracks")
-		return
+		return null
 
 	root.add_node("SwordSlash", attack_node)
 	root.add_node("AttackSpeed", attack_speed)
