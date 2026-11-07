@@ -217,7 +217,8 @@ func _run_checks() -> void:
 	var collision := environment.get_node("CollisionShape3D") as CollisionShape3D
 	if not _require(collision != null and (collision.shape as BoxShape3D).size.x >= 200.0, "Expanded terrain missing"):
 		return
-	# Sample the actual sword tip in the imported rig, not only bone angles.
+	# Sample the actual sword tip in the imported rig, checking right-to-left motion
+	# rather than only comparing shoulder rotation angles.
 	var skel := game.call("_find_skeleton", visual_node) as Skeleton3D
 	print("Shoulder.R rest basis: ", skel.get_bone_rest(skel.find_bone("Shoulder.R")).basis)
 	var sword_grip := skel.get_node_or_null("SwordGrip/SimpleSword") as Node3D
@@ -240,7 +241,7 @@ func _run_checks() -> void:
 	for point in tip_points:
 		min_height = minf(min_height, point.y)
 		max_height = maxf(max_height, point.y)
-	if not _require(start_tip.x - end_tip.x > 2.5, "Sword must sweep across the front of the character"):
+	if not _require(end_tip.x - start_tip.x > 2.5, "Sword must sweep across the front in the reversed direction"):
 		return
 	if not _require(start_tip.y - end_tip.y > 0.3 and max_height - min_height < 1.0, "Sword should descend slightly, not arc vertically"):
 		return
