@@ -254,8 +254,13 @@ func _run_checks() -> void:
 		await process_frame
 		blended_screen_positions.append(view_right.dot(sword_grip.to_global(Vector3(0.0, 1.305, 0.0))))
 	print("Blended player attack screen positions: ", blended_screen_positions, ", OneShot active: ", tree.get("parameters/Attack/active"))
-	if not _require(blended_screen_positions[0] - blended_screen_positions[blended_screen_positions.size() - 1] > 1.7, "In-game AnimationTree attack must move right-to-left on screen"):
+	# Skip the brief preparation/windup: verify the visible cutting phase
+	# consistently moves screen-right to screen-left, not just its endpoints.
+	if not _require(blended_screen_positions[2] - blended_screen_positions[blended_screen_positions.size() - 1] > 2.0, "Live forward-facing attack cutting phase must move right-to-left"):
 		return
+	for i in range(3, blended_screen_positions.size()):
+		if not _require(blended_screen_positions[i] < blended_screen_positions[i - 1] + 0.25, "Forward-facing cutting phase must not reverse direction"):
+			return
 	tree.active = false
 	animator.play("combat/WideSwordSlash")
 	var tip_points: Array[Vector3] = []
@@ -324,8 +329,11 @@ func _run_checks() -> void:
 		await process_frame
 		mirrored_blended.append(view_right.dot(sword_grip.to_global(Vector3(0.0, 1.305, 0.0))))
 	print("Opposite facing blended attack screen positions: ", mirrored_blended)
-	if not _require(mirrored_blended[0] - mirrored_blended[mirrored_blended.size() - 1] > 1.7, "Mirrored gameplay attack must move right-to-left on screen"):
+	if not _require(mirrored_blended[2] - mirrored_blended[mirrored_blended.size() - 1] > 1.7, "Live reverse-facing attack cutting phase must move right-to-left"):
 		return
+	for i in range(3, mirrored_blended.size()):
+		if not _require(mirrored_blended[i] < mirrored_blended[i - 1] + 0.25, "Reverse-facing cutting phase must not reverse direction"):
+			return
 
 	print("Gameplay smoke test passed: camera-selected right-to-left sword attack from both facing directions, descent, FPS cap, offline ping, movement, dash, world, training hits, HP and respawn.")
 	quit(0)
