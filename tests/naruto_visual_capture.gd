@@ -34,26 +34,29 @@ func _capture() -> void:
 		push_error("Visual QA: cannot create screenshot directory")
 		quit(1)
 		return
-	for view in ["side", "diagonal"]:
-		if view == "side":
-			camera.position = Vector3(8.0, 3.2, 0.0)
-		else:
-			camera.position = Vector3(7.0, 4.6, 7.0)
-		camera.look_at(hero.global_position + Vector3(0.0, 1.1, 0.0), Vector3.UP)
-		for frame in range(4):
-			tree.advance(0.13)
-			await process_frame
-			await RenderingServer.frame_post_draw
-			var image := root.get_texture().get_image()
-			if image == null or image.is_empty():
-				push_error("Visual QA: blank viewport image")
-				quit(1)
-				return
-			var filename := "%s/%s_%d.png" % [output_dir, view, frame]
-			if image.save_png(filename) != OK:
-				push_error("Visual QA: failed to save " + filename)
-				quit(1)
-				return
-			print("VISUAL_QA_IMAGE: ", filename, " size=", image.get_size())
+	for state in ["Run", "Naruto"]:
+		game.call("_set_locomotion", state)
+		tree.advance(0.15)
+		for view in ["side", "diagonal"]:
+			if view == "side":
+				camera.position = Vector3(8.0, 3.2, 0.0)
+			else:
+				camera.position = Vector3(7.0, 4.6, 7.0)
+			camera.look_at(hero.global_position + Vector3(0.0, 1.1, 0.0), Vector3.UP)
+			for frame in range(4):
+				tree.advance(0.13)
+				await process_frame
+				await RenderingServer.frame_post_draw
+				var image := root.get_texture().get_image()
+				if image == null or image.is_empty():
+					push_error("Visual QA: blank viewport image")
+					quit(1)
+					return
+				var filename := "%s/%s_%s_%d.png" % [output_dir, state, view, frame]
+				if image.save_png(filename) != OK:
+					push_error("Visual QA: failed to save " + filename)
+					quit(1)
+					return
+				print("VISUAL_QA_IMAGE: ", filename, " size=", image.get_size())
 	print("VISUAL_QA_CAPTURE_OK")
 	quit(0)
