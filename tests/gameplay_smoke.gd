@@ -246,6 +246,9 @@ func _run_checks() -> void:
 	for fraction in [0.16, 0.24, 0.32, 0.40, 0.48, 0.56, 0.64]:
 		tree.advance(playback_duration * (fraction - last_fraction))
 		last_fraction = fraction
+		# BoneAttachment3D synchronizes on Skeleton3D updates, not during
+		# a chain of manual AnimationTree.advance() calls in the same frame.
+		await process_frame
 		blended_screen_positions.append(view_right.dot(sword_grip.to_global(Vector3(0.0, 1.305, 0.0))))
 	print("Blended player attack screen positions: ", blended_screen_positions, ", OneShot active: ", tree.get("parameters/Attack/active"))
 	if not _require(blended_screen_positions[0] - blended_screen_positions[blended_screen_positions.size() - 1] > 1.7, "In-game AnimationTree attack must move right-to-left on screen"):
