@@ -219,14 +219,12 @@ func _run_checks() -> void:
 	# Back-facing swing is the owner's preferred motion. The same one-shot
 	# must be used for every orientation, without any camera-based switching.
 	game.set_physics_process(false)
-	var visual_node := game.get("visual") as Node3D
 	var view_camera := game.get("camera") as Camera3D
 	var skel := game.call("_find_skeleton", visual_node) as Skeleton3D
 	var sword_grip := skel.get_node_or_null("SwordGrip/SimpleSword") as Node3D
 	if not _require(view_camera != null and sword_grip != null, "Camera and sword attachment must exist"):
 		return
 	var view_right := view_camera.global_transform.basis.x.normalized()
-	var attack_node := blend.get_node("SwordSlash") as AnimationNodeAnimation
 	if not _require(attack_node != null and String(attack_node.animation) == "combat/WideSwordSlash", "OneShot must play the single retained sword clip"):
 		return
 
