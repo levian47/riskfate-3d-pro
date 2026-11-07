@@ -54,6 +54,29 @@ jobs:
           test -s dist/index.js
           test -s dist/index.wasm
           test -s dist/index.pck
+          # Exported HTML, JS, WASM and PCK files share the fixed "index" name.
+          # Put each complete export under its own revision URL to prevent
+          # browsers from mixing a new page with an older cached game pack.
+          revision="${GITHUB_SHA:0:12}"
+          mkdir -p "dist/builds/$revision"
+          mv dist/index.* "dist/builds/$revision/"
+          cat > dist/index.html <<EOF
+          <!doctype html>
+          <html lang="uk">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <meta http-equiv="refresh" content="0;url=builds/$revision/">
+            <title>Riskfate 3D Pro</title>
+          </head>
+          <body><a href="builds/$revision/">Відкрити Riskfate 3D Pro</a></body>
+          </html>
+          EOF
+          test -s "dist/builds/$revision/index.html"
+          test -s "dist/builds/$revision/index.js"
+          test -s "dist/builds/$revision/index.wasm"
+          test -s "dist/builds/$revision/index.pck"
+          test -s dist/index.html
           touch dist/.nojekyll
 
       - name: Upload Pages artifact
