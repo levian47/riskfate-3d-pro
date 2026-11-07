@@ -357,7 +357,7 @@ func _find_clip(short_name: String) -> String:
 	return ""
 
 
-func _make_wider_sword_slash(source_name: String, model: Node) -> String:
+func _make_wider_sword_slash(source_name: String, model: Node, mirrored: bool = false) -> String:
 	# Preserve the imported source. First widen the upper arm as before,
 	# then solve the right-shoulder rotation for a near-horizontal sword tip.
 	var source := animator.get_animation(source_name)
@@ -395,16 +395,16 @@ func _make_wider_sword_slash(source_name: String, model: Node) -> String:
 	if arm_track < 0:
 		return ""
 	var lib := AnimationLibrary.new()
-	var clip_name := "WideSwordSlash"
-	var library_name := "combat"
+	var clip_name := "WideSwordSlashMirror" if mirrored else "WideSwordSlash"
+	var library_name := "combat_mirror" if mirrored else "combat"
 	if lib.add_animation(clip_name, wide) != OK:
 		return ""
 	if animator.add_animation_library(library_name, lib) != OK:
 		return ""
 
 	# AnimationPlayer.seek() gives the REAL post-import Godot bone pose.
-	# Keep the back-facing horizontal swing previously used by the game.
-	# This one local-space clip is not corrected per camera orientation.
+	# Preserve the original two-pass pose sampling for the preferred back swing.
+	# The first pass is only setup and its animation is discarded afterward.
 	var key_times: Array[float] = []
 	var shoulder_rotations: Array[Quaternion] = []
 	var previous_pose := Quaternion.IDENTITY
@@ -422,7 +422,8 @@ func _make_wider_sword_slash(source_name: String, model: Node) -> String:
 		if radius < 0.5:
 			continue
 		var progress := smoothstep(0.14, 0.59, fraction)
-		var horizontal_angle := deg_to_rad(lerpf(-SWORD_ARC_SWEEP_ANGLE, SWORD_ARC_SWEEP_ANGLE, progress))
+		var arc_direction := -1.0 if mirrored else 1.0
+		var horizontal_angle := deg_to_rad(lerpf(SWORD_ARC_SWEEP_ANGLE * arc_direction, -SWORD_ARC_SWEEP_ANGLE * arc_direction, progress))
 		var desired_height := lerpf(SWORD_ARC_START_HEIGHT, SWORD_ARC_END_HEIGHT, progress)
 		desired_height = clampf(desired_height, -radius * 0.95, radius * 0.95)
 		var horizontal_length := sqrt(maxf(0.001, radius * radius - desired_height * desired_height))
@@ -489,12 +490,16 @@ func _setup_animation_tree(model: Node) -> void:
 	if attack_clip_name.is_empty():
 		push_error("SwordSlash clip missing")
 		return
-	# Use the same sword slash every time, irrespective of hero rotation.
-	var wide_clip_name := _make_wider_sword_slash(attack_clip_name, model)
-	if wide_clip_name.is_empty():
-		push_error("Could not build sword slash animation")
+	# Build the previously approved back-facing clip in the same rig state
+	# as before. Discard the preparatory normal clip, leaving one active
+	# custom combat animation and no camera-dependent switching.
+	var preparatory_clip := _make_wider_sword_slash(attack_clip_name, model)
+	var retained_clip := _make_wider_sword_slash(attack_clip_name, model, true)
+	if preparatory_clip.is_empty() or retained_clip.is_empty():
+		push_error("Could not build the retained back-facing sword slash")
 		return
-	attack_clip_name = wide_clip_name
+	animator.remove_animation_library("combat")
+	attack_clip_name = retained_clip
 	var attack_clip := animator.get_animation(attack_clip_name)
 	var attack_node := AnimationNodeAnimation.new()
 	attack_node.animation = attack_clip_name
