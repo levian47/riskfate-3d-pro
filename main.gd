@@ -31,6 +31,9 @@ const ATTACK_SWING_MAX_ANGLE := deg_to_rad(170.0)
 const SWORD_ARC_START_HEIGHT := 0.78
 const SWORD_ARC_END_HEIGHT := 0.22
 const SWORD_ARC_SWEEP_ANGLE := 65.0
+# The imported frontal clip contains an opposite-direction preparation phase.
+# Start from the cutting pose instead; back-facing clip keeps its full motion.
+const FRONT_SLASH_SEEK_FRACTION := 0.32
 # Prototype combat parameters. Not approved balance values.
 const TRAINING_HIT_DAMAGE := 25
 const TRAINING_HIT_REACH := 3.1
@@ -265,6 +268,7 @@ func _start_attack() -> void:
 	var hero_right := visual.global_transform.basis.x
 	var use_mirror := camera_right.dot(hero_right) < 0.0
 	animation_tree.set("parameters/SwordDirection/blend_amount", 1.0 if use_mirror else 0.0)
+	animation_tree.set("parameters/AttackSeek/seek_request", 0.0 if use_mirror else animator.get_animation("combat/WideSwordSlash").length * FRONT_SLASH_SEEK_FRACTION)
 	animation_tree.set("parameters/Attack/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
 
 
@@ -518,6 +522,7 @@ func _setup_animation_tree(model: Node) -> void:
 	var swing_direction := AnimationNodeBlend2.new()
 	swing_direction.sync = false
 	var attack_speed := AnimationNodeTimeScale.new()
+	var attack_seek := AnimationNodeTimeSeek.new()
 	var attack_layer := AnimationNodeOneShot.new()
 	attack_layer.fadein_time = 0.06
 	attack_layer.fadeout_time = 0.10
@@ -541,8 +546,10 @@ func _setup_animation_tree(model: Node) -> void:
 	root.connect_node("SwordDirection", 0, "SwordSlash")
 	root.connect_node("SwordDirection", 1, "SwordSlashMirror")
 	root.add_node("AttackSpeed", attack_speed)
+	root.add_node("AttackSeek", attack_seek)
 	root.add_node("Attack", attack_layer)
-	root.connect_node("AttackSpeed", 0, "SwordDirection")
+	root.connect_node("AttackSeek", 0, "SwordDirection")
+	root.connect_node("AttackSpeed", 0, "AttackSeek")
 	root.connect_node("Attack", 0, "Locomotion")
 	root.connect_node("Attack", 1, "AttackSpeed")
 	root.connect_node("output", 0, "Attack")
