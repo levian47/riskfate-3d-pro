@@ -9,9 +9,6 @@ const UPPER_BODY_BONES := [
 	"Shoulder.L", "UpperArm.L", "LowerArm.L", "Fist.L",
 	"Shoulder.R", "UpperArm.R", "LowerArm.R", "Fist.R"
 ]
-# Naruto sprint keeps the leaned torso, level gaze, left arm and all legs
-# unchanged during an attack. Only the sword arm follows SweepingSwordSlash.
-const NARUTO_ATTACK_BONES := ["Shoulder.R", "UpperArm.R", "LowerArm.R", "Fist.R"]
 # Naruto sprint attacks must not straighten the leaning torso or reset gaze.
 # Only the weapon arm is allowed to leave the running pose during the strike.
 const NARUTO_ATTACK_ARM_BONES := ["Shoulder.R", "UpperArm.R", "LowerArm.R", "Fist.R"]
@@ -190,17 +187,3 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 	return animation_tree
 
 
-
-
-static func set_naruto_attack_mask(animation_tree: AnimationTree, naruto_sprint: bool) -> void:
-	if animation_tree == null:
-		return
-	var graph := animation_tree.tree_root as AnimationNodeBlendTree
-	if graph == null:
-		return
-	var attack := graph.get_node("Attack") as AnimationNodeOneShot
-	if attack == null:
-		return
-	for bone in UPPER_BODY_BONES:
-		var enabled := not naruto_sprint or bone in NARUTO_ATTACK_BONES
-		attack.set_filter_path(NodePath("CharacterArmature/Skeleton3D:" + bone), enabled)

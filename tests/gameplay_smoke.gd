@@ -151,9 +151,6 @@ func _run_checks() -> void:
 		return
 	if not _require(head_pose.y > 1.0 and head_pose.z > torso_pose.z + 0.30, "Naruto sprint head must be forward and remain above the ground"):
 		return
-	var head_basis := locomotion_skeleton.get_bone_global_pose(head_index).basis
-	if not _require(head_basis.y.normalized().dot(Vector3.UP) > 0.85 and head_basis.z.normalized().dot(Vector3.FORWARD) > 0.85, "Naruto sprint head must look horizontally forward despite leaned torso"):
-		return
 	# The head remains physically low, but its local forward (+Z) should
 	# face near-horizontally along the run, not down into the ground.
 	var gaze := locomotion_skeleton.get_bone_global_pose(head_index).basis.z.normalized()
@@ -171,6 +168,23 @@ func _run_checks() -> void:
 		if not _require(attack_pose_layer.is_path_filtered(NodePath("CharacterArmature/Skeleton3D:" + bone_name)), "Naruto strike must allow the weapon arm: " + bone_name):
 			return
 
+	# Verify an actual weapon strike uses the running pose mask, not only
+	# static tree configuration. All other locomotion tests run after abort.
+	game.call("_start_attack")
+	for frame in range(4):
+		await physics_frame
+	if not _require(bool(tree.get("parameters/Attack/active")), "Naruto strike must start without leaving the sprint pose"):
+		return
+	var head_gaze_during_attack := locomotion_skeleton.get_bone_global_pose(head_index).basis.z.normalized()
+	if not _require(head_gaze_during_attack.z > 0.90 and absf(head_gaze_during_attack.y) < 0.18, "Naruto strike must not lower the head or override forward gaze"):
+		return
+	tree.set("parameters/Attack/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_ABORT)
+	var sprint_combat := game.get("combat_controller") as RefCounted
+	sprint_combat.set("attack_time_left", 0.0)
+	sprint_combat.set("attack_hit_pending", false)
+	for frame in range(4):
+		await physics_frame
+
 	var left_hand_pose := locomotion_skeleton.get_bone_global_pose(left_hand_index).origin
 	var right_hand_pose := locomotion_skeleton.get_bone_global_pose(right_hand_index).origin
 	var left_shoulder_pose := locomotion_skeleton.get_bone_global_pose(locomotion_skeleton.find_bone("Shoulder.L")).origin
@@ -182,31 +196,6 @@ func _run_checks() -> void:
 	var shoulder_width := absf(left_shoulder_pose.x - right_shoulder_pose.x)
 	if not _require(hand_width > 0.85 and hand_width > shoulder_width + 0.50, "Naruto hands must spread outward farther than the shoulders"):
 		return
-	# A sword strike in Naruto sprint must preserve the tilted trunk, forward
-	# head, running legs and trailing left arm (only the right sword arm moves).
-	game.call("_start_attack")
-	var narrow_attack := blend.get_node("Attack") as AnimationNodeOneShot
-	if not _require(narrow_attack != null and float((game.get("combat_controller") as RefCounted).get("attack_time_left")) > 0.0, "Attack must start in Naruto sprint"):
-		return
-	for bone_name in ANIMATION_BUILDER.UPPER_BODY_BONES:
-		var expected_attack_track: bool = bone_name in ANIMATION_BUILDER.NARUTO_ATTACK_BONES
-		var attack_path := NodePath("CharacterArmature/Skeleton3D:" + bone_name)
-		if not _require(narrow_attack.is_path_filtered(attack_path) == expected_attack_track, "Naruto sword attack must preserve running pose: " + bone_name):
-			return
-	for frame in range(4):
-		await physics_frame
-	if not _require(bool(tree.get("parameters/Attack/active")), "Naruto sword attack must play on top of running stance"):
-		return
-	tree.set("parameters/Attack/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_ABORT)
-	(game.get("combat_controller") as RefCounted).set("attack_time_left", 0.0)
-	(game.get("combat_controller") as RefCounted).set("attack_hit_pending", false)
-	for frame in range(4):
-		await physics_frame
-	# Restore the original full upper-body attack mask for normal running.
-	ANIMATION_BUILDER.set_naruto_attack_mask(tree, false)
-	for bone_name in ANIMATION_BUILDER.UPPER_BODY_BONES:
-		if not _require(narrow_attack.is_path_filtered(NodePath("CharacterArmature/Skeleton3D:" + bone_name)), "Normal attack mask must retain approved full upper body: " + bone_name):
-			return
 	var leg_samples: Array[Quaternion] = []
 	for sample in range(4):
 		for frame in range(5):

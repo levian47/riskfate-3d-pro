@@ -15,7 +15,7 @@ var attack_duration := 0.0
 var attack_hit_pending := false
 
 
-func start_attack(animation_tree: AnimationTree, animator: AnimationPlayer, naruto_sprint: bool = false) -> void:
+func start_attack(animation_tree: AnimationTree, animator: AnimationPlayer) -> void:
 	if animation_tree == null or attack_time_left > 0.0:
 		return
 	# Preserve the existing original SwordSlash duration, not the active
@@ -26,8 +26,6 @@ func start_attack(animation_tree: AnimationTree, animator: AnimationPlayer, naru
 	attack_duration = animator.get_animation(clip_name).length / ATTACK_SPEED
 	attack_time_left = attack_duration
 	attack_hit_pending = true
-	# A sprint attack must not overwrite Naruto's spine/head or left-arm pose.
-	ANIMATION_BUILDER.set_naruto_attack_mask(animation_tree, naruto_sprint)
 	animation_tree.set("parameters/Attack/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
 
 

@@ -176,7 +176,7 @@ func _build_hero() -> void:
 
 func _start_attack() -> void:
 	# Maintain the existing desktop/mobile signal and test-facing entrypoint.
-	combat_controller.start_attack(animation_tree, animator, locomotion_state == "Naruto")
+	combat_controller.start_attack(animation_tree, animator)
 
 
 func _resolve_training_hit() -> void:
