@@ -59,7 +59,7 @@ func _run_checks() -> void:
 		if not _require(help != null and help.text.contains("Sword I"), "Desktop HUD must show the selected weapon"):
 			return
 	else:
-		var mobile := game.get("touch_hud")
+		var mobile := game.get("touch_hud") as Control
 		if not _require(mobile != null and int(mobile.weapon_index) == 1, "Mobile HUD must show current weapon index"):
 			return
 	var hero := game.get("hero") as CharacterBody3D
