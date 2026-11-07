@@ -267,6 +267,10 @@ func _start_attack() -> void:
 	var camera_right := camera.global_transform.basis.x
 	var hero_right := visual.global_transform.basis.x
 	var use_mirror := camera_right.dot(hero_right) < 0.0
+	# The front cut starts in its right-hand pose with no reverse windup.
+	# Keep the previously accepted fade on the back-facing swing.
+	var attack_layer := (animation_tree.tree_root as AnimationNodeBlendTree).get_node("Attack") as AnimationNodeOneShot
+	attack_layer.fadein_time = 0.06 if use_mirror else 0.0
 	animation_tree.set("parameters/SwordDirection/blend_amount", 1.0 if use_mirror else 0.0)
 	animation_tree.set("parameters/AttackSeek/seek_request", 0.0 if use_mirror else animator.get_animation("combat/WideSwordSlash").length * FRONT_SLASH_SEEK_FRACTION)
 	animation_tree.set("parameters/Attack/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
@@ -524,7 +528,7 @@ func _setup_animation_tree(model: Node) -> void:
 	var attack_speed := AnimationNodeTimeScale.new()
 	var attack_seek := AnimationNodeTimeSeek.new()
 	var attack_layer := AnimationNodeOneShot.new()
-	attack_layer.fadein_time = 0.0
+	attack_layer.fadein_time = 0.06
 	attack_layer.fadeout_time = 0.10
 	attack_layer.filter_enabled = true
 	var filtered := 0
