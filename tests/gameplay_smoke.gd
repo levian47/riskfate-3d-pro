@@ -248,7 +248,7 @@ func _run_checks() -> void:
 		await process_frame
 		back_screen.append(view_right.dot(sword_grip.to_global(Vector3(0.0, 1.305, 0.0))))
 	print("Single sword slash / back-facing screen positions: ", back_screen)
-	if not _require(back_screen[1] - back_screen[back_screen.size() - 1] > 1.7, "Retained back-facing sword cut must travel right-to-left on screen"):
+	if not _require(back_screen[3] > 1.0 and back_screen[3] - back_screen[back_screen.size() - 1] > 1.8, "Retained back-facing cutting phase must sweep right-to-left on screen"):
 		return
 
 	# Turning the hero cannot switch clips: the only branch is the same
