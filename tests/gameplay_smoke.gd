@@ -67,6 +67,11 @@ func _run_checks() -> void:
 		return
 	var sweeping_clip := animator.get_animation("combat_sweeping/SweepingSwordSlash")
 	var standard_clip := animator.get_animation("combat_mirror/WideSwordSlashMirror")
+	# Guard against returning to expensive runtime pose reconstruction.
+	var standard_file := load("res://assets/animations/standard_sword_slash.tres") as Animation
+	var sweeping_file := load("res://assets/animations/sweeping_sword_slash.tres") as Animation
+	if not _require(standard_file != null and sweeping_file != null and standard_clip == standard_file and sweeping_clip == sweeping_file, "Both combat clips must load directly from their individual Godot resources"):
+		return
 	if not _require(standard_clip != null and sweeping_clip != null and standard_clip != sweeping_clip and is_equal_approx(standard_clip.length, sweeping_clip.length), "Standard and sweeping clips must be independent and match timing"):
 		return
 	if not _require(not blend.has_node("AttackVariant") and not blend.has_node("SwordDirection") and not blend.has_node("AttackSeek"), "Only the sweeping attack may be wired for playtest"):
@@ -330,6 +335,12 @@ func _run_checks() -> void:
 		return
 	print("Standard sword tip positions in hero local space: ", standard_tips)
 	print("Sweeping sword tip positions in hero local space: ", sweeping_tips)
+	# Visual acceptance baseline before conversion to .tres resources.
+	# A change here means the baked clips no longer reproduce approved poses.
+	if not _require(standard_tips[0].distance_to(Vector3(-1.924545, 2.295721, 1.238922)) < 0.04, "Standard approved sword pose changed during resource migration"):
+		return
+	if not _require(sweeping_tips[0].distance_to(Vector3(-2.201129, 1.863062, 0.963700)) < 0.04, "Sweeping approved sword pose changed during resource migration"):
+		return
 	var standard_min_x := INF
 	var standard_max_x := -INF
 	var sweeping_min_x := INF
@@ -388,7 +399,7 @@ func _run_checks() -> void:
 	if not _require(float(game.get("attack_time_left")) > 0.0 and bool(tree.get("parameters/Attack/active")), "Same sword slash must start when hero turns around"):
 		return
 
-	print("Gameplay smoke test passed: saved original Standard, active Sweeping with upward blade path, FPS cap, offline ping, movement, dash, world, training hits, HP and respawn.")
+	print("Gameplay smoke test passed: independent baked sword resources retain approved poses; active Sweeping, movement, dash, world, training hits, HP and respawn.")
 	quit(0)
 
 func _require(value: bool, message: String) -> bool:
