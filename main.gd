@@ -189,6 +189,9 @@ func _set_locomotion(state: String, restart: bool = false) -> void:
 		return
 	if state == locomotion_state and not restart:
 		return
+	# With Naruto running, the attack overlay may move the weapon arm only.
+	# Normal locomotion keeps the original approved full upper-body strike.
+	ANIMATION_BUILDER.preserve_naruto_pose_during_attack(animation_tree, state == "Naruto")
 	animation_tree.set("parameters/Locomotion/transition_request", state)
 	locomotion_state = state
 

@@ -151,6 +151,23 @@ func _run_checks() -> void:
 		return
 	if not _require(head_pose.y > 1.0 and head_pose.z > torso_pose.z + 0.30, "Naruto sprint head must be forward and remain above the ground"):
 		return
+	# The head remains physically low, but its local forward (+Z) should
+	# face near-horizontally along the run, not down into the ground.
+	var gaze := locomotion_skeleton.get_bone_global_pose(head_index).basis.z.normalized()
+	if not _require(gaze.z > 0.90 and absf(gaze.y) < 0.18, "Naruto face must look forward while the torso leans down"):
+		return
+	# Attack animation must not override the sprinting spine, head or left arm.
+	# Only the weapon arm may play the already approved SweepingSwordSlash.
+	var attack_pose_layer := blend.get_node("Attack") as AnimationNodeOneShot
+	if not _require(attack_pose_layer != null, "Naruto sword attack layer must exist"):
+		return
+	for bone_name in ["Abdomen", "Torso", "Neck", "Head", "Shoulder.L", "UpperArm.L", "LowerArm.L", "Fist.L"]:
+		if not _require(not attack_pose_layer.is_path_filtered(NodePath("CharacterArmature/Skeleton3D:" + bone_name)), "Naruto strike must preserve running pose: " + bone_name):
+			return
+	for bone_name in ANIMATION_BUILDER.NARUTO_ATTACK_ARM_BONES:
+		if not _require(attack_pose_layer.is_path_filtered(NodePath("CharacterArmature/Skeleton3D:" + bone_name)), "Naruto strike must allow the weapon arm: " + bone_name):
+			return
+
 	var left_hand_pose := locomotion_skeleton.get_bone_global_pose(left_hand_index).origin
 	var right_hand_pose := locomotion_skeleton.get_bone_global_pose(right_hand_index).origin
 	var left_shoulder_pose := locomotion_skeleton.get_bone_global_pose(locomotion_skeleton.find_bone("Shoulder.L")).origin
@@ -173,6 +190,10 @@ func _run_checks() -> void:
 	if not _require(leg_motion > 0.01, "Naruto mode must actually animate leg rotations, not slide with frozen pose"):
 		return
 	game.call("_set_locomotion", "Run")
+	# Leaving Naruto must restore every approved attack track.
+	for bone_name in ANIMATION_BUILDER.UPPER_BODY_BONES:
+		if not _require(attack_pose_layer.is_path_filtered(NodePath("CharacterArmature/Skeleton3D:" + bone_name)), "Standard Run must restore the full approved sword attack: " + bone_name):
+			return
 	for frame in range(8):
 		await physics_frame
 	var ordinary_before := locomotion_skeleton.get_bone_pose_rotation(leg_index)

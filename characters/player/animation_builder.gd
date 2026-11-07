@@ -9,6 +9,23 @@ const UPPER_BODY_BONES := [
 	"Shoulder.L", "UpperArm.L", "LowerArm.L", "Fist.L",
 	"Shoulder.R", "UpperArm.R", "LowerArm.R", "Fist.R"
 ]
+# Naruto sprint attacks must not straighten the leaning torso or reset gaze.
+# Only the weapon arm is allowed to leave the running pose during the strike.
+const NARUTO_ATTACK_ARM_BONES := ["Shoulder.R", "UpperArm.R", "LowerArm.R", "Fist.R"]
+
+static func preserve_naruto_pose_during_attack(tree: AnimationTree, active: bool) -> void:
+	if tree == null:
+		return
+	var root := tree.tree_root as AnimationNodeBlendTree
+	if root == null:
+		return
+	var attack := root.get_node("Attack") as AnimationNodeOneShot
+	if attack == null:
+		return
+	for bone in UPPER_BODY_BONES:
+		var path := NodePath("CharacterArmature/Skeleton3D:" + bone)
+		attack.set_filter_path(path, not active or bone in NARUTO_ATTACK_ARM_BONES)
+
 
 static func find_animation_player(node: Node) -> AnimationPlayer:
 	if node is AnimationPlayer:
