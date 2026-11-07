@@ -9,14 +9,10 @@ const MOVE_ANIMATION_THRESHOLD := 0.45
 const TOUCH_HUD_SCRIPT := preload("res://touch_hud.gd")
 const HUD_BUILDER := preload("res://ui/hud_builder.gd")
 const ANIMATION_BUILDER := preload("res://characters/player/animation_builder.gd")
+const COMBAT_CONTROLLER := preload("res://characters/player/combat_controller.gd")
 const WORLD_SCRIPT := preload("res://world/environment.gd")
-# The attack runs on the upper body while the legs retain their movement animation.
-const ATTACK_SPEED := 1.65
-# Prototype combat parameters. Not approved balance values.
-const TRAINING_HIT_DAMAGE := 25
-const TRAINING_HIT_REACH := 3.1
-const TRAINING_HIT_FACING_DOT := 0.60
-const TRAINING_HIT_MOMENT := 0.42
+# Attack still overlays only the upper body; movement continues unchanged.
+const ATTACK_SPEED := COMBAT_CONTROLLER.ATTACK_SPEED
 
 var hero: CharacterBody3D
 var visual: Node3D
@@ -29,10 +25,8 @@ const MOBILE_ZOOM_LEVELS := [8.0, 12.0, 18.0]
 var mobile_zoom_index := 1
 var animation_tree: AnimationTree
 var locomotion_state := ""
-var attack_time_left := 0.0
-var attack_duration := 0.0
-var attack_hit_pending := false
 var movement_controller = MOVEMENT_CONTROLLER.new()
+var combat_controller = COMBAT_CONTROLLER.new()
 var touch_hud
 var fps_label: Label
 var fps_update_elapsed := 0.0
@@ -54,11 +48,7 @@ func _process(delta: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if attack_time_left > 0.0:
-		attack_time_left = maxf(0.0, attack_time_left - delta)
-		if attack_hit_pending and attack_time_left <= attack_duration * (1.0 - TRAINING_HIT_MOMENT):
-			attack_hit_pending = false
-			_resolve_training_hit()
+	combat_controller.physics_step(delta, self, hero, visual)
 
 	# Motion is isolated from combat and animation state transitions.
 	var launched: bool = movement_controller.physics_step(hero, visual, camera, touch_hud, delta)
@@ -145,36 +135,14 @@ func _build_hero() -> void:
 		push_warning("AnimationPlayer not found in imported model")
 
 func _start_attack() -> void:
-	if animation_tree == null or attack_time_left > 0.0:
-		return
-	var clip_name := ANIMATION_BUILDER.find_clip(animator, "SwordSlash")
-	if clip_name.is_empty():
-		return
-	attack_duration = animator.get_animation(clip_name).length / ATTACK_SPEED
-	attack_time_left = attack_duration
-	attack_hit_pending = true
-	animation_tree.set("parameters/Attack/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
+	# Maintain the existing desktop/mobile signal and test-facing entrypoint.
+	combat_controller.start_attack(animation_tree, animator)
 
 
 func _resolve_training_hit() -> void:
-	# The current training step uses a forward reach check; it does not claim
-	# accurate sword-blade collisions or a complete combat damage system.
-	var target := get_node_or_null("Environment/TrainingDummy") as StaticBody3D
-	if target == null or not target.has_method("take_damage") or not target.get("is_available"):
-		return
-	var offset := target.global_position - hero.global_position
-	var height_difference := absf(offset.y)
-	offset.y = 0.0
-	var distance := offset.length()
-	if distance > TRAINING_HIT_REACH or distance < 0.001 or height_difference > 2.2:
-		return
-	# Model has a 180° facing correction: its local +Z is the strike direction.
-	var facing := visual.global_transform.basis.z
-	facing.y = 0.0
-	facing = facing.normalized()
-	if facing.dot(offset / distance) < TRAINING_HIT_FACING_DOT:
-		return
-	target.take_damage(TRAINING_HIT_DAMAGE)
+	# Preserve the existing smoke-test entrypoint, no separate hit mechanic.
+	combat_controller.resolve_training_hit(self, hero, visual)
+
 
 func _find_skeleton(node: Node) -> Skeleton3D:
 	if node is Skeleton3D:
