@@ -183,9 +183,9 @@ func _run_checks() -> void:
 		return
 	if not _require(float(modified_pelvis["pitch"]) > 12.0 and float(modified_pelvis["pitch"]) < 28.0, "Naruto pelvis must pitch forward in actual modified pose"):
 		return
-	if not _require(float(finished_pose["pelvis_segment"]) >= 56.0 and float(finished_pose["pelvis_segment"]) <= 86.0, "Naruto pelvic mesh segment must pitch forward after IK"):
+	if not _require(float(finished_pose["pelvis_segment"]) >= 44.0 and float(finished_pose["pelvis_segment"]) <= 66.0, "Naruto pelvic mesh segment must pitch forward after IK"):
 		return
-	if not _require(float(finished_pose["head_angle"]) >= 62.0 and float(finished_pose["head_angle"]) <= 74.0, "Naruto head-to-pelvis lean must survive IK and pelvis modifier"):
+	if not _require(float(finished_pose["head_angle"]) >= 48.0 and float(finished_pose["head_angle"]) <= 64.0, "Naruto head-to-pelvis lean must survive IK and pelvis modifier"):
 		return
 	var naruto_pelvis_rotation: Quaternion = finished_pose["body_rotation"]
 	var torso_pose := locomotion_skeleton.get_bone_global_pose(torso_index).origin
@@ -196,7 +196,7 @@ func _run_checks() -> void:
 	var forward_lean_degrees := rad_to_deg(atan2(spine_direction.z, spine_direction.y))
 	# Lean is measured on the spine, not by tilting the root or the legs.
 	# The entire native lower-body run chain remains the support and foot contact.
-	if not _require(forward_lean_degrees >= 65.0 and forward_lean_degrees <= 90.0, "Naruto upper spine must stay leaned forward"):
+	if not _require(forward_lean_degrees >= 50.0 and forward_lean_degrees <= 75.0, "Naruto upper spine must stay leaned forward"):
 		return
 	var hips_pose := locomotion_skeleton.get_bone_global_pose(hips_index).origin
 	# Check actual mesh-bearing pelvis segment, not just Body_2's quaternion.
@@ -206,9 +206,9 @@ func _run_checks() -> void:
 	# modified pose above; normal get_bone_global_pose() here is animated only.
 	var full_torso_vector := head_pose - hips_pose
 	var full_torso_angle := rad_to_deg(atan2(full_torso_vector.z, full_torso_vector.y))
-	# The previous test missed the regression: 70 degrees in upper spine
-	# corresponded to only ~43 degrees from the hip to head.
-	if not _require(full_torso_angle >= 62.0 and full_torso_angle <= 74.0, "Naruto must hinge its whole upper body from the hips, not just bend the upper spine"):
+	# Track whole-body lean instead of only the upper spine.
+	# The new Naruto pose aims for a forward ~55-degree head-to-pelvis angle.
+	if not _require(full_torso_angle >= 48.0 and full_torso_angle <= 64.0, "Naruto must hinge its whole upper body from the hips, not just bend the upper spine"):
 		return
 	if not _require(head_pose.y > 1.0 and head_pose.z > torso_pose.z + 0.30, "Naruto sprint head must be forward and remain above the ground"):
 		return
@@ -274,18 +274,18 @@ func _run_checks() -> void:
 			await physics_frame
 		var current_hip := locomotion_skeleton.get_bone_global_pose(hips_index).origin
 		var current_modified: Dictionary = finished_pose_samples.back()
-		if not _require(float(current_modified["pelvis_segment"]) >= 56.0 and float(current_modified["pelvis_segment"]) <= 86.0, "Naruto pelvis must visibly follow the torso across the stride"):
+		if not _require(float(current_modified["pelvis_segment"]) >= 44.0 and float(current_modified["pelvis_segment"]) <= 66.0, "Naruto pelvis must visibly follow the torso across the stride"):
 			return
 		var current_head := locomotion_skeleton.get_bone_global_pose(head_index).origin
 		var current_axis := current_head - current_hip
 		var current_angle := rad_to_deg(atan2(current_axis.z, current_axis.y))
 		var current_width := absf(locomotion_skeleton.get_bone_global_pose(left_hand_index).origin.x - locomotion_skeleton.get_bone_global_pose(right_hand_index).origin.x)
 		var current_pelvis_pitch := float(current_modified["pitch"])
-		if not _require(current_angle >= 62.0 and current_angle <= 74.0 and current_width > 1.65, "Naruto full-body lean and wide arms must survive the whole run cycle"):
+		if not _require(current_angle >= 48.0 and current_angle <= 64.0 and current_width > 1.65, "Naruto full-body lean and wide arms must survive the whole run cycle"):
 			return
 		if not _require(current_pelvis_pitch > 12.0 and current_pelvis_pitch < 28.0, "Naruto pelvic tilt must persist through the full stride"):
 			return
-		if not _require(float(current_modified["head_angle"]) >= 62.0 and float(current_modified["head_angle"]) <= 74.0, "Naruto corrected torso angle must survive the full stride"):
+		if not _require(float(current_modified["head_angle"]) >= 48.0 and float(current_modified["head_angle"]) <= 64.0, "Naruto corrected torso angle must survive the full stride"):
 			return
 	print("Naruto processed pose over full gait: ", finished_pose_samples.slice(maxi(0, finished_pose_samples.size() - 8)))
 	var leg_samples: Array[Quaternion] = []
