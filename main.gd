@@ -401,6 +401,14 @@ func _make_wider_sword_slash(source_name: String, model: Node, mirrored: bool = 
 			wide.track_set_key_value(track, key_index, changed_rotation.normalized())
 	if arm_track < 0:
 		return ""
+	if not mirrored:
+		# The imported right-arm swing contradicts the camera-facing slash
+		# during the start of the OneShot blend. Keep the upper arm stable;
+		# the generated shoulder rotation drives the right-to-left sword arc.
+		# The already-accepted back-facing mirrored animation stays untouched.
+		var stable_arm_pose: Quaternion = wide.track_get_key_value(arm_track, 0)
+		for key_index in range(1, wide.track_get_key_count(arm_track)):
+			wide.track_set_key_value(arm_track, key_index, stable_arm_pose)
 	var lib := AnimationLibrary.new()
 	var clip_name := "WideSwordSlashMirror" if mirrored else "WideSwordSlash"
 	var library_name := "combat_mirror" if mirrored else "combat"
