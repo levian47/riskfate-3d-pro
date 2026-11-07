@@ -254,12 +254,13 @@ func _run_checks() -> void:
 		await process_frame
 		blended_screen_positions.append(view_right.dot(sword_grip.to_global(Vector3(0.0, 1.305, 0.0))))
 	print("Blended player attack screen positions: ", blended_screen_positions, ", OneShot active: ", tree.get("parameters/Attack/active"))
-	# Skip the brief preparation/windup: verify the visible cutting phase
-	# consistently moves screen-right to screen-left, not just its endpoints.
-	if not _require(blended_screen_positions[2] - blended_screen_positions[blended_screen_positions.size() - 1] > 2.0, "Live forward-facing attack cutting phase must move right-to-left"):
+	# User's front-facing regression: a rightward snap BEFORE the cutting
+	# phase looks like a left-to-right strike. Check the full visible sequence,
+	# rather than only the clean tail from 32% onward.
+	if not _require(blended_screen_positions[0] - blended_screen_positions[blended_screen_positions.size() - 1] > 2.0, "Front-facing full swing must travel screen-right to screen-left"):
 		return
-	for i in range(3, blended_screen_positions.size()):
-		if not _require(blended_screen_positions[i] < blended_screen_positions[i - 1] + 0.25, "Forward-facing cutting phase must not reverse direction"):
+	for i in range(1, blended_screen_positions.size()):
+		if not _require(blended_screen_positions[i] <= blended_screen_positions[i - 1] + 0.30, "Front-facing sword must not snap rightward mid-swing"):
 			return
 	tree.active = false
 	animator.play("combat/WideSwordSlash")
