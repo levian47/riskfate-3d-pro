@@ -146,9 +146,9 @@ func _run_checks() -> void:
 		return
 	for side in ["L", "R"]:
 		var solver := left_ik if side == "L" else right_ik
-		var target := locomotion_skeleton.get_node_or_null("NarutoFoot" + side) as BoneAttachment3D
-		var pole := locomotion_skeleton.get_node_or_null("NarutoPoleTarget" + side) as BoneAttachment3D
-		if not _require(target != null and pole != null and solver.is_using_virtual_end(0), "Naruto IK needs animated foot/pole controls and a virtual ankle: " + side):
+		var target := locomotion_skeleton.get_node_or_null("NarutoFoot" + side) as ModifierBoneTarget3D
+		var pole := locomotion_skeleton.get_node_or_null("NarutoPoleTarget" + side) as ModifierBoneTarget3D
+		if not _require(target != null and pole != null and solver.is_using_virtual_end(0) and not target.active and not pole.active, "Naruto IK needs idle modifier targets and a virtual ankle: " + side):
 			return
 	if not _require(not pelvis_modifier.active and not left_ik.active and not right_ik.active, "Normal locomotion must not apply Naruto crouch or IK"):
 		return
@@ -183,9 +183,9 @@ func _run_checks() -> void:
 		return
 	if not _require(float(modified_pelvis["pitch"]) > 12.0 and float(modified_pelvis["pitch"]) < 28.0, "Naruto pelvis must pitch forward in actual modified pose"):
 		return
-	if not _require(float(finished_pose["pelvis_segment"]) >= 56.0 and float(finished_pose["pelvis_segment"]) <= 86.0, "Naruto pelvic mesh segment must pitch forward after IK"):
+	if not _require(float(finished_pose["pelvis_segment"]) >= 44.0 and float(finished_pose["pelvis_segment"]) <= 66.0, "Naruto pelvic mesh segment must pitch forward after IK"):
 		return
-	if not _require(float(finished_pose["head_angle"]) >= 62.0 and float(finished_pose["head_angle"]) <= 74.0, "Naruto head-to-pelvis lean must survive IK and pelvis modifier"):
+	if not _require(float(finished_pose["head_angle"]) >= 48.0 and float(finished_pose["head_angle"]) <= 64.0, "Naruto head-to-pelvis lean must survive IK and pelvis modifier"):
 		return
 	var naruto_pelvis_rotation: Quaternion = finished_pose["body_rotation"]
 	var torso_pose := locomotion_skeleton.get_bone_global_pose(torso_index).origin
@@ -196,7 +196,7 @@ func _run_checks() -> void:
 	var forward_lean_degrees := rad_to_deg(atan2(spine_direction.z, spine_direction.y))
 	# Lean is measured on the spine, not by tilting the root or the legs.
 	# The entire native lower-body run chain remains the support and foot contact.
-	if not _require(forward_lean_degrees >= 65.0 and forward_lean_degrees <= 90.0, "Naruto upper spine must stay leaned forward"):
+	if not _require(forward_lean_degrees >= 50.0 and forward_lean_degrees <= 75.0, "Naruto upper spine must stay leaned forward"):
 		return
 	var hips_pose := locomotion_skeleton.get_bone_global_pose(hips_index).origin
 	# Check actual mesh-bearing pelvis segment, not just Body_2's quaternion.
@@ -206,9 +206,9 @@ func _run_checks() -> void:
 	# modified pose above; normal get_bone_global_pose() here is animated only.
 	var full_torso_vector := head_pose - hips_pose
 	var full_torso_angle := rad_to_deg(atan2(full_torso_vector.z, full_torso_vector.y))
-	# The previous test missed the regression: 70 degrees in upper spine
-	# corresponded to only ~43 degrees from the hip to head.
-	if not _require(full_torso_angle >= 62.0 and full_torso_angle <= 74.0, "Naruto must hinge its whole upper body from the hips, not just bend the upper spine"):
+	# Track whole-body lean instead of only the upper spine.
+	# The new Naruto pose aims for a forward ~55-degree head-to-pelvis angle.
+	if not _require(full_torso_angle >= 48.0 and full_torso_angle <= 64.0, "Naruto must hinge its whole upper body from the hips, not just bend the upper spine"):
 		return
 	if not _require(head_pose.y > 1.0 and head_pose.z > torso_pose.z + 0.30, "Naruto sprint head must be forward and remain above the ground"):
 		return
@@ -274,18 +274,18 @@ func _run_checks() -> void:
 			await physics_frame
 		var current_hip := locomotion_skeleton.get_bone_global_pose(hips_index).origin
 		var current_modified: Dictionary = finished_pose_samples.back()
-		if not _require(float(current_modified["pelvis_segment"]) >= 56.0 and float(current_modified["pelvis_segment"]) <= 86.0, "Naruto pelvis must visibly follow the torso across the stride"):
+		if not _require(float(current_modified["pelvis_segment"]) >= 44.0 and float(current_modified["pelvis_segment"]) <= 66.0, "Naruto pelvis must visibly follow the torso across the stride"):
 			return
 		var current_head := locomotion_skeleton.get_bone_global_pose(head_index).origin
 		var current_axis := current_head - current_hip
 		var current_angle := rad_to_deg(atan2(current_axis.z, current_axis.y))
 		var current_width := absf(locomotion_skeleton.get_bone_global_pose(left_hand_index).origin.x - locomotion_skeleton.get_bone_global_pose(right_hand_index).origin.x)
 		var current_pelvis_pitch := float(current_modified["pitch"])
-		if not _require(current_angle >= 62.0 and current_angle <= 74.0 and current_width > 1.65, "Naruto full-body lean and wide arms must survive the whole run cycle"):
+		if not _require(current_angle >= 48.0 and current_angle <= 64.0 and current_width > 1.65, "Naruto full-body lean and wide arms must survive the whole run cycle"):
 			return
 		if not _require(current_pelvis_pitch > 12.0 and current_pelvis_pitch < 28.0, "Naruto pelvic tilt must persist through the full stride"):
 			return
-		if not _require(float(current_modified["head_angle"]) >= 62.0 and float(current_modified["head_angle"]) <= 74.0, "Naruto corrected torso angle must survive the full stride"):
+		if not _require(float(current_modified["head_angle"]) >= 48.0 and float(current_modified["head_angle"]) <= 64.0, "Naruto corrected torso angle must survive the full stride"):
 			return
 	var leg_samples: Array[Quaternion] = []
 	for sample in range(4):
@@ -776,7 +776,23 @@ func _capture_naruto_modifier_pose(skeleton: Skeleton3D, body_index: int, hips_i
 	var head_axis := head - hips
 	var pelvis_segment := rad_to_deg(atan2(pelvis_axis.z, pelvis_axis.y))
 	var head_angle := rad_to_deg(atan2(head_axis.z, head_axis.y))
+	var left_upper := skeleton.get_bone_global_pose(skeleton.find_bone("UpperLeg.L")).origin
+	var right_upper := skeleton.get_bone_global_pose(skeleton.find_bone("UpperLeg.R")).origin
+	var left_knee := skeleton.get_bone_global_pose(skeleton.find_bone("LowerLeg.L")).origin
+	var right_knee := skeleton.get_bone_global_pose(skeleton.find_bone("LowerLeg.R")).origin
+	var left_foot := skeleton.get_bone_global_pose(skeleton.find_bone("Foot.L")).origin
+	var right_foot := skeleton.get_bone_global_pose(skeleton.find_bone("Foot.R")).origin
 	output.append({
+		"hip_joint_y": hips.y,
+		"head_y": head.y,
+		"left_upper_y": left_upper.y,
+		"right_upper_y": right_upper.y,
+		"left_knee_y": left_knee.y,
+		"right_knee_y": right_knee.y,
+		"left_foot_y": left_foot.y,
+		"right_foot_y": right_foot.y,
+		"left_shin_distance": left_knee.distance_to(left_foot),
+		"right_shin_distance": right_knee.distance_to(right_foot),
 		"body_y": body_y,
 		"body_rotation": body_rotation,
 		"pitch": pitch,

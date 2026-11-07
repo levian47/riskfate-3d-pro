@@ -43,13 +43,15 @@ static func install_naruto_grounding(model: Node) -> bool:
 			push_error("Naruto grounding needs Ninja bone: " + bone_name)
 			return false
 
-	# BoneAttachment3D reads the original animated control bones without
-	# overriding their poses. No continuous target-position script is needed.
+	# Built-in ModifierBoneTarget3D is synchronized with SkeletonModifier3D,
+	# unlike BoneAttachment3D which updates outside the IK modifier sequence.
+	# Place targets BEFORE pelvis/IK solvers in the Skeleton3D child order.
 	for side in ["L", "R"]:
 		for label in ["Foot", "PoleTarget"]:
-			var target := BoneAttachment3D.new()
+			var target := ModifierBoneTarget3D.new()
 			target.name = "Naruto" + label + side
 			target.bone_name = label + "." + side
+			target.active = false
 			skeleton.add_child(target)
 
 	var pelvis := NARUTO_PELVIS_MODIFIER.new() as SkeletonModifier3D
@@ -80,7 +82,10 @@ static func set_naruto_grounding_active(model: Node, enabled: bool) -> void:
 	var skeleton := model.find_child("Skeleton3D", true, false) as Skeleton3D
 	if skeleton == null:
 		return
-	for modifier_name in ["NarutoPelvisLowering", "NarutoLegIKL", "NarutoLegIKR"]:
+	for modifier_name in [
+		"NarutoFootL", "NarutoPoleTargetL", "NarutoFootR", "NarutoPoleTargetR",
+		"NarutoPelvisLowering", "NarutoLegIKL", "NarutoLegIKR"
+	]:
 		var modifier := skeleton.get_node_or_null(modifier_name) as SkeletonModifier3D
 		if modifier != null:
 			modifier.active = enabled
