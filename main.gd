@@ -424,7 +424,7 @@ func _make_wider_sword_slash(source_name: String, model: Node) -> String:
 		var desired_height := lerpf(SWORD_ARC_START_HEIGHT, SWORD_ARC_END_HEIGHT, progress)
 		desired_height = clampf(desired_height, -radius * 0.95, radius * 0.95)
 		var horizontal_length := sqrt(maxf(0.001, radius * radius - desired_height * desired_height))
-		var desired_offset := Vector3(sinf(horizontal_angle) * horizontal_length, desired_height, cosf(horizontal_angle) * horizontal_length)
+		var desired_offset := Vector3(sin(horizontal_angle) * horizontal_length, desired_height, cos(horizontal_angle) * horizontal_length)
 		var delta_rotation := Quaternion(offset.normalized(), desired_offset.normalized())
 		var shoulder_pose := skeleton.get_bone_pose_rotation(shoulder_idx)
 		var global_rotation := shoulder_transform.basis.get_rotation_quaternion()
