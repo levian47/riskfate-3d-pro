@@ -79,13 +79,18 @@ func _run_checks() -> void:
 	var wide_base: Quaternion = wide_clip.track_get_key_value(arm_wide, 0)
 	var source_max := 0.0
 	var wide_max := 0.0
+	var added_swing := 0.0
 	for key in range(original_clip.track_get_key_count(arm_source)):
 		var q: Quaternion = original_clip.track_get_key_value(arm_source, key)
 		source_max = maxf(source_max, source_base.angle_to(q))
 	for key in range(wide_clip.track_get_key_count(arm_wide)):
 		var q: Quaternion = wide_clip.track_get_key_value(arm_wide, key)
 		wide_max = maxf(wide_max, wide_base.angle_to(q))
-	if not _require(source_max > 0.05 and wide_max > source_max * 1.9, "Right-arm swing must exceed the previous wide swing"):
+		if key < original_clip.track_get_key_count(arm_source):
+			var original_key: Quaternion = original_clip.track_get_key_value(arm_source, key)
+			var previous_angle := source_base.angle_to(original_key) * (130.0 / 90.0)
+			added_swing = maxf(added_swing, wide_base.angle_to(q) - previous_angle)
+	if not _require(source_max > 0.05 and added_swing > 0.10 and wide_max <= deg_to_rad(171.0), "Wide attack must add forward arm swing without a 180-degree wrap"):
 		return
 	var attack_node := blend.get_node("SwordSlash") as AnimationNodeAnimation
 	if not _require(attack_node != null and String(attack_node.animation) == "combat/WideSwordSlash", "Attack blend node must play wider clip"):

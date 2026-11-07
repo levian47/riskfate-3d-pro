@@ -23,6 +23,8 @@ const ATTACK_SPEED := 1.65
 # This affects the right arm only; attack timing, damage and controls stay intact.
 const PREVIOUS_ATTACK_SWING_AMPLITUDE := 130.0 / 90.0
 const ATTACK_SWING_AMPLITUDE := PREVIOUS_ATTACK_SWING_AMPLITUDE * 1.5
+# Avoid quaternion shortest-arc wraparound when extrapolation exceeds 180°.
+const ATTACK_SWING_MAX_ANGLE := deg_to_rad(170.0)
 # Prototype combat parameters. Not approved balance values.
 const TRAINING_HIT_DAMAGE := 25
 const TRAINING_HIT_REACH := 3.1
@@ -380,7 +382,8 @@ func _make_wider_sword_slash(source_name: String) -> String:
 			var angle := relative.get_angle()
 			if angle <= 0.001:
 				continue
-			var wider_rotation := start_rotation * Quaternion(relative.get_axis(), angle * ATTACK_SWING_AMPLITUDE)
+			var wider_angle := minf(angle * ATTACK_SWING_AMPLITUDE, ATTACK_SWING_MAX_ANGLE)
+			var wider_rotation := start_rotation * Quaternion(relative.get_axis(), wider_angle)
 			wide.track_set_key_value(track, key_index, wider_rotation.normalized())
 			altered_keys += 1
 	if altered_keys == 0:
