@@ -193,6 +193,13 @@ func _run_checks() -> void:
 	if not _require(forward_lean_degrees >= 65.0 and forward_lean_degrees <= 90.0, "Naruto upper spine must stay leaned forward"):
 		return
 	var hips_pose := locomotion_skeleton.get_bone_global_pose(hips_index).origin
+	# Check actual mesh-bearing pelvis segment, not just Body_2's quaternion.
+	# The previous modifier rotated Body_2 but counter-rotated Hips, hiding
+	# most of the hip movement despite passing the bone rotation assertion.
+	var pelvis_segment := abdomen_pose - hips_pose
+	var pelvis_segment_lean := rad_to_deg(atan2(pelvis_segment.z, pelvis_segment.y))
+	if not _require(pelvis_segment_lean >= 56.0 and pelvis_segment_lean <= 86.0, "Naruto Hips-to-Abdomen segment must visibly follow pelvic tilt"):
+		return
 	var full_torso_vector := head_pose - hips_pose
 	var full_torso_angle := rad_to_deg(atan2(full_torso_vector.z, full_torso_vector.y))
 	# The previous test missed the regression: 70 degrees in upper spine
@@ -262,6 +269,11 @@ func _run_checks() -> void:
 		for frame in range(5):
 			await physics_frame
 		var current_hip := locomotion_skeleton.get_bone_global_pose(hips_index).origin
+		var current_abdomen := locomotion_skeleton.get_bone_global_pose(abdomen_index).origin
+		var current_pelvis_spine := current_abdomen - current_hip
+		var current_pelvis_segment_angle := rad_to_deg(atan2(current_pelvis_spine.z, current_pelvis_spine.y))
+		if not _require(current_pelvis_segment_angle >= 56.0 and current_pelvis_segment_angle <= 86.0, "Naruto pelvis must visibly follow the torso across the stride"):
+			return
 		var current_head := locomotion_skeleton.get_bone_global_pose(head_index).origin
 		var current_axis := current_head - current_hip
 		var current_angle := rad_to_deg(atan2(current_axis.z, current_axis.y))
