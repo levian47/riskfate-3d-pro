@@ -14,6 +14,11 @@ func _capture() -> void:
 	root.add_child(game)
 	await process_frame
 	game.set_physics_process(false)
+	# Main scene initially spawns the collision body 0.2m above the floor;
+	# place it at the settled standing height for truthful foot-contact frames.
+	var spawned_hero := game.get("hero") as CharacterBody3D
+	if spawned_hero != null:
+		spawned_hero.position.y = 0.0
 	var tree := game.get("animation_tree") as AnimationTree
 	var hero := game.get("hero") as CharacterBody3D
 	var camera := game.get("camera") as Camera3D
