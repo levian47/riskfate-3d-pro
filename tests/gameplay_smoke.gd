@@ -69,7 +69,7 @@ func _run_checks() -> void:
 		return
 	# Naruto state must be independently selectable without replacing the
 	# previously accepted Run or either sword slash.
-	if not _require(NARUTO_FULL != null and NARUTO_FULL.loop_mode == Animation.LOOP_LINEAR and NARUTO_FULL.get_track_count() == 12, "Naruto overlay must contain twelve upper-body tracks; legs belong to native Ninja Run"):
+	if not _require(NARUTO_FULL != null and NARUTO_FULL.loop_mode == Animation.LOOP_LINEAR and NARUTO_FULL.get_track_count() == 13, "Naruto overlay must contain spine-root Hips and twelve upper-body tracks; legs stay native Ninja Run"):
 		return
 	var blend := tree.tree_root as AnimationNodeBlendTree
 	if not _require(blend != null, "Blend tree missing"):
@@ -86,12 +86,12 @@ func _run_checks() -> void:
 			return
 		var bone_name := String(track_path.get_subname(track_path.get_subname_count() - 1))
 		naruto_bones[bone_name] = true
-		if not _require(bone_name in ANIMATION_BUILDER.UPPER_BODY_BONES, "Naruto overlay must not animate the native Ninja legs, feet or pelvis: " + bone_name):
+		if not _require(bone_name in ANIMATION_BUILDER.NARUTO_POSE_BONES, "Naruto overlay must not animate native Ninja legs or foot controls: " + bone_name):
 			return
-	for bone_name in ANIMATION_BUILDER.UPPER_BODY_BONES:
-		if not _require(naruto_bones.has(bone_name) and naruto_layer.is_path_filtered(NodePath("CharacterArmature/Skeleton3D:" + bone_name)), "Naruto must animate every upper-body bone: " + bone_name):
+	for bone_name in ANIMATION_BUILDER.NARUTO_POSE_BONES:
+		if not _require(naruto_bones.has(bone_name) and naruto_layer.is_path_filtered(NodePath("CharacterArmature/Skeleton3D:" + bone_name)), "Naruto must animate the spine hinge and every upper-body bone: " + bone_name):
 			return
-	for bone_name in ["Body_2", "Hips", "UpperLeg.L", "LowerLeg.L", "UpperLeg.R", "LowerLeg.R", "Foot.L", "Foot.R"]:
+	for bone_name in ["Body_2", "UpperLeg.L", "LowerLeg.L", "UpperLeg.R", "LowerLeg.R", "Foot.L", "Foot.R"]:
 		if not _require(not naruto_bones.has(bone_name) and not naruto_layer.is_path_filtered(NodePath("CharacterArmature/Skeleton3D:" + bone_name)), "Naruto must preserve native leg/foot animation: " + bone_name):
 			return
 	# The Ninja Run input must have a separate branch: Godot rejects connecting
@@ -127,10 +127,15 @@ func _run_checks() -> void:
 	var left_hand_index := locomotion_skeleton.find_bone("Fist.L")
 	var right_hand_index := locomotion_skeleton.find_bone("Fist.R")
 	var torso_index := locomotion_skeleton.find_bone("Torso")
+	var hips_index := locomotion_skeleton.find_bone("Hips")
+	var upper_left_index := locomotion_skeleton.find_bone("UpperArm.L")
+	var upper_right_index := locomotion_skeleton.find_bone("UpperArm.R")
+	var elbow_left_index := locomotion_skeleton.find_bone("LowerArm.L")
+	var elbow_right_index := locomotion_skeleton.find_bone("LowerArm.R")
 	var abdomen_index := locomotion_skeleton.find_bone("Abdomen")
 	var neck_index := locomotion_skeleton.find_bone("Neck")
 	var head_index := locomotion_skeleton.find_bone("Head")
-	if not _require(left_hand_index >= 0 and right_hand_index >= 0 and torso_index >= 0 and abdomen_index >= 0 and neck_index >= 0 and head_index >= 0, "Naruto pose verification requires both fists, torso and head"):
+	if not _require(left_hand_index >= 0 and right_hand_index >= 0 and torso_index >= 0 and hips_index >= 0 and upper_left_index >= 0 and upper_right_index >= 0 and elbow_left_index >= 0 and elbow_right_index >= 0 and abdomen_index >= 0 and neck_index >= 0 and head_index >= 0, "Naruto pose verification requires both fists, torso and head"):
 		return
 	game.set_physics_process(false)
 	game.call("_set_locomotion", "Naruto")
@@ -147,7 +152,14 @@ func _run_checks() -> void:
 	var forward_lean_degrees := rad_to_deg(atan2(spine_direction.z, spine_direction.y))
 	# Lean is measured on the spine, not by tilting the root or the legs.
 	# The entire native lower-body run chain remains the support and foot contact.
-	if not _require(forward_lean_degrees >= 64.0 and forward_lean_degrees <= 74.0, "Naruto sprint torso must lean forward roughly 70 degrees"):
+	if not _require(forward_lean_degrees >= 65.0 and forward_lean_degrees <= 90.0, "Naruto upper spine must stay leaned forward"):
+		return
+	var hips_pose := locomotion_skeleton.get_bone_global_pose(hips_index).origin
+	var full_torso_vector := head_pose - hips_pose
+	var full_torso_angle := rad_to_deg(atan2(full_torso_vector.z, full_torso_vector.y))
+	# The previous test missed the regression: 70 degrees in upper spine
+	# corresponded to only ~43 degrees from the hip to head.
+	if not _require(full_torso_angle >= 62.0 and full_torso_angle <= 74.0, "Naruto must hinge its whole upper body from the hips, not just bend the upper spine"):
 		return
 	if not _require(head_pose.y > 1.0 and head_pose.z > torso_pose.z + 0.30, "Naruto sprint head must be forward and remain above the ground"):
 		return
@@ -194,8 +206,23 @@ func _run_checks() -> void:
 			return
 	var hand_width := absf(left_hand_pose.x - right_hand_pose.x)
 	var shoulder_width := absf(left_shoulder_pose.x - right_shoulder_pose.x)
-	if not _require(hand_width > 0.85 and hand_width > shoulder_width + 0.50, "Naruto hands must spread outward farther than the shoulders"):
+	if not _require(hand_width > 1.40 and hand_width > shoulder_width + 0.90, "Naruto hands must stay in a broad V shape"):
 		return
+	var upper_arm_width := absf(locomotion_skeleton.get_bone_global_pose(upper_left_index).origin.x - locomotion_skeleton.get_bone_global_pose(upper_right_index).origin.x)
+	var elbow_width := absf(locomotion_skeleton.get_bone_global_pose(elbow_left_index).origin.x - locomotion_skeleton.get_bone_global_pose(elbow_right_index).origin.x)
+	if not _require(upper_arm_width > 0.60 and elbow_width > 1.0, "Naruto shoulders and elbows must fan outward, not pinch inward"):
+		return
+	# Check the silhouette across a full stride, rather than a single frame.
+	for phase in range(4):
+		for frame in range(5):
+			await physics_frame
+		var current_hip := locomotion_skeleton.get_bone_global_pose(hips_index).origin
+		var current_head := locomotion_skeleton.get_bone_global_pose(head_index).origin
+		var current_axis := current_head - current_hip
+		var current_angle := rad_to_deg(atan2(current_axis.z, current_axis.y))
+		var current_width := absf(locomotion_skeleton.get_bone_global_pose(left_hand_index).origin.x - locomotion_skeleton.get_bone_global_pose(right_hand_index).origin.x)
+		if not _require(current_angle >= 62.0 and current_angle <= 74.0 and current_width > 1.40, "Naruto full-body lean and wide arms must survive the whole run cycle"):
+			return
 	var leg_samples: Array[Quaternion] = []
 	for sample in range(4):
 		for frame in range(5):
