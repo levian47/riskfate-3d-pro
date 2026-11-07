@@ -88,6 +88,43 @@ jobs:
           cd "$RUNNER_TEMP"
           "$GODOT_BIN" --headless --main-pack "$GITHUB_WORKSPACE/dist/builds/${GITHUB_SHA:0:12}/index.pck" --script res://tests/gameplay_smoke.gd
 
+      # Isolated optional phone-test build; the primary game is built from main.
+      # A broken preview aborts deployment before Pages changes.
+      - name: Build and validate Naruto IK phone preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          preview_src="$RUNNER_TEMP/naruto-ik-source"
+          git fetch --depth=1 origin refs/heads/test/naruto-pelvis-native-ik
+          git worktree add --detach "$preview_src" FETCH_HEAD
+          preview_sha="$(git -C "$preview_src" rev-parse --short=12 HEAD)"
+          "$GODOT_BIN" --headless --path "$preview_src" --editor --quit
+          "$GODOT_BIN" --headless --path "$preview_src" --script res://tests/gameplay_smoke.gd
+          preview_dir="$GITHUB_WORKSPACE/dist/preview/naruto-ik"
+          mkdir -p "$preview_dir/builds/$preview_sha"
+          "$GODOT_BIN" --headless --path "$preview_src" --export-release Web "$preview_dir/builds/$preview_sha/index.html"
+          test -s "$preview_dir/builds/$preview_sha/index.html"
+          test -s "$preview_dir/builds/$preview_sha/index.js"
+          test -s "$preview_dir/builds/$preview_sha/index.wasm"
+          test -s "$preview_dir/builds/$preview_sha/index.pck"
+          (
+            cd "$RUNNER_TEMP"
+            "$GODOT_BIN" --headless --main-pack "$preview_dir/builds/$preview_sha/index.pck" --script res://tests/gameplay_smoke.gd
+          )
+          cat > "$preview_dir/index.html" <<EOF
+          <!doctype html>
+          <html lang="uk">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <meta http-equiv="refresh" content="0;url=builds/$preview_sha/">
+            <title>Riskfate 3D Pro — Naruto IK preview</title>
+          </head>
+          <body><a href="builds/$preview_sha/">Відкрити тест Naruto IK</a></body>
+          </html>
+          EOF
+          echo "Naruto preview built from $preview_sha"
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
