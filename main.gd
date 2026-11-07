@@ -180,7 +180,7 @@ func _build_hero() -> void:
 		skeleton_debug = SKELETON_DEBUG.new() as MeshInstance3D
 		skeleton_debug.name = "SkeletonDebug"
 		rig.add_child(skeleton_debug)
-		skeleton_debug.setup(rig)
+		skeleton_debug.call("setup", rig)
 	animator = ANIMATION_BUILDER.find_animation_player(model)
 	if animator != null:
 		# Preserve imported locomotion loop behavior and accepted attack clips.
