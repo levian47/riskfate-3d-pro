@@ -85,7 +85,7 @@ func _run_checks() -> void:
 	for key in range(wide_clip.track_get_key_count(arm_wide)):
 		var q: Quaternion = wide_clip.track_get_key_value(arm_wide, key)
 		wide_max = maxf(wide_max, wide_base.angle_to(q))
-	if not _require(source_max > 0.05 and wide_max > source_max * 1.25, "Right-arm swing must increase visibly"):
+	if not _require(source_max > 0.05 and wide_max > source_max * 1.9, "Right-arm swing must exceed the previous wide swing"):
 		return
 	var attack_node := blend.get_node("SwordSlash") as AnimationNodeAnimation
 	if not _require(attack_node != null and String(attack_node.animation) == "combat/WideSwordSlash", "Attack blend node must play wider clip"):

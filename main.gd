@@ -19,9 +19,10 @@ const TOUCH_HUD_SCRIPT := preload("res://touch_hud.gd")
 const WORLD_SCRIPT := preload("res://world/environment.gd")
 # The attack runs on the upper body while the legs retain their movement animation.
 const ATTACK_SPEED := 1.65
-# Approximate visual swing target: ~130 degrees instead of the reported ~90.
-# Scales the right upper-arm excursion, NOT combat damage or timing.
-const ATTACK_SWING_AMPLITUDE := 130.0 / 90.0
+# Trial: extend the previous wide slash by another 50% (visual, not blade angle).
+# This affects the right arm only; attack timing, damage and controls stay intact.
+const PREVIOUS_ATTACK_SWING_AMPLITUDE := 130.0 / 90.0
+const ATTACK_SWING_AMPLITUDE := PREVIOUS_ATTACK_SWING_AMPLITUDE * 1.5
 # Prototype combat parameters. Not approved balance values.
 const TRAINING_HIT_DAMAGE := 25
 const TRAINING_HIT_REACH := 3.1
