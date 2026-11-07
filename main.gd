@@ -19,22 +19,10 @@ const TOUCH_HUD_SCRIPT := preload("res://touch_hud.gd")
 const WORLD_SCRIPT := preload("res://world/environment.gd")
 # The attack runs on the upper body while the legs retain their movement animation.
 const ATTACK_SPEED := 1.65
-# Trial: extend the previous wide slash by another 50% (visual, not blade angle).
-# This affects the right arm only; attack timing, damage and controls stay intact.
-const PREVIOUS_ATTACK_SWING_AMPLITUDE := 130.0 / 90.0
-const ATTACK_SWING_AMPLITUDE := PREVIOUS_ATTACK_SWING_AMPLITUDE * 1.5
-# Avoid quaternion shortest-arc wraparound when extrapolation exceeds 180°.
-const ATTACK_SWING_MAX_ANGLE := deg_to_rad(170.0)
-# A horizontal sword arc is authored once from the actual imported Godot
-# skeleton poses on startup, avoiding glTF-versus-Godot bone-space mistakes.
-# The broad original upper-arm swing is preserved as the starting motion.
-const SWORD_ARC_START_HEIGHT := 0.78
-const SWORD_ARC_END_HEIGHT := 0.22
-const SWORD_ARC_SWEEP_ANGLE := 65.0
-# Trial parameters for the second, wider, slightly ascending horizontal slash.
-const SWEEPING_ARC_ANGLE := 90.0
-const SWEEPING_ARC_START_HEIGHT := 0.22
-const SWEEPING_ARC_END_HEIGHT := 0.78
+# Accepted animations are versioned as Godot resources. Do not rebuild
+# skeleton rotations at runtime: that could drift from the approved poses.
+const STANDARD_SWORD_CLIP := preload("res://assets/animations/standard_sword_slash.tres")
+const SWEEPING_SWORD_CLIP := preload("res://assets/animations/sweeping_sword_slash.tres")
 # Prototype combat parameters. Not approved balance values.
 const TRAINING_HIT_DAMAGE := 25
 const TRAINING_HIT_REACH := 3.1
@@ -361,118 +349,6 @@ func _find_clip(short_name: String) -> String:
 	return ""
 
 
-func _make_wider_sword_slash(source_name: String, model: Node, mirrored: bool = false, sweeping: bool = false) -> String:
-	# Preserve the imported source. First widen the upper arm as before,
-	# then solve the right-shoulder rotation for a near-horizontal sword tip.
-	var source := animator.get_animation(source_name)
-	var skeleton := _find_skeleton(model)
-	if source == null or skeleton == null:
-		return ""
-	var shoulder_idx := skeleton.find_bone("Shoulder.R")
-	var fist_idx := skeleton.find_bone("Fist.R")
-	if shoulder_idx < 0 or fist_idx < 0:
-		return ""
-	var wide := source.duplicate(true) as Animation
-	var arm_track := -1
-	for track in range(wide.get_track_count()):
-		if wide.track_get_type(track) != Animation.TYPE_ROTATION_3D:
-			continue
-		var path := wide.track_get_path(track)
-		if path.get_subname_count() == 0:
-			continue
-		var bone := String(path.get_subname(path.get_subname_count() - 1))
-		if bone != "UpperArm.R" or wide.track_is_compressed(track):
-			continue
-		arm_track = track
-		var first: Quaternion = wide.track_get_key_value(track, 0)
-		for key_index in range(1, wide.track_get_key_count(track)):
-			var original: Quaternion = wide.track_get_key_value(track, key_index)
-			var relative := (first.inverse() * original).normalized()
-			if relative.w < 0.0:
-				relative = Quaternion(-relative.x, -relative.y, -relative.z, -relative.w)
-			var angle := relative.get_angle()
-			if angle <= 0.001:
-				continue
-			var applied_angle := minf(angle * ATTACK_SWING_AMPLITUDE, ATTACK_SWING_MAX_ANGLE)
-			var changed_rotation := first * Quaternion(relative.get_axis(), applied_angle)
-			wide.track_set_key_value(track, key_index, changed_rotation.normalized())
-	if arm_track < 0:
-		return ""
-	var lib := AnimationLibrary.new()
-	var clip_name := "SweepingSwordSlash" if sweeping else ("WideSwordSlashMirror" if mirrored else "WideSwordSlash")
-	var library_name := "combat_sweeping" if sweeping else ("combat_mirror" if mirrored else "combat")
-	if lib.add_animation(clip_name, wide) != OK:
-		return ""
-	if animator.add_animation_library(library_name, lib) != OK:
-		return ""
-
-	# AnimationPlayer.seek() gives the REAL post-import Godot bone pose.
-	# Preserve the original two-pass pose sampling for the preferred back swing.
-	# The first pass is only setup and its animation is discarded afterward.
-	var key_times: Array[float] = []
-	var shoulder_rotations: Array[Quaternion] = []
-	var previous_pose := Quaternion.IDENTITY
-	animator.play(library_name + "/" + clip_name)
-	for i in range(wide.track_get_key_count(arm_track)):
-		var time: float = wide.track_get_key_time(arm_track, i)
-		animator.seek(time, true)
-		animator.advance(0.0)
-		var fraction := clampf(time / wide.length, 0.0, 1.0)
-		var shoulder_transform := skeleton.get_bone_global_pose(shoulder_idx)
-		var fist_transform := skeleton.get_bone_global_pose(fist_idx)
-		var tip: Vector3 = fist_transform * Vector3(0.0, 1.305, 0.0)
-		var offset := tip - shoulder_transform.origin
-		var radius := offset.length()
-		if radius < 0.5:
-			continue
-		# Give the new sweeping attack a longer, ease-in/ease-out cutting
-		# phase. The standard attack retains its approved timing curve.
-		var progress := smoothstep(0.08, 0.66, fraction) if sweeping else smoothstep(0.14, 0.59, fraction)
-		var arc_direction := -1.0 if mirrored else 1.0
-		var sweep_angle := SWEEPING_ARC_ANGLE if sweeping else SWORD_ARC_SWEEP_ANGLE
-		var start_height := SWEEPING_ARC_START_HEIGHT if sweeping else SWORD_ARC_START_HEIGHT
-		var end_height := SWEEPING_ARC_END_HEIGHT if sweeping else SWORD_ARC_END_HEIGHT
-		var horizontal_angle := deg_to_rad(lerpf(sweep_angle * arc_direction, -sweep_angle * arc_direction, progress))
-		var desired_height := lerpf(start_height, end_height, progress)
-		desired_height = clampf(desired_height, -radius * 0.95, radius * 0.95)
-		var horizontal_length := sqrt(maxf(0.001, radius * radius - desired_height * desired_height))
-		var desired_offset := Vector3(sin(horizontal_angle) * horizontal_length, desired_height, cos(horizontal_angle) * horizontal_length)
-		var delta_rotation := Quaternion(offset.normalized(), desired_offset.normalized())
-		var shoulder_pose := skeleton.get_bone_pose_rotation(shoulder_idx)
-		var global_rotation := shoulder_transform.basis.get_rotation_quaternion()
-		var rest_world_rotation := (global_rotation * shoulder_pose.inverse()).normalized()
-		# The imported clip begins with the sword unusually high. For the
-		# sweeping test attack, solve its low starting pose from frame zero
-		# rather than fading the shoulder correction in during the first 15%.
-		# Leave the approved Standard branch bit-for-bit identical.
-		var envelope := (1.0 - smoothstep(0.70, 0.94, fraction)) if sweeping else (smoothstep(0.01, 0.15, fraction) * (1.0 - smoothstep(0.68, 0.94, fraction)))
-		# Every valid shoulder solution can twist about the target direction.
-		# Choose the nearest one to the previous key to avoid sudden flips.
-		var best_pose := Quaternion.IDENTITY
-		var best_score := INF
-		for twist_step in range(-12, 13):
-			var twist := Quaternion(desired_offset.normalized(), deg_to_rad(float(twist_step) * 15.0))
-			var target_rotation := (rest_world_rotation.inverse() * twist * delta_rotation * global_rotation).normalized()
-			var sampled_rotation := Quaternion.IDENTITY.slerp(target_rotation, envelope).normalized()
-			var score := previous_pose.angle_to(sampled_rotation) + 0.03 * Quaternion.IDENTITY.angle_to(target_rotation)
-			if score < best_score:
-				best_score = score
-				best_pose = sampled_rotation
-		key_times.append(time)
-		shoulder_rotations.append(best_pose)
-		previous_pose = best_pose
-	animator.stop()
-
-	if shoulder_rotations.size() < 20:
-		return ""
-	var shoulder_track := wide.add_track(Animation.TYPE_ROTATION_3D)
-	var arm_path := String(wide.track_get_path(arm_track))
-	wide.track_set_path(shoulder_track, NodePath(arm_path.replace("UpperArm.R", "Shoulder.R")))
-	for key_index in range(key_times.size()):
-		wide.rotation_track_insert_key(shoulder_track, key_times[key_index], shoulder_rotations[key_index])
-	return library_name + "/" + clip_name
-
-
 func _setup_animation_tree(model: Node) -> void:
 	var root := AnimationNodeBlendTree.new()
 	var locomotion := AnimationNodeTransition.new()
@@ -499,28 +375,23 @@ func _setup_animation_tree(model: Node) -> void:
 		else:
 			root.connect_node("Locomotion", i, state)
 
-	var attack_clip_name := _find_clip("SwordSlash")
-	if attack_clip_name.is_empty():
-		push_error("SwordSlash clip missing")
+	# Register both approved attacks as independent, pre-baked animations.
+	# The Standard remains available, while ATK still plays only Sweeping.
+	var standard_library := AnimationLibrary.new()
+	var sweeping_library := AnimationLibrary.new()
+	if standard_library.add_animation("WideSwordSlashMirror", STANDARD_SWORD_CLIP) != OK:
+		push_error("Could not register the Standard sword animation")
 		return
-	# Build the previously approved back-facing clip in the same rig state
-	# as before. Discard the preparatory normal clip, leaving one active
-	# custom combat animation and no camera-dependent switching.
-	var preparatory_clip := _make_wider_sword_slash(attack_clip_name, model)
-	var retained_clip := _make_wider_sword_slash(attack_clip_name, model, true)
-	if preparatory_clip.is_empty() or retained_clip.is_empty():
-		push_error("Could not build the retained back-facing sword slash")
+	if sweeping_library.add_animation("SweepingSwordSlash", SWEEPING_SWORD_CLIP) != OK:
+		push_error("Could not register the Sweeping sword animation")
 		return
-	animator.remove_animation_library("combat")
-	# Build the experimental variant only AFTER the approved clip is complete.
-	# The standard animation object and its keyframes are never modified.
-	var sweeping_clip := _make_wider_sword_slash(attack_clip_name, model, true, true)
-	if sweeping_clip.is_empty():
-		push_error("Could not build the sweeping sword slash")
+	if animator.add_animation_library("combat_mirror", standard_library) != OK:
+		push_error("Could not attach Standard sword animation")
 		return
-	# Keep the approved standard clip in AnimationPlayer for future use.
-	# For this playtest, the only active combat node runs SweepingSwordSlash.
-	attack_clip_name = sweeping_clip
+	if animator.add_animation_library("combat_sweeping", sweeping_library) != OK:
+		push_error("Could not attach Sweeping sword animation")
+		return
+	var attack_clip_name := "combat_sweeping/SweepingSwordSlash"
 	var attack_clip := animator.get_animation(attack_clip_name)
 	var attack_node := AnimationNodeAnimation.new()
 	attack_node.animation = attack_clip_name
