@@ -30,6 +30,9 @@ func _run_checks() -> void:
 	if not _require(blend != null, "Blend tree missing"):
 		return
 	var attack := blend.get_node("Attack") as AnimationNodeOneShot
+	var direction_node := blend.get_node("SwordDirection") as AnimationNodeTransition
+	if not _require(direction_node != null and direction_node.input_count == 2, "Camera-dependent sword direction selector missing"):
+		return
 	var animator := game.get("animator") as AnimationPlayer
 	if not _require(attack != null and animator != null and attack.filter_enabled, "Upper-body attack layer missing"):
 		return
@@ -284,7 +287,47 @@ func _run_checks() -> void:
 		if not _require(point.z > 0.20, "Sword blade must remain forward during the active sweep"):
 			return
 
-	print("Gameplay smoke test passed: visible right-to-left sword attack in direct clip and AnimationTree, descent, FPS cap, offline ping, movement, dash, world, training hits, HP and respawn.")
+	# Turn the hero around. Local left/right reverses on screen, so the
+	# mirrored clip must take over without changing damage, duration or camera.
+	var mirrored_name := "combat_mirror/WideSwordSlashMirror"
+	if not _require(animator.has_animation(mirrored_name), "Mirrored attack clip must exist"):
+		return
+	var mirrored_clip := animator.get_animation(mirrored_name)
+	visual_node.rotation.y = PI
+	tree.active = false
+	animator.play(mirrored_name)
+	var mirrored_screen: Array[float] = []
+	for fraction in [0.16, 0.24, 0.32, 0.40, 0.48, 0.56, 0.64]:
+		animator.seek(mirrored_clip.length * fraction, true)
+		await process_frame
+		mirrored_screen.append(view_right.dot(sword_grip.to_global(Vector3(0.0, 1.305, 0.0))))
+	animator.stop()
+	tree.active = true
+	print("Opposite facing mirrored attack screen positions: ", mirrored_screen)
+	if not _require(mirrored_screen[0] - mirrored_screen[mirrored_screen.size() - 1] > 2.0, "Mirrored sword clip must move right-to-left on screen when hero faces backwards"):
+		return
+	# The actual input handler must select the appropriate variant, not just
+	# keep the correct mirrored animation unused in the resource library.
+	tree.set("parameters/Attack/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_ABORT)
+	tree.advance(0.01)
+	game.set("attack_time_left", 0.0)
+	game.call("_start_attack")
+	tree.advance(0.04)
+	if not _require(String(tree.get("parameters/SwordDirection/current_state")) == "Mirrored", "Turning around must select mirrored animation in the live AnimationTree"):
+		return
+	var mirrored_blended: Array[float] = []
+	var previous_fraction := 0.0
+	var mirror_duration: float = float(game.get("attack_duration"))
+	for fraction in [0.16, 0.24, 0.32, 0.40, 0.48, 0.56, 0.64]:
+		tree.advance(mirror_duration * (fraction - previous_fraction))
+		previous_fraction = fraction
+		await process_frame
+		mirrored_blended.append(view_right.dot(sword_grip.to_global(Vector3(0.0, 1.305, 0.0))))
+	print("Opposite facing blended attack screen positions: ", mirrored_blended)
+	if not _require(mirrored_blended[0] - mirrored_blended[mirrored_blended.size() - 1] > 1.7, "Mirrored gameplay attack must move right-to-left on screen"):
+		return
+
+	print("Gameplay smoke test passed: camera-selected right-to-left sword attack from both facing directions, descent, FPS cap, offline ping, movement, dash, world, training hits, HP and respawn.")
 	quit(0)
 
 
