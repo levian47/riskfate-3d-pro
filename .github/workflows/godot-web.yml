@@ -3,6 +3,8 @@ name: Godot Web / GitHub Pages
 on:
   push:
     branches: [main, test/naruto-pelvis-native-ik]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
