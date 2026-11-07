@@ -77,6 +77,11 @@ func _run_checks() -> void:
 	var naruto_layer := blend.get_node("NarutoUpperBlend") as AnimationNodeBlend2
 	if not _require(naruto_layer != null and naruto_layer.filter_enabled and is_equal_approx(float(tree.get("parameters/NarutoUpperBlend/blend_amount")), 1.0), "Naruto upper-body layer must be filtered and enabled"):
 		return
+	var source_run := ANIMATION_BUILDER.find_clip(game.get("animator") as AnimationPlayer, "Run")
+	var run_asset := (game.get("animator") as AnimationPlayer).get_animation(source_run)
+	var upper_speed := blend.get_node("NarutoUpperSpeed") as AnimationNodeTimeScale
+	if not _require(upper_speed != null and run_asset != null and is_equal_approx(float(tree.get("parameters/NarutoUpperSpeed/scale")), NARUTO_UPPER.length / run_asset.length), "Naruto upper loop must match the Ninja Run leg stride"):
+		return
 	var attack := blend.get_node("Attack") as AnimationNodeOneShot
 	var animator := game.get("animator") as AnimationPlayer
 	if not _require(animator.has_animation("movement_naruto/NarutoRunUpper"), "Naruto run must be registered separately"):

@@ -81,6 +81,14 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 		return null
 	var naruto_upper := AnimationNodeAnimation.new()
 	naruto_upper.animation = "movement_naruto/NarutoRunUpper"
+	# Naruto source loop is 0.65s; native Ninja Run is 0.875s.
+	# Match the upper-body loop period to the existing leg cycle.
+	var naruto_upper_speed := AnimationNodeTimeScale.new()
+	var run_clip := animator.get_animation(find_clip(animator, "Run"))
+	if run_clip == null or run_clip.length <= 0.0:
+		push_error("Cannot synchronize Naruto upper body without Ninja Run")
+		return null
+	var naruto_source_speed_ratio := NARUTO_RUN_UPPER_CLIP.length / run_clip.length
 	var naruto_blend := AnimationNodeBlend2.new()
 	naruto_blend.filter_enabled = true
 	for bone in ["Body_2", "Hips", "Abdomen", "Torso", "Neck", "Head",
@@ -88,9 +96,11 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 			"Shoulder.R", "UpperArm.R", "LowerArm.R", "Fist.R"]:
 		naruto_blend.set_filter_path(NodePath("CharacterArmature/Skeleton3D:" + bone), true)
 	root.add_node("NarutoUpper", naruto_upper)
+	root.add_node("NarutoUpperSpeed", naruto_upper_speed)
 	root.add_node("NarutoUpperBlend", naruto_blend)
+	root.connect_node("NarutoUpperSpeed", 0, "NarutoUpper")
 	root.connect_node("NarutoUpperBlend", 0, "RunSpeed")
-	root.connect_node("NarutoUpperBlend", 1, "NarutoUpper")
+	root.connect_node("NarutoUpperBlend", 1, "NarutoUpperSpeed")
 	locomotion.set_input_name(4, "Naruto")
 	root.connect_node("Locomotion", 4, "NarutoUpperBlend")
 
@@ -151,6 +161,7 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 	animation_tree.active = true
 	animation_tree.set("parameters/AttackSpeed/scale", attack_speed_value)
 	animation_tree.set("parameters/NarutoUpperBlend/blend_amount", 1.0)
+	animation_tree.set("parameters/NarutoUpperSpeed/scale", naruto_source_speed_ratio)
 	return animation_tree
 
 
