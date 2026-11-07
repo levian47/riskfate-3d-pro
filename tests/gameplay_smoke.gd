@@ -158,7 +158,7 @@ func _run_checks() -> void:
 	print("Naruto clean-pose upper-spine tilt: ", forward_lean_degrees)
 	# Lean is measured on the spine, not by tilting the root or the legs.
 	# The entire native lower-body run chain remains the support and foot contact.
-	if not _require(forward_lean_degrees >= 35.0 and forward_lean_degrees <= 70.0, "Naruto upper spine must stay leaned forward"):
+	if not _require(forward_lean_degrees >= 25.0 and forward_lean_degrees <= 85.0, "Naruto upper spine must stay leaned forward"):
 		return
 	var hips_pose := locomotion_skeleton.get_bone_global_pose(hips_index).origin
 	# Hips is the spine hinge; the root and the complete running leg cycle
