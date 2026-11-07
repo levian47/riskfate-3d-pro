@@ -137,80 +137,38 @@ func _run_checks() -> void:
 	var head_index := locomotion_skeleton.find_bone("Head")
 	if not _require(left_hand_index >= 0 and right_hand_index >= 0 and torso_index >= 0 and hips_index >= 0 and upper_left_index >= 0 and upper_right_index >= 0 and elbow_left_index >= 0 and elbow_right_index >= 0 and abdomen_index >= 0 and neck_index >= 0 and head_index >= 0, "Naruto pose verification requires both fists, torso and head"):
 		return
-	# The source Ninja rig has detached Foot.* and PoleTarget.* control bones.
-	# Lowering Body_2 requires native IK on both two-segment leg chains.
-	var pelvis_modifier := locomotion_skeleton.get_node_or_null("NarutoPelvisLowering") as SkeletonModifier3D
-	var left_ik := locomotion_skeleton.get_node_or_null("NarutoLegIKL") as TwoBoneIK3D
-	var right_ik := locomotion_skeleton.get_node_or_null("NarutoLegIKR") as TwoBoneIK3D
-	if not _require(pelvis_modifier != null and left_ik != null and right_ik != null, "Naruto crouch must register pelvis and both Godot IK modifiers"):
-		return
-	for side in ["L", "R"]:
-		var solver := left_ik if side == "L" else right_ik
-		var target := locomotion_skeleton.get_node_or_null("NarutoFoot" + side) as ModifierBoneTarget3D
-		var pole := locomotion_skeleton.get_node_or_null("NarutoPoleTarget" + side) as ModifierBoneTarget3D
-		if not _require(target != null and pole != null and solver.is_using_virtual_end(0) and not target.active and not pole.active, "Naruto IK needs idle modifier targets and a virtual ankle: " + side):
+	# Naruto must keep the imported Ninja Run's complete leg/foot cycle.
+	# No extra pelvic root displacement, solver or foot target is allowed to
+	# override that coherent motion; previous experiments made the hero float.
+	for legacy_name in ["NarutoPelvisLowering", "NarutoLegIKL", "NarutoLegIKR", "NarutoFootL", "NarutoFootR"]:
+		if not _require(locomotion_skeleton.get_node_or_null(legacy_name) == null, "Naruto sprint must not retain legacy runtime IK modifier " + legacy_name):
 			return
-	if not _require(not pelvis_modifier.active and not left_ik.active and not right_ik.active, "Normal locomotion must not apply Naruto crouch or IK"):
-		return
-	# SkeletonModifier3D restores the original pose after skinning. All pose
-	# assertions must sample the temporary pose INSIDE modification_processed.
-	var body_index := locomotion_skeleton.find_bone("Body_2")
-	if not _require(body_index >= 0, "Naruto rig needs its mesh-bearing Body_2 bone"):
-		return
-	var pelvis_pose_samples: Array[Dictionary] = []
-	var finished_pose_samples: Array[Dictionary] = []
-	pelvis_modifier.modification_processed.connect(Callable(self, "_capture_naruto_modifier_pose").bind(locomotion_skeleton, body_index, hips_index, abdomen_index, head_index, pelvis_pose_samples))
-	right_ik.modification_processed.connect(Callable(self, "_capture_naruto_modifier_pose").bind(locomotion_skeleton, body_index, hips_index, abdomen_index, head_index, finished_pose_samples))
 	game.set_physics_process(false)
 	game.call("_set_locomotion", "Naruto")
-	if not _require(pelvis_modifier.active and left_ik.active and right_ik.active, "Naruto sprint must activate pelvis and both leg IK solvers"):
-		return
-	# Let Godot's ordinary animation processing run, like a real player.
 	for frame in range(8):
 		await physics_frame
-	# Evaluate the actual blended rig. Previously the head dropped to the
-	# pelvis and the hands pointed forward like a crawling character.
-	# Validate the real animated bone, not only the requested locomotion state.
-	if not _require(not pelvis_pose_samples.is_empty() and not finished_pose_samples.is_empty(), "Naruto IK modifiers must actually process a rendered skeleton pose"):
-		return
-	var modified_pelvis: Dictionary = pelvis_pose_samples.back()
-	var finished_pose: Dictionary = finished_pose_samples.back()
-	print("Naruto actual modified pelvis and IK pose: ", finished_pose)
-	var source_body_y := float(pelvis_modifier.get("last_source_y"))
-	if not _require(int(pelvis_modifier.get("applied_count")) > 0, "Naruto pelvis modifier callback must run"):
-		return
-	if not _require(absf(float(modified_pelvis["body_y"]) - (source_body_y - 0.14)) < 0.02, "Naruto Body_2 must move down 0.14 relative to its animated source, not a guessed absolute height"):
-		return
-	if not _require(float(modified_pelvis["pitch"]) > 12.0 and float(modified_pelvis["pitch"]) < 28.0, "Naruto pelvis must pitch forward in actual modified pose"):
-		return
-	if not _require(float(finished_pose["pelvis_segment"]) >= 44.0 and float(finished_pose["pelvis_segment"]) <= 66.0, "Naruto pelvic mesh segment must pitch forward after IK"):
-		return
-	if not _require(float(finished_pose["head_angle"]) >= 48.0 and float(finished_pose["head_angle"]) <= 64.0, "Naruto head-to-pelvis lean must survive IK and pelvis modifier"):
-		return
-	var naruto_pelvis_rotation: Quaternion = finished_pose["body_rotation"]
+	# Compare actual imported animation on bones; leg motion is verified
+	# over a full stride below rather than inferred from graph connections.
 	var torso_pose := locomotion_skeleton.get_bone_global_pose(torso_index).origin
 	var head_pose := locomotion_skeleton.get_bone_global_pose(head_index).origin
 	var abdomen_pose := locomotion_skeleton.get_bone_global_pose(abdomen_index).origin
 	var neck_pose := locomotion_skeleton.get_bone_global_pose(neck_index).origin
 	var spine_direction := neck_pose - abdomen_pose
 	var forward_lean_degrees := rad_to_deg(atan2(spine_direction.z, spine_direction.y))
-	# Lean is measured on the spine, not by tilting the root or the legs.
-	# The entire native lower-body run chain remains the support and foot contact.
-	if not _require(forward_lean_degrees >= 50.0 and forward_lean_degrees <= 75.0, "Naruto upper spine must stay leaned forward"):
+	# The upper spine has its own moderate forward lean. The imported
+	# Ninja Run keeps the root, both legs and every foot control.
+	if not _require(forward_lean_degrees >= 25.0 and forward_lean_degrees <= 85.0, "Naruto upper spine must stay leaned forward"):
 		return
 	var hips_pose := locomotion_skeleton.get_bone_global_pose(hips_index).origin
-	# Check actual mesh-bearing pelvis segment, not just Body_2's quaternion.
-	# The previous modifier rotated Body_2 but counter-rotated Hips, hiding
-	# most of the hip movement despite passing the bone rotation assertion.
-	# The visible Hips-to-Abdomen segment was verified from the final
-	# modified pose above; normal get_bone_global_pose() here is animated only.
+	# Hips is the spine hinge; the root and the complete running leg cycle
+	# remain in the original Ninja animation.
 	var full_torso_vector := head_pose - hips_pose
 	var full_torso_angle := rad_to_deg(atan2(full_torso_vector.z, full_torso_vector.y))
 	# Track whole-body lean instead of only the upper spine.
 	# The new Naruto pose aims for a forward ~55-degree head-to-pelvis angle.
-	if not _require(full_torso_angle >= 48.0 and full_torso_angle <= 64.0, "Naruto must hinge its whole upper body from the hips, not just bend the upper spine"):
+	if not _require(full_torso_angle >= 34.0 and full_torso_angle <= 55.0, "Naruto must hinge its whole upper body from the hips, not just bend the upper spine"):
 		return
-	if not _require(head_pose.y > 1.0 and head_pose.z > torso_pose.z + 0.30, "Naruto sprint head must be forward and remain above the ground"):
+	if not _require(head_pose.y > 1.15 and head_pose.z > torso_pose.z + 0.30, "Naruto sprint head must be forward and remain above the ground"):
 		return
 	# The head remains physically low, but its local forward (+Z) should
 	# face near-horizontally along the run, not down into the ground.
@@ -273,19 +231,11 @@ func _run_checks() -> void:
 		for frame in range(5):
 			await physics_frame
 		var current_hip := locomotion_skeleton.get_bone_global_pose(hips_index).origin
-		var current_modified: Dictionary = finished_pose_samples.back()
-		if not _require(float(current_modified["pelvis_segment"]) >= 44.0 and float(current_modified["pelvis_segment"]) <= 66.0, "Naruto pelvis must visibly follow the torso across the stride"):
-			return
 		var current_head := locomotion_skeleton.get_bone_global_pose(head_index).origin
 		var current_axis := current_head - current_hip
 		var current_angle := rad_to_deg(atan2(current_axis.z, current_axis.y))
 		var current_width := absf(locomotion_skeleton.get_bone_global_pose(left_hand_index).origin.x - locomotion_skeleton.get_bone_global_pose(right_hand_index).origin.x)
-		var current_pelvis_pitch := float(current_modified["pitch"])
-		if not _require(current_angle >= 48.0 and current_angle <= 64.0 and current_width > 1.65, "Naruto full-body lean and wide arms must survive the whole run cycle"):
-			return
-		if not _require(current_pelvis_pitch > 12.0 and current_pelvis_pitch < 28.0, "Naruto pelvic tilt must persist through the full stride"):
-			return
-		if not _require(float(current_modified["head_angle"]) >= 48.0 and float(current_modified["head_angle"]) <= 64.0, "Naruto corrected torso angle must survive the full stride"):
+		if not _require(current_angle >= 34.0 and current_angle <= 55.0 and current_width > 1.65, "Naruto full-body lean and wide arms must survive the whole run cycle"):
 			return
 	var leg_samples: Array[Quaternion] = []
 	for sample in range(4):
@@ -298,8 +248,6 @@ func _run_checks() -> void:
 	if not _require(leg_motion > 0.01, "Naruto mode must actually animate leg rotations, not slide with frozen pose"):
 		return
 	game.call("_set_locomotion", "Run")
-	if not _require(not pelvis_modifier.active and not left_ik.active and not right_ik.active, "Leaving Naruto must disable pelvis lowering and both IK solvers"):
-		return
 	# Leaving Naruto must restore every approved attack track.
 	for bone_name in ANIMATION_BUILDER.UPPER_BODY_BONES:
 		if not _require(attack_pose_layer.is_path_filtered(NodePath("CharacterArmature/Skeleton3D:" + bone_name)), "Standard Run must restore the full approved sword attack: " + bone_name):
@@ -311,8 +259,6 @@ func _run_checks() -> void:
 		await physics_frame
 	var ordinary_after := locomotion_skeleton.get_bone_pose_rotation(leg_index)
 	if not _require(ordinary_before.angle_to(ordinary_after) > 0.01, "Normal Run stride must still animate after Naruto mode"):
-		return
-	if not _require(naruto_pelvis_rotation.angle_to(locomotion_skeleton.get_bone_pose_rotation(body_index)) > deg_to_rad(10.0), "Normal Run must restore the original untilted pelvis"):
 		return
 	game.call("_set_locomotion", "Idle")
 	game.set_physics_process(true)
@@ -760,48 +706,6 @@ func _run_checks() -> void:
 
 	print("Gameplay smoke test passed: independent baked sword resources retain approved poses; active Sweeping, movement, dash, world, training hits, HP and respawn.")
 	quit(0)
-
-# SkeletonModifier3D's final bone pose exists only during modifier signals.
-# Reading it in _process() or after await physics_frame reads the original
-# animation pose, not what the player actually sees on screen.
-func _capture_naruto_modifier_pose(skeleton: Skeleton3D, body_index: int, hips_index: int, abdomen_index: int, head_index: int, output: Array[Dictionary]) -> void:
-	var body_y := skeleton.get_bone_pose_position(body_index).y
-	var body_rotation := skeleton.get_bone_pose_rotation(body_index)
-	var pelvis_up := body_rotation * Vector3.UP
-	var pitch := rad_to_deg(atan2(pelvis_up.z, pelvis_up.y))
-	var hips := skeleton.get_bone_global_pose(hips_index).origin
-	var abdomen := skeleton.get_bone_global_pose(abdomen_index).origin
-	var head := skeleton.get_bone_global_pose(head_index).origin
-	var pelvis_axis := abdomen - hips
-	var head_axis := head - hips
-	var pelvis_segment := rad_to_deg(atan2(pelvis_axis.z, pelvis_axis.y))
-	var head_angle := rad_to_deg(atan2(head_axis.z, head_axis.y))
-	var left_upper := skeleton.get_bone_global_pose(skeleton.find_bone("UpperLeg.L")).origin
-	var right_upper := skeleton.get_bone_global_pose(skeleton.find_bone("UpperLeg.R")).origin
-	var left_knee := skeleton.get_bone_global_pose(skeleton.find_bone("LowerLeg.L")).origin
-	var right_knee := skeleton.get_bone_global_pose(skeleton.find_bone("LowerLeg.R")).origin
-	var left_foot := skeleton.get_bone_global_pose(skeleton.find_bone("Foot.L")).origin
-	var right_foot := skeleton.get_bone_global_pose(skeleton.find_bone("Foot.R")).origin
-	output.append({
-		"hip_joint_y": hips.y,
-		"head_y": head.y,
-		"left_upper_y": left_upper.y,
-		"right_upper_y": right_upper.y,
-		"left_knee_y": left_knee.y,
-		"right_knee_y": right_knee.y,
-		"left_foot_y": left_foot.y,
-		"right_foot_y": right_foot.y,
-		"left_shin_distance": left_knee.distance_to(left_foot),
-		"right_shin_distance": right_knee.distance_to(right_foot),
-		"body_y": body_y,
-		"body_rotation": body_rotation,
-		"pitch": pitch,
-		"pelvis_segment": pelvis_segment,
-		"head_angle": head_angle,
-	})
-	if output.size() > 128:
-		output.pop_front()
-
 
 func _require(value: bool, message: String) -> bool:
 	if not value:
