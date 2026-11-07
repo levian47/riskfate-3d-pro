@@ -70,9 +70,9 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 		else:
 			root.connect_node("Locomotion", i, state)
 
-	# Independent Naruto sprint with a complete limb cycle. Keep the imported
-	# Run separately for the root and the Ninja's original foot helper controls.
-	# The Mixamo source foot joints cannot be mapped to this footless Ninja rig.
+	# The Naruto overlay controls the upper body only. The imported Ninja Run
+	# supplies a coherent complete leg chain plus Foot.* helper bones to avoid
+	# mismatched shin/knee and foot deformations from the Mixamo skeleton.
 	var naruto_library := AnimationLibrary.new()
 	if naruto_library.add_animation("NarutoRunFull", NARUTO_RUN_FULL_CLIP) != OK:
 		push_error("Could not register Naruto full-body running clip")
@@ -93,12 +93,9 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 	var naruto_full_speed := AnimationNodeTimeScale.new()
 	var naruto_blend := AnimationNodeBlend2.new()
 	naruto_blend.filter_enabled = true
-	# Exclude Body_2 / Hips and both Foot.* IK helpers. The earlier raw Mixamo
-	# root pitch made the character crawl; the foot joints are incompatible.
-	for bone in ["Abdomen", "Torso", "Neck", "Head",
-			"Shoulder.L", "UpperArm.L", "LowerArm.L", "Fist.L",
-			"Shoulder.R", "UpperArm.R", "LowerArm.R", "Fist.R",
-			"UpperLeg.L", "LowerLeg.L", "UpperLeg.R", "LowerLeg.R"]:
+	# Only upper-body tracks are replaced; the pelvis, thighs, shins and foot
+	# helpers are always evaluated together from the native Ninja Run clip.
+	for bone in UPPER_BODY_BONES:
 		naruto_blend.set_filter_path(NodePath("CharacterArmature/Skeleton3D:" + bone), true)
 	root.add_node("NarutoBaseRun", naruto_base_run)
 	root.add_node("NarutoBaseRunSpeed", naruto_base_speed)
