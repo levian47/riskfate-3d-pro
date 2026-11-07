@@ -4,6 +4,7 @@ const ANIMATION_BUILDER := preload("res://characters/player/animation_builder.gd
 const MOVEMENT_MATH := preload("res://characters/player/movement_math.gd")
 const MOVEMENT_CONTROLLER := preload("res://characters/player/movement_controller.gd")
 const COMBAT_CONTROLLER := preload("res://characters/player/combat_controller.gd")
+const WEAPON_VISUALS := preload("res://characters/player/weapon_visuals.gd")
 
 func _initialize() -> void:
 	call_deferred("_run_checks")
@@ -35,6 +36,31 @@ func _run_checks() -> void:
 	if not DisplayServer.is_touchscreen_available():
 		var fullscreen_control := game.get_node_or_null("HUD/FullscreenButton") as Button
 		if not _require(fullscreen_control != null and fullscreen_control.pressed.is_connected(Callable(game, "_toggle_fullscreen")), "Desktop fullscreen callback must survive HUD extraction"):
+			return
+	# Verify every playable model, including the imported FBX, can be equipped.
+	var weapon_component = game.get("weapon_visuals")
+	if not _require(weapon_component != null and WEAPON_VISUALS.WEAPONS.size() == 5, "Five test weapons must be available"):
+		return
+	for index in range(WEAPON_VISUALS.WEAPONS.size()):
+		if not _require(bool(weapon_component.call("equip", index)), "Failed to equip weapon index %d" % index):
+			return
+		var fitted := weapon_component.get("current_visual") as Node3D
+		if not _require(fitted != null and int(weapon_component.get("current_index")) == index, "Equipped weapon instance and index must be valid"):
+			return
+		var measured: AABB = weapon_component.call("_bounds_in_root", fitted)
+		var target_length: float = float(WEAPON_VISUALS.WEAPONS[index]["length"])
+		if not _require(measured.size.y > 0.1 and absf(measured.size.y * fitted.scale.y - target_length) < 0.02, "Imported weapon must be scaled to expected test length"):
+			return
+	game.call("_cycle_weapon")
+	if not _require(int(weapon_component.get("current_index")) == 0, "Weapon selection must wrap to first model"):
+		return
+	if not DisplayServer.is_touchscreen_available():
+		var help := game.get_node_or_null("HUD/HelpPanel/HelpText") as Label
+		if not _require(help != null and help.text.contains("Sword I"), "Desktop HUD must show the selected weapon"):
+			return
+	else:
+		var mobile := game.get("touch_hud")
+		if not _require(mobile != null and int(mobile.weapon_index) == 1, "Mobile HUD must show current weapon index"):
 			return
 	var hero := game.get("hero") as CharacterBody3D
 	var tree := game.get("animation_tree") as AnimationTree
@@ -342,8 +368,8 @@ func _run_checks() -> void:
 	# The approved standard remains available in AnimationPlayer.
 	game.set_physics_process(false)
 	var view_camera := game.get("camera") as Camera3D
-	var skel := game.call("_find_skeleton", visual_node) as Skeleton3D
-	var sword_grip := skel.get_node_or_null("SwordGrip/SimpleSword") as Node3D
+	var skel := WEAPON_VISUALS.find_skeleton(visual_node) as Skeleton3D
+	var sword_grip := skel.get_node_or_null("SwordGrip/WeaponMount") as Node3D
 	if not _require(view_camera != null and sword_grip != null, "Camera and sword attachment must exist"):
 		return
 	var view_right := view_camera.global_transform.basis.x.normalized()
@@ -456,8 +482,8 @@ func _run_checks() -> void:
 	fresh_visual.rotation.y = PI
 	var fresh_tree := fresh_game.get("animation_tree") as AnimationTree
 	fresh_tree.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
-	var fresh_skeleton := fresh_game.call("_find_skeleton", fresh_visual) as Skeleton3D
-	var fresh_sword := fresh_skeleton.get_node_or_null("SwordGrip/SimpleSword") as Node3D
+	var fresh_skeleton := WEAPON_VISUALS.find_skeleton(fresh_visual) as Skeleton3D
+	var fresh_sword := fresh_skeleton.get_node_or_null("SwordGrip/WeaponMount") as Node3D
 	# Let the newly created AnimationTree evaluate Idle before the OneShot.
 	# This mirrors a character that has actually stood still in the game.
 	fresh_tree.advance(0.15)

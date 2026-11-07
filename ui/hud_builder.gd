@@ -50,10 +50,12 @@ static func build_fps_counter(canvas: CanvasLayer) -> Label:
 
 static func build_desktop_controls(canvas: CanvasLayer) -> Button:
 	var panel := PanelContainer.new()
+	panel.name = "HelpPanel"
 	panel.position = Vector2(18, 18)
 	canvas.add_child(panel)
 	var label := Label.new()
-	label.text = "NINJA 3D TEST\nWASD — рух   |   SHIFT — біг   |   Q — ривок\nSPACE — стрибок   |   ЛКМ — удар мечем\nКолесо миші — масштаб"
+	label.name = "HelpText"
+	label.text = desktop_help_text("Sword I")
 	panel.add_child(label)
 
 	# Fullscreen must still be connected by the scene's gameplay controller.
@@ -68,3 +70,7 @@ static func build_desktop_controls(canvas: CanvasLayer) -> Button:
 	fullscreen_button.offset_bottom = 62.0
 	canvas.add_child(fullscreen_button)
 	return fullscreen_button
+
+
+static func desktop_help_text(weapon_name: String) -> String:
+	return "NINJA 3D TEST\nWASD — рух   |   SHIFT — біг   |   Q — ривок\nSPACE — стрибок   |   ЛКМ — удар\nКолесо миші — масштаб   |   E — змінити зброю\nЗброя: " + weapon_name

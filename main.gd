@@ -10,6 +10,7 @@ const TOUCH_HUD_SCRIPT := preload("res://touch_hud.gd")
 const HUD_BUILDER := preload("res://ui/hud_builder.gd")
 const ANIMATION_BUILDER := preload("res://characters/player/animation_builder.gd")
 const COMBAT_CONTROLLER := preload("res://characters/player/combat_controller.gd")
+const WEAPON_VISUALS := preload("res://characters/player/weapon_visuals.gd")
 const WORLD_SCRIPT := preload("res://world/environment.gd")
 # Attack still overlays only the upper body; movement continues unchanged.
 const ATTACK_SPEED := COMBAT_CONTROLLER.ATTACK_SPEED
@@ -27,6 +28,7 @@ var animation_tree: AnimationTree
 var locomotion_state := ""
 var movement_controller = MOVEMENT_CONTROLLER.new()
 var combat_controller = COMBAT_CONTROLLER.new()
+var weapon_visuals = WEAPON_VISUALS.new()
 var touch_hud
 var fps_label: Label
 var fps_update_elapsed := 0.0
@@ -75,6 +77,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_Q:
 		_start_dash()
 		return
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_E:
+		_cycle_weapon()
+		return
 	if event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			_start_attack()
@@ -85,6 +90,21 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			camera_zoom = minf(28.0, camera_zoom + 1.0)
 			camera.size = camera_zoom
+
+func _cycle_weapon() -> void:
+	# This is a visual playtest only. Current attack state stays untouched.
+	if weapon_visuals.cycle():
+		_update_weapon_display()
+
+
+func _update_weapon_display() -> void:
+	if touch_hud != null:
+		touch_hud.weapon_index = weapon_visuals.current_index + 1
+		touch_hud.queue_redraw()
+	var help_label := get_node_or_null("HUD/HelpPanel/HelpText") as Label
+	if help_label != null:
+		help_label.text = HUD_BUILDER.desktop_help_text(weapon_visuals.selected_name())
+
 
 func _start_dash() -> void:
 	# Keep the same callback name for Q, the touch HUD and existing tests.
@@ -127,7 +147,8 @@ func _build_hero() -> void:
 	if animator != null:
 		# Preserve imported locomotion loop behavior and accepted attack clips.
 		ANIMATION_BUILDER.configure_animation_loops(animator)
-		_attach_simple_sword(model)
+		if not weapon_visuals.initialize(model):
+			push_warning("Visual weapon test could not initialize")
 		animation_tree = ANIMATION_BUILDER.setup_animation_tree(model, animator, ATTACK_SPEED)
 		if animation_tree != null:
 			_set_locomotion("Idle")
@@ -143,48 +164,6 @@ func _resolve_training_hit() -> void:
 	# Preserve the existing smoke-test entrypoint, no separate hit mechanic.
 	combat_controller.resolve_training_hit(self, hero, visual)
 
-
-func _find_skeleton(node: Node) -> Skeleton3D:
-	if node is Skeleton3D:
-		return node
-	for child in node.get_children():
-		var skeleton := _find_skeleton(child)
-		if skeleton != null:
-			return skeleton
-	return null
-
-func _attach_simple_sword(model: Node) -> void:
-	# This GLTF contains SwordSlash animation but no separate sword mesh.
-	# Attach a low-poly placeholder weapon to the right hand bone.
-	var skeleton := _find_skeleton(model)
-	if skeleton == null or skeleton.find_bone("Fist.R") == -1:
-		push_warning("Right-hand bone not found: sword placeholder omitted")
-		return
-	var attachment := BoneAttachment3D.new()
-	attachment.name = "SwordGrip"
-	attachment.bone_name = "Fist.R"
-	skeleton.add_child(attachment)
-	var sword := Node3D.new()
-	sword.name = "SimpleSword"
-	# Alignment is approximate and can be adjusted for this imported rig.
-	sword.rotation_degrees = Vector3(0, 0, 0)
-	attachment.add_child(sword)
-	_add_sword_part(sword, "Handle", Vector3(0.10, 0.36, 0.10), Vector3(0, 0.0, 0), Color("493329"))
-	_add_sword_part(sword, "Guard", Vector3(0.45, 0.09, 0.13), Vector3(0, 0.22, 0), Color("bca267"))
-	_add_sword_part(sword, "Blade", Vector3(0.13, 1.05, 0.065), Vector3(0, 0.78, 0), Color("c9dae1"))
-
-func _add_sword_part(parent: Node3D, part_name: String, dimensions: Vector3, offset: Vector3, color: Color) -> void:
-	var part := MeshInstance3D.new()
-	part.name = part_name
-	var mesh := BoxMesh.new()
-	mesh.size = dimensions
-	part.mesh = mesh
-	var material := StandardMaterial3D.new()
-	material.albedo_color = color
-	material.metallic = 0.35
-	part.material_override = material
-	part.position = offset
-	parent.add_child(part)
 
 func _set_locomotion(state: String, restart: bool = false) -> void:
 	if animation_tree == null:
@@ -242,7 +221,10 @@ func _build_ui() -> void:
 		touch_hud.dash_requested.connect(_start_dash)
 		touch_hud.zoom_requested.connect(_cycle_mobile_zoom)
 		touch_hud.fullscreen_requested.connect(_toggle_fullscreen)
+		touch_hud.weapon_requested.connect(_cycle_weapon)
+		_update_weapon_display()
 		touch_hud.zoom_level = mobile_zoom_index + 1
 		return
 	var fullscreen_button := HUD_BUILDER.build_desktop_controls(canvas)
 	fullscreen_button.pressed.connect(_toggle_fullscreen)
+	_update_weapon_display()

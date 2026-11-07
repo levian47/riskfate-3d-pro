@@ -6,6 +6,7 @@ signal attack_requested
 signal dash_requested
 signal zoom_requested
 signal fullscreen_requested
+signal weapon_requested
 
 var move_vector := Vector2.ZERO
 var jump_held := false
@@ -15,6 +16,8 @@ var dash_finger := -1
 var attack_finger := -1
 var zoom_finger := -1
 var fullscreen_finger := -1
+var weapon_finger := -1
+var weapon_index := 1
 var zoom_level := 2
 var stick_thumb := Vector2.ZERO
 var portrait_mode := false
@@ -36,6 +39,7 @@ func _on_resized() -> void:
 		attack_finger = -1
 		zoom_finger = -1
 		fullscreen_finger = -1
+		weapon_finger = -1
 		move_vector = Vector2.ZERO
 		stick_thumb = Vector2.ZERO
 		jump_held = false
@@ -63,6 +67,8 @@ func _layout() -> Dictionary:
 		"dash_radius": dash_radius,
 		"zoom": Vector2(width - margin - zoom_radius, margin + zoom_radius),
 		"zoom_radius": zoom_radius,
+		"weapon": Vector2(width - margin - zoom_radius, margin + zoom_radius * 3.6),
+		"weapon_radius": zoom_radius,
 		"fullscreen": Vector2(margin + fullscreen_radius, margin + fullscreen_radius),
 		"fullscreen_radius": fullscreen_radius
 	}
@@ -103,6 +109,10 @@ func _press(finger: int, point: Vector2) -> void:
 		zoom_finger = finger
 		zoom_requested.emit()
 		queue_redraw()
+	elif weapon_finger == -1 and point.distance_to(layout["weapon"]) <= layout["weapon_radius"] * 1.20:
+		weapon_finger = finger
+		weapon_requested.emit()
+		queue_redraw()
 	elif _press_fullscreen(finger, point):
 		pass
 	elif attack_finger == -1 and point.distance_to(layout["attack"]) <= layout["attack_radius"] * 1.18:
@@ -134,6 +144,8 @@ func _release(finger: int) -> void:
 		zoom_finger = -1
 	if finger == fullscreen_finger:
 		fullscreen_finger = -1
+	if finger == weapon_finger:
+		weapon_finger = -1
 	queue_redraw()
 
 func _update_stick(point: Vector2) -> void:
@@ -180,6 +192,11 @@ func _draw() -> void:
 	_draw_button(zoom_center, zoom_r, Color(0.15, 0.25, 0.39, 0.94 if zoom_finger != -1 else 0.76), Color(0.76, 0.87, 1.0, 0.92))
 	_draw_label(zoom_center + Vector2(0, -zoom_r * 0.18), "ZOOM", zoom_r * 0.29)
 	_draw_label(zoom_center + Vector2(0, zoom_r * 0.28), "%d/3" % zoom_level, zoom_r * 0.34)
+	var weapon_center: Vector2 = layout["weapon"]
+	var weapon_r: float = layout["weapon_radius"]
+	_draw_button(weapon_center, weapon_r, Color(0.33, 0.27, 0.44, 0.94 if weapon_finger != -1 else 0.83), Color(0.90, 0.82, 1.0, 0.96))
+	_draw_label(weapon_center + Vector2(0, -weapon_r * 0.18), "WPN", weapon_r * 0.32)
+	_draw_label(weapon_center + Vector2(0, weapon_r * 0.28), "%d/5" % weapon_index, weapon_r * 0.34)
 	_draw_fullscreen_control(layout)
 
 func _draw_fullscreen_control(layout: Dictionary) -> void:
