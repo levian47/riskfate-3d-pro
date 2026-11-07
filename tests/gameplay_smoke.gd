@@ -30,8 +30,8 @@ func _run_checks() -> void:
 	if not _require(blend != null, "Blend tree missing"):
 		return
 	var attack := blend.get_node("Attack") as AnimationNodeOneShot
-	var direction_node := blend.get_node("SwordDirection") as AnimationNodeTransition
-	if not _require(direction_node != null and direction_node.input_count == 2, "Camera-dependent sword direction selector missing"):
+	var direction_node := blend.get_node("SwordDirection") as AnimationNodeBlend2
+	if not _require(direction_node != null, "Camera-dependent sword direction Blend2 selector missing"):
 		return
 	var animator := game.get("animator") as AnimationPlayer
 	if not _require(attack != null and animator != null and attack.filter_enabled, "Upper-body attack layer missing"):
@@ -59,40 +59,44 @@ func _run_checks() -> void:
 	if not _require(arm_found and not leg_found, "Attack must affect arms, not legs"):
 		return
 
-	# The camera-facing clip must not replay the imported opposing arm
-	# windup; the accepted back-facing mirrored clip keeps its full arm motion.
-	if not _require(animator.has_animation("combat/WideSwordSlash") and animator.has_animation("combat_mirror/WideSwordSlashMirror"), "Both combat clips must exist"):
+	# Both generated clips are independent and preserve source animation timing.
+	if not _require(animator.has_animation("combat/WideSwordSlash") and animator.has_animation("combat_mirror/WideSwordSlashMirror"), "Both sword clips must exist"):
 		return
 	var original_clip := animator.get_animation(sword_name)
 	var wide_clip := animator.get_animation("combat/WideSwordSlash")
 	var mirror_clip := animator.get_animation("combat_mirror/WideSwordSlashMirror")
-	if not _require(wide_clip != original_clip and is_equal_approx(wide_clip.length, original_clip.length) and is_equal_approx(mirror_clip.length, original_clip.length), "Combat clip copies must preserve original timing"):
+	if not _require(wide_clip != original_clip and is_equal_approx(wide_clip.length, original_clip.length) and is_equal_approx(mirror_clip.length, original_clip.length), "Combat clips must preserve timing"):
 		return
 	var arm_source := -1
 	var arm_wide := -1
 	for i in range(original_clip.get_track_count()):
-		var path := original_clip.track_get_path(i)
-		if original_clip.track_get_type(i) == Animation.TYPE_ROTATION_3D and path.get_subname_count() > 0 and String(path.get_subname(path.get_subname_count() - 1)) == "UpperArm.R":
+		var track_path := original_clip.track_get_path(i)
+		if original_clip.track_get_type(i) == Animation.TYPE_ROTATION_3D and track_path.get_subname_count() > 0 and String(track_path.get_subname(track_path.get_subname_count() - 1)) == "UpperArm.R":
 			arm_source = i
 			break
 	for i in range(wide_clip.get_track_count()):
-		var path := wide_clip.track_get_path(i)
-		if wide_clip.track_get_type(i) == Animation.TYPE_ROTATION_3D and path.get_subname_count() > 0 and String(path.get_subname(path.get_subname_count() - 1)) == "UpperArm.R":
+		var track_path := wide_clip.track_get_path(i)
+		if wide_clip.track_get_type(i) == Animation.TYPE_ROTATION_3D and track_path.get_subname_count() > 0 and String(track_path.get_subname(track_path.get_subname_count() - 1)) == "UpperArm.R":
 			arm_wide = i
 			break
-	if not _require(arm_source >= 0 and arm_wide >= 0, "Right arm rotation tracks must exist"):
+	if not _require(arm_source >= 0 and arm_wide >= 0, "Right upper arm tracks must exist"):
 		return
 	var source_base: Quaternion = original_clip.track_get_key_value(arm_source, 0)
-	var front_pose: Quaternion = wide_clip.track_get_key_value(arm_wide, 0)
+	var wide_base: Quaternion = wide_clip.track_get_key_value(arm_wide, 0)
 	var source_max := 0.0
-	for i in range(original_clip.track_get_key_count(arm_source)):
-		var q: Quaternion = original_clip.track_get_key_value(arm_source, i)
+	var wide_max := 0.0
+	var added_swing := 0.0
+	for key in range(original_clip.track_get_key_count(arm_source)):
+		var q: Quaternion = original_clip.track_get_key_value(arm_source, key)
 		source_max = maxf(source_max, source_base.angle_to(q))
-	for i in range(wide_clip.track_get_key_count(arm_wide)):
-		var q: Quaternion = wide_clip.track_get_key_value(arm_wide, i)
-		if not _require(front_pose.angle_to(q) < 0.01, "Front-facing upper arm must not swing against the sword direction"):
-			return
-	if not _require(source_max > 0.05, "Original source arm animation must be preserved"):
+	for key in range(wide_clip.track_get_key_count(arm_wide)):
+		var q: Quaternion = wide_clip.track_get_key_value(arm_wide, key)
+		wide_max = maxf(wide_max, wide_base.angle_to(q))
+		if key < original_clip.track_get_key_count(arm_source):
+			var original_key: Quaternion = original_clip.track_get_key_value(arm_source, key)
+			var previous_angle := source_base.angle_to(original_key) * (130.0 / 90.0)
+			added_swing = maxf(added_swing, wide_base.angle_to(q) - previous_angle)
+	if not _require(source_max > 0.05 and added_swing > 0.10 and wide_max <= deg_to_rad(171.0), "Original arm widening must remain intact"):
 		return
 	# The re-authored sword arc should be smooth rather than an overhead pose.
 	var shoulder_wide := -1
@@ -313,7 +317,7 @@ func _run_checks() -> void:
 	game.set("attack_time_left", 0.0)
 	game.call("_start_attack")
 	tree.advance(0.04)
-	if not _require(String(tree.get("parameters/SwordDirection/current_state")) == "Mirrored", "Turning around must select mirrored animation in the live AnimationTree"):
+	if not _require(is_equal_approx(float(tree.get("parameters/SwordDirection/blend_amount")), 1.0), "Turning around must select mirrored animation in the live AnimationTree"):
 		return
 	var mirrored_blended: Array[float] = []
 	var previous_fraction := 0.0
