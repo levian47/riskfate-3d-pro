@@ -9,8 +9,8 @@ const DROP_METERS := 0.14
 const PELVIS_TILT_DEGREES := 20.0
 
 var pelvis_bone_index := -1
-var spine_bone_index := -1
-var leg_root_indices: Array[int] = []
+var compensated_bone_indices: Array[int] = []
+var compensations: Array[Quaternion] = []
 
 
 func _ready() -> void:
@@ -18,15 +18,23 @@ func _ready() -> void:
 	if skeleton == null:
 		return
 	pelvis_bone_index = skeleton.find_bone(PELVIS_BONE)
-	spine_bone_index = skeleton.find_bone(SPINE_BONE)
-	for bone_name in LEG_ROOT_BONES:
-		leg_root_indices.append(skeleton.find_bone(bone_name))
+	var tilt_inverse := Quaternion(Vector3.RIGHT, -deg_to_rad(PELVIS_TILT_DEGREES))
+	for bone_name in [SPINE_BONE] + LEG_ROOT_BONES:
+		var index := skeleton.find_bone(bone_name)
+		compensated_bone_indices.append(index)
+		if index >= 0:
+			# Bone rests are static; cache the leg/spine compensation to avoid
+			# rebuilding quaternions every frame on mobile devices.
+			var rest_rotation := skeleton.get_bone_rest(index).basis.orthonormalized().get_rotation_quaternion()
+			compensations.append((rest_rotation.inverse() * tilt_inverse * rest_rotation).normalized())
+		else:
+			compensations.append(Quaternion.IDENTITY)
 
 
 func _process_modification_with_delta(_delta: float) -> void:
-	if pelvis_bone_index < 0 or spine_bone_index < 0:
+	if pelvis_bone_index < 0 or compensated_bone_indices.size() != 3:
 		return
-	for index in leg_root_indices:
+	for index in compensated_bone_indices:
 		if index < 0:
 			return
 	var skeleton := get_skeleton()
@@ -37,16 +45,10 @@ func _process_modification_with_delta(_delta: float) -> void:
 	# correction would pitch the already-approved torso farther forward and
 	# turn the legs away from the original run's stride.
 	var tilt := Quaternion(Vector3.RIGHT, deg_to_rad(PELVIS_TILT_DEGREES))
-	var untilted_child_indices: Array[int] = [spine_bone_index]
-	untilted_child_indices.append_array(leg_root_indices)
-	for index in untilted_child_indices:
-		# Rest orientation differs between spine and leg bones. Conjugating by
-		# the child rest basis cancels the parent's extra rotation in that bone's
-		# local pose while preserving its animated global orientation.
-		var rest_rotation := skeleton.get_bone_rest(index).basis.orthonormalized().get_rotation_quaternion()
-		var local_counter_rotation := rest_rotation.inverse() * tilt.inverse() * rest_rotation
+	for i in range(compensated_bone_indices.size()):
+		var index := compensated_bone_indices[i]
 		var source_rotation := skeleton.get_bone_pose_rotation(index)
-		skeleton.set_bone_pose_rotation(index, (local_counter_rotation * source_rotation).normalized())
+		skeleton.set_bone_pose_rotation(index, (compensations[i] * source_rotation).normalized())
 
 	# Translate and pitch the pelvis only in Naruto mode. The following two
 	# stock TwoBoneIK3D modifiers restore the animated foot targets.
