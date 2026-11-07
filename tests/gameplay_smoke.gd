@@ -56,13 +56,13 @@ func _run_checks() -> void:
 	if not _require(arm_found and not leg_found, "Attack must affect arms, not legs"):
 		return
 
-	# One combat clip must remain, matching the former back-facing variant.
-	if not _require(animator.has_animation("combat/WideSwordSlash"), "Sword slash clip must exist"):
+	# Only the original back-facing combat clip remains after initialization.
+	if not _require(animator.has_animation("combat_mirror/WideSwordSlashMirror"), "Preferred back-facing sword slash must exist"):
 		return
-	if not _require(not animator.has_animation("combat_mirror/WideSwordSlashMirror") and not blend.has_node("SwordDirection") and not blend.has_node("AttackSeek"), "Old alternate slash and selectors must be removed"):
+	if not _require(not animator.has_animation("combat/WideSwordSlash") and not blend.has_node("SwordDirection") and not blend.has_node("AttackSeek"), "Unused slash and direction selectors must be removed"):
 		return
 	var original_clip := animator.get_animation(sword_name)
-	var wide_clip := animator.get_animation("combat/WideSwordSlash")
+	var wide_clip := animator.get_animation("combat_mirror/WideSwordSlashMirror")
 	if not _require(wide_clip != original_clip and is_equal_approx(wide_clip.length, original_clip.length) , "Combat clips must preserve timing"):
 		return
 	var arm_source := -1
@@ -123,7 +123,7 @@ func _run_checks() -> void:
 		previous_q = adjusted_q
 
 	var attack_node := blend.get_node("SwordSlash") as AnimationNodeAnimation
-	if not _require(attack_node != null and String(attack_node.animation) == "combat/WideSwordSlash", "Attack blend node must play wider clip"):
+	if not _require(attack_node != null and String(attack_node.animation) == "combat_mirror/WideSwordSlashMirror", "Attack blend node must play wider clip"):
 		return
 
 	game.call("_set_locomotion", "Run")
