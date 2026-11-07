@@ -258,6 +258,13 @@ func _start_attack() -> void:
 	attack_duration = animator.get_animation(clip_name).length / ATTACK_SPEED
 	attack_time_left = attack_duration
 	attack_hit_pending = true
+	# Screen-right is the camera X axis. Pick the reverse local swing when
+	# the hero's right-side axis projects toward the left of the screen.
+	# This also works when changing directions during ordinary movement.
+	var camera_right := camera.global_transform.basis.x
+	var hero_right := visual.global_transform.basis.x
+	var use_mirror := camera_right.dot(hero_right) < 0.0
+	animation_tree.set("parameters/SwordDirection/transition_request", "Mirrored" if use_mirror else "Normal")
 	animation_tree.set("parameters/Attack/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
 
 
@@ -357,7 +364,7 @@ func _find_clip(short_name: String) -> String:
 	return ""
 
 
-func _make_wider_sword_slash(source_name: String, model: Node) -> String:
+func _make_wider_sword_slash(source_name: String, model: Node, mirrored: bool = false) -> String:
 	# Preserve the imported source. First widen the upper arm as before,
 	# then solve the right-shoulder rotation for a near-horizontal sword tip.
 	var source := animator.get_animation(source_name)
@@ -395,9 +402,11 @@ func _make_wider_sword_slash(source_name: String, model: Node) -> String:
 	if arm_track < 0:
 		return ""
 	var lib := AnimationLibrary.new()
-	if lib.add_animation("WideSwordSlash", wide) != OK:
+	var clip_name := "WideSwordSlashMirror" if mirrored else "WideSwordSlash"
+	var library_name := "combat_mirror" if mirrored else "combat"
+	if lib.add_animation(clip_name, wide) != OK:
 		return ""
-	if animator.add_animation_library("combat", lib) != OK:
+	if animator.add_animation_library(library_name, lib) != OK:
 		return ""
 
 	# AnimationPlayer.seek() gives the REAL post-import Godot bone pose.
@@ -408,7 +417,7 @@ func _make_wider_sword_slash(source_name: String, model: Node) -> String:
 	var key_times: Array[float] = []
 	var shoulder_rotations: Array[Quaternion] = []
 	var previous_pose := Quaternion.IDENTITY
-	animator.play("combat/WideSwordSlash")
+	animator.play(library_name + "/" + clip_name)
 	for i in range(wide.track_get_key_count(arm_track)):
 		var time: float = wide.track_get_key_time(arm_track, i)
 		animator.seek(time, true)
@@ -422,7 +431,8 @@ func _make_wider_sword_slash(source_name: String, model: Node) -> String:
 		if radius < 0.5:
 			continue
 		var progress := smoothstep(0.14, 0.59, fraction)
-		var horizontal_angle := deg_to_rad(lerpf(SWORD_ARC_SWEEP_ANGLE, -SWORD_ARC_SWEEP_ANGLE, progress))
+		var arc_direction := -1.0 if mirrored else 1.0
+		var horizontal_angle := deg_to_rad(lerpf(SWORD_ARC_SWEEP_ANGLE * arc_direction, -SWORD_ARC_SWEEP_ANGLE * arc_direction, progress))
 		var desired_height := lerpf(SWORD_ARC_START_HEIGHT, SWORD_ARC_END_HEIGHT, progress)
 		desired_height = clampf(desired_height, -radius * 0.95, radius * 0.95)
 		var horizontal_length := sqrt(maxf(0.001, radius * radius - desired_height * desired_height))
@@ -456,7 +466,7 @@ func _make_wider_sword_slash(source_name: String, model: Node) -> String:
 	wide.track_set_path(shoulder_track, NodePath(arm_path.replace("UpperArm.R", "Shoulder.R")))
 	for key_index in range(key_times.size()):
 		wide.rotation_track_insert_key(shoulder_track, key_times[key_index], shoulder_rotations[key_index])
-	return "combat/WideSwordSlash"
+	return library_name + "/" + clip_name
 
 
 func _setup_animation_tree(model: Node) -> void:
@@ -489,12 +499,25 @@ func _setup_animation_tree(model: Node) -> void:
 	if attack_clip_name.is_empty():
 		push_error("SwordSlash clip missing")
 		return
+	# The same fixed local-space swing can appear reversed when the hero turns
+	# relative to the isometric camera. Author both directions once and choose
+	# which clip travels right-to-left ON SCREEN at the moment of each attack.
 	var wide_clip_name := _make_wider_sword_slash(attack_clip_name, model)
-	if not wide_clip_name.is_empty():
-		attack_clip_name = wide_clip_name
+	var mirror_clip_name := _make_wider_sword_slash(attack_clip_name, model, true)
+	if wide_clip_name.is_empty() or mirror_clip_name.is_empty():
+		push_error("Could not build both sword swing direction variants")
+		return
+	attack_clip_name = wide_clip_name
 	var attack_clip := animator.get_animation(attack_clip_name)
 	var attack_node := AnimationNodeAnimation.new()
 	attack_node.animation = attack_clip_name
+	var mirror_node := AnimationNodeAnimation.new()
+	mirror_node.animation = mirror_clip_name
+	var swing_direction := AnimationNodeTransition.new()
+	swing_direction.input_count = 2
+	swing_direction.xfade_time = 0.0
+	swing_direction.set_input_name(0, "Normal")
+	swing_direction.set_input_name(1, "Mirrored")
 	var attack_speed := AnimationNodeTimeScale.new()
 	var attack_layer := AnimationNodeOneShot.new()
 	attack_layer.fadein_time = 0.06
@@ -514,9 +537,13 @@ func _setup_animation_tree(model: Node) -> void:
 		return
 
 	root.add_node("SwordSlash", attack_node)
+	root.add_node("SwordSlashMirror", mirror_node)
+	root.add_node("SwordDirection", swing_direction)
+	root.connect_node("SwordDirection", 0, "SwordSlash")
+	root.connect_node("SwordDirection", 1, "SwordSlashMirror")
 	root.add_node("AttackSpeed", attack_speed)
 	root.add_node("Attack", attack_layer)
-	root.connect_node("AttackSpeed", 0, "SwordSlash")
+	root.connect_node("AttackSpeed", 0, "SwordDirection")
 	root.connect_node("Attack", 0, "Locomotion")
 	root.connect_node("Attack", 1, "AttackSpeed")
 	root.connect_node("output", 0, "Attack")
@@ -529,6 +556,7 @@ func _setup_animation_tree(model: Node) -> void:
 	animator.stop()
 	animation_tree.active = true
 	animation_tree.set("parameters/AttackSpeed/scale", ATTACK_SPEED)
+	animation_tree.set("parameters/SwordDirection/transition_request", "Normal")
 	_set_locomotion("Idle")
 
 
