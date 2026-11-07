@@ -46,10 +46,6 @@ jobs:
         run: |
           "$GODOT_BIN" --headless --path . --script res://tests/gameplay_smoke.gd
 
-      - name: Bake approved sword clips into text resources for migration
-        run: |
-          "$GODOT_BIN" --headless --path . --script res://tests/bake_sword_clips.gd
-
       - name: Export Web build
         run: |
           mkdir -p dist
