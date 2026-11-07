@@ -54,6 +54,7 @@ jobs:
           test -s dist/index.js
           test -s dist/index.wasm
           test -s dist/index.pck
+          echo "Web export resource pack (PCK): $(stat -c %s dist/index.pck) bytes"
           # Exported HTML, JS, WASM and PCK files share the fixed "index" name.
           # Put each complete export under its own revision URL to prevent
           # browsers from mixing a new page with an older cached game pack.
