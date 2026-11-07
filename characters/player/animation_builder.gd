@@ -3,7 +3,7 @@ extends RefCounted
 # No gameplay input, attack damage or state transitions live here.
 const STANDARD_SWORD_CLIP := preload("res://assets/animations/standard_sword_slash.tres")
 const SWEEPING_SWORD_CLIP := preload("res://assets/animations/sweeping_sword_slash.tres")
-const NARUTO_RUN_UPPER_CLIP := preload("res://assets/animations/naruto_run_upper_body.tres")
+const NARUTO_RUN_FULL_CLIP := preload("res://assets/animations/naruto_run_fullbody.tres")
 const UPPER_BODY_BONES := [
 	"Abdomen", "Torso", "Neck", "Head",
 	"Shoulder.L", "UpperArm.L", "LowerArm.L", "Fist.L",
@@ -70,50 +70,47 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 		else:
 			root.connect_node("Locomotion", i, state)
 
-	# The Naruto run is a separate optional state. The existing Run clip still
-	# drives the legs; only upper-body rotations come from the retargeted source.
+	# Independent Naruto sprint with a complete limb cycle. Keep the imported
+	# Run separately for the root and the Ninja's original foot helper controls.
+	# The Mixamo source foot joints cannot be mapped to this footless Ninja rig.
 	var naruto_library := AnimationLibrary.new()
-	if naruto_library.add_animation("NarutoRunUpper", NARUTO_RUN_UPPER_CLIP) != OK:
-		push_error("Could not register Naruto run upper body")
+	if naruto_library.add_animation("NarutoRunFull", NARUTO_RUN_FULL_CLIP) != OK:
+		push_error("Could not register Naruto full-body running clip")
 		return null
 	if animator.add_animation_library("movement_naruto", naruto_library) != OK:
-		push_error("Could not attach Naruto run upper body")
+		push_error("Could not attach Naruto running library")
 		return null
-	var naruto_upper := AnimationNodeAnimation.new()
-	naruto_upper.animation = "movement_naruto/NarutoRunUpper"
-	# Naruto source loop is 0.65s; native Ninja Run is 0.875s.
-	# Match the upper-body loop period to the existing leg cycle.
-	var naruto_upper_speed := AnimationNodeTimeScale.new()
 	var run_clip := animator.get_animation(find_clip(animator, "Run"))
 	if run_clip == null or run_clip.length <= 0.0:
-		push_error("Cannot synchronize Naruto upper body without Ninja Run")
+		push_error("Cannot synchronize Naruto running clip without Ninja Run")
 		return null
-	var naruto_source_speed_ratio := NARUTO_RUN_UPPER_CLIP.length / run_clip.length
-	var naruto_blend := AnimationNodeBlend2.new()
-	# The filtered upper-body tracks come from NarutoUpper; the dedicated
-	# base Run branch supplies every unfiltered leg track.
-	naruto_blend.filter_enabled = true
-	for bone in ["Body_2", "Hips", "Abdomen", "Torso", "Neck", "Head",
-			"Shoulder.L", "UpperArm.L", "LowerArm.L", "Fist.L",
-			"Shoulder.R", "UpperArm.R", "LowerArm.R", "Fist.R"]:
-		naruto_blend.set_filter_path(NodePath("CharacterArmature/Skeleton3D:" + bone), true)
-	# AnimationNodeBlendTree does not allow the same output to feed two
-	# consumers. Give Naruto its own Run playback; reusing RunSpeed here
-	# silently rejects the connection and leaves the character sliding.
+	var naruto_speed_ratio := NARUTO_RUN_FULL_CLIP.length / run_clip.length
 	var naruto_base_run := AnimationNodeAnimation.new()
 	naruto_base_run.animation = find_clip(animator, "Run")
 	var naruto_base_speed := AnimationNodeTimeScale.new()
+	var naruto_full := AnimationNodeAnimation.new()
+	naruto_full.animation = "movement_naruto/NarutoRunFull"
+	var naruto_full_speed := AnimationNodeTimeScale.new()
+	var naruto_blend := AnimationNodeBlend2.new()
+	naruto_blend.filter_enabled = true
+	# Exclude Body_2 / Hips and both Foot.* IK helpers. The earlier raw Mixamo
+	# root pitch made the character crawl; the foot joints are incompatible.
+	for bone in ["Abdomen", "Torso", "Neck", "Head",
+			"Shoulder.L", "UpperArm.L", "LowerArm.L", "Fist.L",
+			"Shoulder.R", "UpperArm.R", "LowerArm.R", "Fist.R",
+			"UpperLeg.L", "LowerLeg.L", "UpperLeg.R", "LowerLeg.R"]:
+		naruto_blend.set_filter_path(NodePath("CharacterArmature/Skeleton3D:" + bone), true)
 	root.add_node("NarutoBaseRun", naruto_base_run)
 	root.add_node("NarutoBaseRunSpeed", naruto_base_speed)
-	root.add_node("NarutoUpper", naruto_upper)
-	root.add_node("NarutoUpperSpeed", naruto_upper_speed)
-	root.add_node("NarutoUpperBlend", naruto_blend)
+	root.add_node("NarutoFull", naruto_full)
+	root.add_node("NarutoFullSpeed", naruto_full_speed)
+	root.add_node("NarutoFullBodyBlend", naruto_blend)
 	root.connect_node("NarutoBaseRunSpeed", 0, "NarutoBaseRun")
-	root.connect_node("NarutoUpperSpeed", 0, "NarutoUpper")
-	root.connect_node("NarutoUpperBlend", 0, "NarutoBaseRunSpeed")
-	root.connect_node("NarutoUpperBlend", 1, "NarutoUpperSpeed")
+	root.connect_node("NarutoFullSpeed", 0, "NarutoFull")
+	root.connect_node("NarutoFullBodyBlend", 0, "NarutoBaseRunSpeed")
+	root.connect_node("NarutoFullBodyBlend", 1, "NarutoFullSpeed")
 	locomotion.set_input_name(4, "Naruto")
-	root.connect_node("Locomotion", 4, "NarutoUpperBlend")
+	root.connect_node("Locomotion", 4, "NarutoFullBodyBlend")
 
 	# Register both approved attacks as independent, pre-baked animations.
 	# The Standard remains available, while ATK still plays only Sweeping.
@@ -171,8 +168,8 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 	animator.stop()
 	animation_tree.active = true
 	animation_tree.set("parameters/AttackSpeed/scale", attack_speed_value)
-	animation_tree.set("parameters/NarutoUpperBlend/blend_amount", 1.0)
-	animation_tree.set("parameters/NarutoUpperSpeed/scale", naruto_source_speed_ratio)
+	animation_tree.set("parameters/NarutoFullBodyBlend/blend_amount", 1.0)
+	animation_tree.set("parameters/NarutoFullSpeed/scale", naruto_speed_ratio)
 	return animation_tree
 
 

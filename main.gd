@@ -27,7 +27,7 @@ var mobile_zoom_index := 1
 var animation_tree: AnimationTree
 var locomotion_state := ""
 var naruto_run_enabled := false
-var naruto_source_speed_ratio := 1.0
+var naruto_clip_speed_ratio := 1.0
 var movement_controller = MOVEMENT_CONTROLLER.new()
 var combat_controller = COMBAT_CONTROLLER.new()
 var weapon_visuals = WEAPON_VISUALS.new()
@@ -75,7 +75,7 @@ func _physics_process(delta: float) -> void:
 			var run_scale := clampf(actual_speed / RUN_SPEED, 0.85, 1.25)
 			animation_tree.set("parameters/RunSpeed/scale", run_scale)
 			animation_tree.set("parameters/NarutoBaseRunSpeed/scale", run_scale)
-			animation_tree.set("parameters/NarutoUpperSpeed/scale", run_scale * naruto_source_speed_ratio)
+			animation_tree.set("parameters/NarutoFullSpeed/scale", run_scale * naruto_clip_speed_ratio)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -169,7 +169,7 @@ func _build_hero() -> void:
 			push_warning("Visual weapon test could not initialize")
 		animation_tree = ANIMATION_BUILDER.setup_animation_tree(model, animator, ATTACK_SPEED)
 		if animation_tree != null:
-			naruto_source_speed_ratio = float(animation_tree.get("parameters/NarutoUpperSpeed/scale"))
+			naruto_clip_speed_ratio = float(animation_tree.get("parameters/NarutoFullSpeed/scale"))
 			_set_locomotion("Idle")
 	else:
 		push_warning("AnimationPlayer not found in imported model")

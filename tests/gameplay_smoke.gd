@@ -5,7 +5,7 @@ const MOVEMENT_MATH := preload("res://characters/player/movement_math.gd")
 const MOVEMENT_CONTROLLER := preload("res://characters/player/movement_controller.gd")
 const COMBAT_CONTROLLER := preload("res://characters/player/combat_controller.gd")
 const WEAPON_VISUALS := preload("res://characters/player/weapon_visuals.gd")
-const NARUTO_UPPER := preload("res://assets/animations/naruto_run_upper_body.tres")
+const NARUTO_FULL := preload("res://assets/animations/naruto_run_fullbody.tres")
 
 func _initialize() -> void:
 	call_deferred("_run_checks")
@@ -69,26 +69,41 @@ func _run_checks() -> void:
 		return
 	# Naruto state must be independently selectable without replacing the
 	# previously accepted Run or either sword slash.
-	if not _require(NARUTO_UPPER != null and NARUTO_UPPER.loop_mode == Animation.LOOP_LINEAR and NARUTO_UPPER.get_track_count() >= 12, "Retargeted Naruto run upper-body clip must be present and looping"):
+	if not _require(NARUTO_FULL != null and NARUTO_FULL.loop_mode == Animation.LOOP_LINEAR and NARUTO_FULL.get_track_count() == 16, "Retargeted Naruto full-body cycle must contain sixteen looping bone tracks"):
 		return
 	var blend := tree.tree_root as AnimationNodeBlendTree
 	if not _require(blend != null, "Blend tree missing"):
 		return
-	var naruto_layer := blend.get_node("NarutoUpperBlend") as AnimationNodeBlend2
-	if not _require(naruto_layer != null and naruto_layer.filter_enabled and is_equal_approx(float(tree.get("parameters/NarutoUpperBlend/blend_amount")), 1.0), "Naruto upper-body layer must be filtered and enabled"):
+	var naruto_layer := blend.get_node("NarutoFullBodyBlend") as AnimationNodeBlend2
+	if not _require(naruto_layer != null and naruto_layer.filter_enabled and is_equal_approx(float(tree.get("parameters/NarutoFullBodyBlend/blend_amount")), 1.0), "Naruto upper-body layer must be filtered and enabled"):
 		return
+	# The source has anatomical feet; Ninja has only root-level Foot.* helpers.
+	# Neither those joints nor the source's excessive root/pelvis pitch belong
+	# in the new full-body overlay. Both thighs and both shins must be driven.
+	var naruto_bones: Dictionary = {}
+	for track_index in range(NARUTO_FULL.get_track_count()):
+		var track_path := NARUTO_FULL.track_get_path(track_index)
+		if not _require(NARUTO_FULL.track_get_type(track_index) == Animation.TYPE_ROTATION_3D and track_path.get_subname_count() > 0, "Naruto full-body clip must contain only skeletal rotations"):
+			return
+		var bone_name := String(track_path.get_subname(track_path.get_subname_count() - 1))
+		naruto_bones[bone_name] = true
+		if not _require(bone_name not in ["Body_2", "Hips", "Foot.L", "Foot.R"], "Naruto clip must not override pelvis/root or incompatible foot helpers"):
+			return
+	for bone_name in ["UpperLeg.L", "LowerLeg.L", "UpperLeg.R", "LowerLeg.R", "UpperArm.L", "LowerArm.L", "UpperArm.R", "LowerArm.R"]:
+		if not _require(naruto_bones.has(bone_name) and naruto_layer.is_path_filtered(NodePath("CharacterArmature/Skeleton3D:" + bone_name)), "Naruto full-body animation must drive both legs and both arms: " + bone_name):
+			return
 	# The Ninja Run input must have a separate branch: Godot rejects connecting
 	# the same RunSpeed output to both Locomotion and NarutoUpperBlend.
 	if not _require(blend.get_node("NarutoBaseRun") is AnimationNodeAnimation and blend.get_node("NarutoBaseRunSpeed") is AnimationNodeTimeScale, "Naruto layer needs both a connected Run base and connected upper-body overlay"):
 		return
 	var source_run := ANIMATION_BUILDER.find_clip(game.get("animator") as AnimationPlayer, "Run")
 	var run_asset := (game.get("animator") as AnimationPlayer).get_animation(source_run)
-	var upper_speed := blend.get_node("NarutoUpperSpeed") as AnimationNodeTimeScale
-	if not _require(upper_speed != null and run_asset != null and is_equal_approx(float(tree.get("parameters/NarutoUpperSpeed/scale")), NARUTO_UPPER.length / run_asset.length), "Naruto upper loop must match the Ninja Run leg stride"):
+	var full_speed := blend.get_node("NarutoFullSpeed") as AnimationNodeTimeScale
+	if not _require(full_speed != null and run_asset != null and is_equal_approx(float(tree.get("parameters/NarutoFullSpeed/scale")), NARUTO_FULL.length / run_asset.length), "Naruto full-body loop must match the Ninja Run root/foot stride"):
 		return
 	var attack := blend.get_node("Attack") as AnimationNodeOneShot
 	var animator := game.get("animator") as AnimationPlayer
-	if not _require(animator.has_animation("movement_naruto/NarutoRunUpper"), "Naruto run must be registered separately"):
+	if not _require(animator.has_animation("movement_naruto/NarutoRunFull"), "Naruto run must be registered separately"):
 		return
 	if not _require(not bool(game.get("naruto_run_enabled")), "Classic Run must remain default"):
 		return
@@ -107,11 +122,27 @@ func _run_checks() -> void:
 	if not _require(locomotion_skeleton != null and locomotion_skeleton.find_bone("UpperLeg.L") >= 0, "Ninja skeleton needs left upper leg to test Naruto stride"):
 		return
 	var leg_index := locomotion_skeleton.find_bone("UpperLeg.L")
+	var left_hand_index := locomotion_skeleton.find_bone("Fist.L")
+	var right_hand_index := locomotion_skeleton.find_bone("Fist.R")
+	var torso_index := locomotion_skeleton.find_bone("Torso")
+	var head_index := locomotion_skeleton.find_bone("Head")
+	if not _require(left_hand_index >= 0 and right_hand_index >= 0 and torso_index >= 0 and head_index >= 0, "Naruto pose verification requires both fists, torso and head"):
+		return
 	game.set_physics_process(false)
 	game.call("_set_locomotion", "Naruto")
 	# Let Godot's ordinary animation processing run, like a real player.
 	for frame in range(8):
 		await physics_frame
+	# Evaluate the actual blended rig. Previously the head dropped to the
+	# pelvis and the hands pointed forward like a crawling character.
+	var torso_pose := locomotion_skeleton.get_bone_global_pose(torso_index).origin
+	var head_pose := locomotion_skeleton.get_bone_global_pose(head_index).origin
+	if not _require(head_pose.y > torso_pose.y + 0.35 and head_pose.z < torso_pose.z + 0.50, "Naruto sprint must not fold the character into a crawling pose"):
+		return
+	for hand_index in [left_hand_index, right_hand_index]:
+		var hand_pose := locomotion_skeleton.get_bone_global_pose(hand_index).origin
+		if not _require(hand_pose.y < torso_pose.y - 0.10 and hand_pose.z < torso_pose.z - 0.15, "Naruto sprint hands must trail below and behind the torso"):
+			return
 	var leg_samples: Array[Quaternion] = []
 	for sample in range(4):
 		for frame in range(5):
