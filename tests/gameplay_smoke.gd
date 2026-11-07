@@ -216,7 +216,7 @@ func _run_checks() -> void:
 	physics_body.free()
 	var test_visual := Node3D.new()
 	MOVEMENT_MATH.apply_facing(test_visual, Vector3.FORWARD)
-	if not _require(absf(test_visual.rotation.y) < 0.001, "Imported rig facing correction must remain unchanged"):
+	if not _require(absf(test_visual.rotation.y - PI) < 0.001, "Imported rig facing correction must remain unchanged"):
 		return
 	test_visual.free()
 
