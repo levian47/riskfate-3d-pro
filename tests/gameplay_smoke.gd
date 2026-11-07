@@ -97,6 +97,48 @@ func _run_checks() -> void:
 			added_swing = maxf(added_swing, wide_base.angle_to(q) - previous_angle)
 	if not _require(source_max > 0.05 and added_swing > 0.10 and wide_max <= deg_to_rad(171.0), "Wide attack must add forward arm swing without a 180-degree wrap"):
 		return
+	# The source Shoulder.R track is preserved. The adjusted clip aims its
+	# active swing from one side of the forward axis to the other and eases back.
+	var shoulder_source := -1
+	var shoulder_wide := -1
+	for i in range(original_clip.get_track_count()):
+		var path := original_clip.track_get_path(i)
+		if original_clip.track_get_type(i) == Animation.TYPE_ROTATION_3D and path.get_subname_count() > 0:
+			if String(path.get_subname(path.get_subname_count() - 1)) == "Shoulder.R":
+				shoulder_source = i
+				break
+	for i in range(wide_clip.get_track_count()):
+		var path := wide_clip.track_get_path(i)
+		if wide_clip.track_get_type(i) == Animation.TYPE_ROTATION_3D and path.get_subname_count() > 0:
+			if String(path.get_subname(path.get_subname_count() - 1)) == "Shoulder.R":
+				shoulder_wide = i
+				break
+	if not _require(shoulder_source >= 0 and shoulder_wide >= 0, "Right shoulder rotation tracks must exist"):
+		return
+	if not _require(original_clip.track_get_key_count(shoulder_source) == wide_clip.track_get_key_count(shoulder_wide), "Shoulder timing must stay unchanged"):
+		return
+	var opening_shifted := false
+	var contact_shifted := false
+	for i in range(wide_clip.track_get_key_count(shoulder_wide)):
+		var original_q: Quaternion = original_clip.track_get_key_value(shoulder_source, i)
+		var adjusted_q: Quaternion = wide_clip.track_get_key_value(shoulder_wide, i)
+		var time_fraction: float = wide_clip.track_get_key_time(shoulder_wide, i) / wide_clip.length
+		var relative_q := (adjusted_q * original_q.inverse()).normalized()
+		var local_forward := relative_q * Vector3.BACK
+		if time_fraction > 0.15 and time_fraction < 0.28 and local_forward.x < -0.15:
+			opening_shifted = true
+		if time_fraction > 0.39 and time_fraction < 0.53 and local_forward.x > 0.15:
+			contact_shifted = true
+	if not _require(opening_shifted and contact_shifted, "Sword swing must steer across the frontal sector"):
+		return
+	var first_q: Quaternion = original_clip.track_get_key_value(shoulder_source, 0)
+	var first_wide_q: Quaternion = wide_clip.track_get_key_value(shoulder_wide, 0)
+	var last_index := wide_clip.track_get_key_count(shoulder_wide) - 1
+	var last_q: Quaternion = original_clip.track_get_key_value(shoulder_source, last_index)
+	var last_wide_q: Quaternion = wide_clip.track_get_key_value(shoulder_wide, last_index)
+	if not _require(first_q.angle_to(first_wide_q) < 0.01 and last_q.angle_to(last_wide_q) < 0.01, "Shoulder must smoothly return to original pose"):
+		return
+
 	var attack_node := blend.get_node("SwordSlash") as AnimationNodeAnimation
 	if not _require(attack_node != null and String(attack_node.animation) == "combat/WideSwordSlash", "Attack blend node must play wider clip"):
 		return
@@ -191,7 +233,7 @@ func _run_checks() -> void:
 	var collision := environment.get_node("CollisionShape3D") as CollisionShape3D
 	if not _require(collision != null and (collision.shape as BoxShape3D).size.x >= 200.0, "Expanded terrain missing"):
 		return
-	print("Gameplay smoke test passed: FPS cap 60, offline ping, widened sword swing, movement, dash, world, training hits, HP and respawn.")
+	print("Gameplay smoke test passed: frontal sword sector, FPS cap, offline ping, movement, dash, world, training hits, HP and respawn.")
 	quit(0)
 
 

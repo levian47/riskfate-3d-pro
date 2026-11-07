@@ -25,6 +25,11 @@ const PREVIOUS_ATTACK_SWING_AMPLITUDE := 130.0 / 90.0
 const ATTACK_SWING_AMPLITUDE := PREVIOUS_ATTACK_SWING_AMPLITUDE * 1.5
 # Avoid quaternion shortest-arc wraparound when extrapolation exceeds 180°.
 const ATTACK_SWING_MAX_ANGLE := deg_to_rad(170.0)
+# Test pose steering: keep the existing swing span but move its active arc
+# from the side toward the direction the character is facing.
+const ATTACK_FORWARD_START_YAW := -50.0
+const ATTACK_FORWARD_FINISH_YAW := 38.0
+const ATTACK_FORWARD_PITCH := 15.0
 # Prototype combat parameters. Not approved balance values.
 const TRAINING_HIT_DAMAGE := 25
 const TRAINING_HIT_REACH := 3.1
@@ -353,8 +358,8 @@ func _find_clip(short_name: String) -> String:
 
 func _make_wider_sword_slash(source_name: String) -> String:
 	# Keep the imported clip untouched; build an independently editable variation.
-	# Extrapolating upper-arm key rotations widens the existing slash without
-	# reorienting the sword in the grip or disturbing the locomotion layer.
+	# Extrapolate the upper arm as before, then steer the right shoulder so the
+	# active swing passes further in front, without touching the lower body.
 	var source := animator.get_animation(source_name)
 	if source == null:
 		return ""
@@ -367,25 +372,41 @@ func _make_wider_sword_slash(source_name: String) -> String:
 		if track_path.get_subname_count() == 0:
 			continue
 		var bone_name := String(track_path.get_subname(track_path.get_subname_count() - 1))
-		if bone_name != "UpperArm.R" or wide.track_is_compressed(track):
+		if wide.track_is_compressed(track):
 			continue
 		var key_count := wide.track_get_key_count(track)
 		if key_count < 2:
 			continue
-		var start_rotation: Quaternion = wide.track_get_key_value(track, 0)
-		for key_index in range(1, key_count):
-			var original: Quaternion = wide.track_get_key_value(track, key_index)
-			var relative: Quaternion = (start_rotation.inverse() * original).normalized()
-			# Quaternions q and -q encode the same rotation; choose shortest arc.
-			if relative.w < 0.0:
-				relative = Quaternion(-relative.x, -relative.y, -relative.z, -relative.w)
-			var angle := relative.get_angle()
-			if angle <= 0.001:
-				continue
-			var wider_angle := minf(angle * ATTACK_SWING_AMPLITUDE, ATTACK_SWING_MAX_ANGLE)
-			var wider_rotation := start_rotation * Quaternion(relative.get_axis(), wider_angle)
-			wide.track_set_key_value(track, key_index, wider_rotation.normalized())
-			altered_keys += 1
+		if bone_name == "UpperArm.R":
+			# Keep the previously accepted size of the sweep unchanged.
+			var start_rotation: Quaternion = wide.track_get_key_value(track, 0)
+			for key_index in range(1, key_count):
+				var original: Quaternion = wide.track_get_key_value(track, key_index)
+				var relative: Quaternion = (start_rotation.inverse() * original).normalized()
+				if relative.w < 0.0:
+					relative = Quaternion(-relative.x, -relative.y, -relative.z, -relative.w)
+				var angle := relative.get_angle()
+				if angle <= 0.001:
+					continue
+				var wider_angle := minf(angle * ATTACK_SWING_AMPLITUDE, ATTACK_SWING_MAX_ANGLE)
+				var wider_rotation := start_rotation * Quaternion(relative.get_axis(), wider_angle)
+				wide.track_set_key_value(track, key_index, wider_rotation.normalized())
+				altered_keys += 1
+		elif bone_name == "Shoulder.R":
+			# Turn the strike's sector across the front of the body.
+			# Smooth fade at the start/end prevents a snap back to idle.
+			for key_index in range(key_count):
+				var phase: float = wide.track_get_key_time(track, key_index) / wide.length
+				var influence := smoothstep(0.02, 0.16, phase) * (1.0 - smoothstep(0.65, 0.98, phase))
+				if influence <= 0.001:
+					continue
+				var sweep_progress := smoothstep(0.16, 0.45, phase)
+				var yaw := deg_to_rad(lerpf(ATTACK_FORWARD_START_YAW, ATTACK_FORWARD_FINISH_YAW, sweep_progress) * influence)
+				var pitch := deg_to_rad(ATTACK_FORWARD_PITCH * influence)
+				var correction := Quaternion(Vector3.RIGHT, pitch) * Quaternion(Vector3.UP, yaw)
+				var shoulder_rotation: Quaternion = wide.track_get_key_value(track, key_index)
+				wide.track_set_key_value(track, key_index, (correction * shoulder_rotation).normalized())
+				altered_keys += 1
 	if altered_keys == 0:
 		push_warning("SwordSlash: upper-arm animation track cannot be widened")
 		return ""
