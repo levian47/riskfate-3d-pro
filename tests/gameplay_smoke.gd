@@ -219,6 +219,7 @@ func _run_checks() -> void:
 		return
 	# Sample the actual sword tip in the imported rig, not only bone angles.
 	var skel := game.call("_find_skeleton", visual_node) as Skeleton3D
+	print("Shoulder.R rest basis: ", skel.get_bone_rest(skel.find_bone("Shoulder.R")).basis)
 	var sword_grip := skel.get_node_or_null("SwordGrip/SimpleSword") as Node3D
 	if not _require(sword_grip != null, "Test sword attachment must be present"):
 		return

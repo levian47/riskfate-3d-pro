@@ -383,22 +383,32 @@ func _find_clip(short_name: String) -> String:
 	return ""
 
 
-func _shoulder_strike_correction(phase: float) -> Quaternion:
+func _shoulder_strike_correction(phase: float, shoulder_rest_rotation: Quaternion) -> Quaternion:
 	# Interpolate model-specific sampled poses; Godot may omit constant
 	# glTF shoulder tracks, so the generated animation adds this track.
 	var key_position := clampf(phase, 0.0, 1.0) * float(SWORD_SWING_SHOULDER_KEYS.size() - 1)
 	var index := mini(int(floorf(key_position)), SWORD_SWING_SHOULDER_KEYS.size() - 2)
 	var amount := key_position - float(index)
-	return SWORD_SWING_SHOULDER_KEYS[index].slerp(SWORD_SWING_SHOULDER_KEYS[index + 1], amount).normalized()
+	var parent_space_rotation: Quaternion = SWORD_SWING_SHOULDER_KEYS[index].slerp(SWORD_SWING_SHOULDER_KEYS[index + 1], amount).normalized()
+	# Animation rotation tracks use bone POSE space, after the bone's rest.
+	# Convert our parent-space correction into Shoulder.R rest-local axes.
+	return (shoulder_rest_rotation.inverse() * parent_space_rotation * shoulder_rest_rotation).normalized()
 
 
-func _make_wider_sword_slash(source_name: String) -> String:
+func _make_wider_sword_slash(source_name: String, model: Node) -> String:
 	# Keep the imported clip untouched; build an independently editable variation.
 	# Extrapolate the upper arm as before, then steer the right shoulder so the
 	# active swing passes further in front, without touching the lower body.
 	var source := animator.get_animation(source_name)
 	if source == null:
 		return ""
+	var shoulder_skeleton := _find_skeleton(model)
+	if shoulder_skeleton == null:
+		return ""
+	var shoulder_index := shoulder_skeleton.find_bone("Shoulder.R")
+	if shoulder_index < 0:
+		return ""
+	var shoulder_rest_rotation := shoulder_skeleton.get_bone_rest(shoulder_index).basis.get_rotation_quaternion()
 	var wide := source.duplicate(true) as Animation
 	var altered_keys := 0
 	var upper_arm_track := -1
@@ -435,7 +445,7 @@ func _make_wider_sword_slash(source_name: String) -> String:
 			shoulder_track_found = true
 			for key_index in range(key_count):
 				var phase: float = wide.track_get_key_time(track, key_index) / wide.length
-				var correction := _shoulder_strike_correction(phase)
+				var correction := _shoulder_strike_correction(phase, shoulder_rest_rotation)
 				var shoulder_rotation: Quaternion = wide.track_get_key_value(track, key_index)
 				wide.track_set_key_value(track, key_index, (correction * shoulder_rotation).normalized())
 				altered_keys += 1
@@ -449,7 +459,7 @@ func _make_wider_sword_slash(source_name: String) -> String:
 		wide.track_set_path(new_track, NodePath(shoulder_path))
 		for key_index in range(wide.track_get_key_count(upper_arm_track)):
 			var key_time := wide.track_get_key_time(upper_arm_track, key_index)
-			var correction := _shoulder_strike_correction(key_time / wide.length)
+			var correction := _shoulder_strike_correction(key_time / wide.length, shoulder_rest_rotation)
 			wide.rotation_track_insert_key(new_track, key_time, correction.normalized())
 			altered_keys += 1
 	if altered_keys == 0:
@@ -493,7 +503,7 @@ func _setup_animation_tree(model: Node) -> void:
 	if attack_clip_name.is_empty():
 		push_error("SwordSlash clip missing")
 		return
-	var wide_clip_name := _make_wider_sword_slash(attack_clip_name)
+	var wide_clip_name := _make_wider_sword_slash(attack_clip_name, model)
 	if not wide_clip_name.is_empty():
 		attack_clip_name = wide_clip_name
 	var attack_clip := animator.get_animation(attack_clip_name)
