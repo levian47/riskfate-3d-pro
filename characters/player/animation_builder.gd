@@ -3,6 +3,7 @@ extends RefCounted
 # No gameplay input, attack damage or state transitions live here.
 const STANDARD_SWORD_CLIP := preload("res://assets/animations/standard_sword_slash.tres")
 const SWEEPING_SWORD_CLIP := preload("res://assets/animations/sweeping_sword_slash.tres")
+const NARUTO_RUN_UPPER_CLIP := preload("res://assets/animations/naruto_run_upper_body.tres")
 const UPPER_BODY_BONES := [
 	"Abdomen", "Torso", "Neck", "Head",
 	"Shoulder.L", "UpperArm.L", "LowerArm.L", "Fist.L",
@@ -46,7 +47,7 @@ static func find_clip(animator: AnimationPlayer, short_name: String) -> String:
 static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_speed_value: float) -> AnimationTree:
 	var root := AnimationNodeBlendTree.new()
 	var locomotion := AnimationNodeTransition.new()
-	locomotion.input_count = 4
+	locomotion.input_count = 5
 	locomotion.xfade_time = 0.10
 	root.add_node("Locomotion", locomotion)
 
@@ -68,6 +69,30 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 			root.connect_node("Locomotion", i, state + "Speed")
 		else:
 			root.connect_node("Locomotion", i, state)
+
+	# The Naruto run is a separate optional state. The existing Run clip still
+	# drives the legs; only upper-body rotations come from the retargeted source.
+	var naruto_library := AnimationLibrary.new()
+	if naruto_library.add_animation("NarutoRunUpper", NARUTO_RUN_UPPER_CLIP) != OK:
+		push_error("Could not register Naruto run upper body")
+		return null
+	if animator.add_animation_library("movement_naruto", naruto_library) != OK:
+		push_error("Could not attach Naruto run upper body")
+		return null
+	var naruto_upper := AnimationNodeAnimation.new()
+	naruto_upper.animation = "movement_naruto/NarutoRunUpper"
+	var naruto_blend := AnimationNodeBlend2.new()
+	naruto_blend.filter_enabled = true
+	for bone in ["Body_2", "Hips", "Abdomen", "Torso", "Neck", "Head",
+			"Shoulder.L", "UpperArm.L", "LowerArm.L", "Fist.L",
+			"Shoulder.R", "UpperArm.R", "LowerArm.R", "Fist.R"]:
+		naruto_blend.set_filter_path(NodePath("CharacterArmature/Skeleton3D:" + bone), true)
+	root.add_node("NarutoUpper", naruto_upper)
+	root.add_node("NarutoUpperBlend", naruto_blend)
+	root.connect_node("NarutoUpperBlend", 0, "RunSpeed")
+	root.connect_node("NarutoUpperBlend", 1, "NarutoUpper")
+	locomotion.set_input_name(4, "Naruto")
+	root.connect_node("Locomotion", 4, "NarutoUpperBlend")
 
 	# Register both approved attacks as independent, pre-baked animations.
 	# The Standard remains available, while ATK still plays only Sweeping.
@@ -125,6 +150,7 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 	animator.stop()
 	animation_tree.active = true
 	animation_tree.set("parameters/AttackSpeed/scale", attack_speed_value)
+	animation_tree.set("parameters/NarutoUpperBlend/blend_amount", 1.0)
 	return animation_tree
 
 

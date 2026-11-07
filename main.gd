@@ -26,6 +26,7 @@ const MOBILE_ZOOM_LEVELS := [8.0, 12.0, 18.0]
 var mobile_zoom_index := 1
 var animation_tree: AnimationTree
 var locomotion_state := ""
+var naruto_run_enabled := false
 var movement_controller = MOVEMENT_CONTROLLER.new()
 var combat_controller = COMBAT_CONTROLLER.new()
 var weapon_visuals = WEAPON_VISUALS.new()
@@ -65,7 +66,7 @@ func _physics_process(delta: float) -> void:
 		if actual_speed < MOVE_ANIMATION_THRESHOLD:
 			_set_locomotion("Idle")
 		elif actual_speed >= (WALK_SPEED + RUN_SPEED) * 0.5:
-			_set_locomotion("Run")
+			_set_locomotion("Naruto" if naruto_run_enabled else "Run")
 		else:
 			_set_locomotion("Walk")
 		if animation_tree != null:
@@ -76,6 +77,9 @@ func _physics_process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_Q:
 		_start_dash()
+		return
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_R:
+		_toggle_naruto_run()
 		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_E:
 		_cycle_weapon()
@@ -91,6 +95,16 @@ func _unhandled_input(event: InputEvent) -> void:
 			camera_zoom = minf(28.0, camera_zoom + 1.0)
 			camera.size = camera_zoom
 
+func _toggle_naruto_run() -> void:
+	naruto_run_enabled = not naruto_run_enabled
+	if locomotion_state == "Run" or locomotion_state == "Naruto":
+		_set_locomotion("Naruto" if naruto_run_enabled else "Run")
+	if touch_hud != null:
+		touch_hud.naruto_run_enabled = naruto_run_enabled
+		touch_hud.queue_redraw()
+	_update_weapon_display()
+
+
 func _cycle_weapon() -> void:
 	# This is a visual playtest only. Current attack state stays untouched.
 	if weapon_visuals.cycle():
@@ -103,7 +117,7 @@ func _update_weapon_display() -> void:
 		touch_hud.queue_redraw()
 	var help_label := get_node_or_null("HUD/HelpPanel/HelpText") as Label
 	if help_label != null:
-		help_label.text = HUD_BUILDER.desktop_help_text(weapon_visuals.selected_name())
+		help_label.text = HUD_BUILDER.desktop_help_text(weapon_visuals.selected_name(), naruto_run_enabled)
 
 
 func _start_dash() -> void:
@@ -222,6 +236,7 @@ func _build_ui() -> void:
 		touch_hud.zoom_requested.connect(_cycle_mobile_zoom)
 		touch_hud.fullscreen_requested.connect(_toggle_fullscreen)
 		touch_hud.weapon_requested.connect(_cycle_weapon)
+		touch_hud.naruto_requested.connect(_toggle_naruto_run)
 		_update_weapon_display()
 		touch_hud.zoom_level = mobile_zoom_index + 1
 		return

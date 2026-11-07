@@ -85,6 +85,8 @@
 
 - [x] **Архівування двох бібліотек анімацій (07.11.2026):** оригінальні ZIP Quaternius Universal Animation Library Standard і Kevin Iglesias Human Melee Animations FREE збережено у приватному [Google Drive / Animation Sources](https://drive.google.com/drive/folders/184B3ehg4sb0o30aCJ3KVIXI14WtpYe4g); додатково 43 кліпи CC0 Quaternius (Godot GLB без root motion) збережені в компактному ZIP `assets_source/animation_libraries/quaternius/ual1_standard_godot.zip` у публічному репозиторії. FBX Kevin Iglesias не публікувалися через обмеження Standard Asset Store EULA на перепоширення. До ігрових сцен, AnimationTree, керування та Web-пакета анімації не підключалися; retargeting і художній огляд — окреме завдання.
 
+- [ ] **Naruto Run — анімаційний тест (07.11.2026):** оригінальний CC BY 4.0 ZIP збережено у приватному Drive; рух верхньої частини тіла ретаргетовано зі скелета Mixamo на Ninja як окремий `.tres`. Увімкнення R / RUN, чинний біг залишається за замовчуванням; рух, бій і затверджені удари без змін. Автоматичний CI та візуальна оцінка/реальний смартфон поки не підтверджені. Автор і джерело: ronildo.facanha, Sketchfab, посилання в README.
+
 ## Етап 4 — базовий ігровий цикл
 
 - [ ] Погодити базові 3D-пропорції героя, камеру та стиль low-poly; перевірити продуктивність.

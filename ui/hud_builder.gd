@@ -72,5 +72,5 @@ static func build_desktop_controls(canvas: CanvasLayer) -> Button:
 	return fullscreen_button
 
 
-static func desktop_help_text(weapon_name: String) -> String:
-	return "NINJA 3D TEST\nWASD — рух   |   SHIFT — біг   |   Q — ривок\nSPACE — стрибок   |   ЛКМ — удар\nКолесо миші — масштаб   |   E — змінити зброю\nЗброя: " + weapon_name
+static func desktop_help_text(weapon_name: String, naruto_enabled: bool = false) -> String:
+	return "NINJA 3D TEST\nWASD — рух   |   SHIFT — біг   |   Q — ривок\nSPACE — стрибок   |   ЛКМ — удар\nКолесо миші — масштаб   |   E — змінити зброю\nR — Naruto Run (" + ("ON" if naruto_enabled else "OFF") + ")   |   Зброя: " + weapon_name

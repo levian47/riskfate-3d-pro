@@ -5,6 +5,7 @@ const MOVEMENT_MATH := preload("res://characters/player/movement_math.gd")
 const MOVEMENT_CONTROLLER := preload("res://characters/player/movement_controller.gd")
 const COMBAT_CONTROLLER := preload("res://characters/player/combat_controller.gd")
 const WEAPON_VISUALS := preload("res://characters/player/weapon_visuals.gd")
+const NARUTO_UPPER := preload("res://assets/animations/naruto_run_upper_body.tres")
 
 func _initialize() -> void:
 	call_deferred("_run_checks")
@@ -66,11 +67,31 @@ func _run_checks() -> void:
 	var tree := game.get("animation_tree") as AnimationTree
 	if not _require(hero != null and tree != null and tree.active, "Character and AnimationTree must initialize"):
 		return
+	# Naruto state must be independently selectable without replacing the
+	# previously accepted Run or either sword slash.
+	if not _require(NARUTO_UPPER != null and NARUTO_UPPER.loop_mode == Animation.LOOP_LINEAR and NARUTO_UPPER.get_track_count() >= 12, "Retargeted Naruto run upper-body clip must be present and looping"):
+		return
 	var blend := tree.tree_root as AnimationNodeBlendTree
 	if not _require(blend != null, "Blend tree missing"):
 		return
+	var naruto_layer := blend.get_node("NarutoUpperBlend") as AnimationNodeBlend2
+	if not _require(naruto_layer != null and naruto_layer.filter_enabled and is_equal_approx(float(tree.get("parameters/NarutoUpperBlend/blend_amount")), 1.0), "Naruto upper-body layer must be filtered and enabled"):
+		return
 	var attack := blend.get_node("Attack") as AnimationNodeOneShot
 	var animator := game.get("animator") as AnimationPlayer
+	if not _require(animator.has_animation("movement_naruto/NarutoRunUpper"), "Naruto run must be registered separately"):
+		return
+	if not _require(not bool(game.get("naruto_run_enabled")), "Classic Run must remain default"):
+		return
+	game.call("_toggle_naruto_run")
+	if not _require(bool(game.get("naruto_run_enabled")), "Naruto mode must toggle on"):
+		return
+	game.call("_set_locomotion", "Naruto")
+	if not _require(String(tree.get("parameters/Locomotion/current_state")) == "Naruto" or String(game.get("locomotion_state")) == "Naruto", "Naruto state must be selectable"):
+		return
+	game.call("_toggle_naruto_run")
+	if not _require(not bool(game.get("naruto_run_enabled")) and String(game.get("locomotion_state")) == "Run", "Turning Naruto mode off must restore the normal Run state"):
+		return
 	var combat_state := game.get("combat_controller") as RefCounted
 	if not _require(combat_state != null, "Combat state must be owned by the dedicated player combat controller"):
 		return
