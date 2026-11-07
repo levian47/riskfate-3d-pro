@@ -30,9 +30,6 @@ func _run_checks() -> void:
 	if not _require(blend != null, "Blend tree missing"):
 		return
 	var attack := blend.get_node("Attack") as AnimationNodeOneShot
-	var direction_node := blend.get_node("SwordDirection") as AnimationNodeBlend2
-	if not _require(direction_node != null, "Camera-dependent sword direction Blend2 selector missing"):
-		return
 	var animator := game.get("animator") as AnimationPlayer
 	if not _require(attack != null and animator != null and attack.filter_enabled, "Upper-body attack layer missing"):
 		return
@@ -59,13 +56,14 @@ func _run_checks() -> void:
 	if not _require(arm_found and not leg_found, "Attack must affect arms, not legs"):
 		return
 
-	# Both generated clips are independent and preserve source animation timing.
-	if not _require(animator.has_animation("combat/WideSwordSlash") and animator.has_animation("combat_mirror/WideSwordSlashMirror"), "Both sword clips must exist"):
+	# One combat clip must remain, matching the former back-facing variant.
+	if not _require(animator.has_animation("combat/WideSwordSlash"), "Sword slash clip must exist"):
+		return
+	if not _require(not animator.has_animation("combat_mirror/WideSwordSlashMirror") and not blend.has_node("SwordDirection") and not blend.has_node("AttackSeek"), "Old alternate slash and selectors must be removed"):
 		return
 	var original_clip := animator.get_animation(sword_name)
 	var wide_clip := animator.get_animation("combat/WideSwordSlash")
-	var mirror_clip := animator.get_animation("combat_mirror/WideSwordSlashMirror")
-	if not _require(wide_clip != original_clip and is_equal_approx(wide_clip.length, original_clip.length) and is_equal_approx(mirror_clip.length, original_clip.length), "Combat clips must preserve timing"):
+	if not _require(wide_clip != original_clip and is_equal_approx(wide_clip.length, original_clip.length) , "Combat clips must preserve timing"):
 		return
 	var arm_source := -1
 	var arm_wide := -1
@@ -218,162 +216,56 @@ func _run_checks() -> void:
 	var collision := environment.get_node("CollisionShape3D") as CollisionShape3D
 	if not _require(collision != null and (collision.shape as BoxShape3D).size.x >= 200.0, "Expanded terrain missing"):
 		return
-	# Test the visible right-to-left swing with the actual isometric camera
-	# while the player faces the training dummy (+Z), not just the model's axes.
+	# Back-facing swing is the owner's preferred motion. The same one-shot
+	# must be used for every orientation, without any camera-based switching.
 	game.set_physics_process(false)
-	visual_node.rotation.y = 0.0
+	var visual_node := game.get("visual") as Node3D
 	var view_camera := game.get("camera") as Camera3D
-	if not _require(view_camera != null, "Isometric camera must exist for screen-direction test"):
+	var skel := game.call("_find_skeleton", visual_node) as Skeleton3D
+	var sword_grip := skel.get_node_or_null("SwordGrip/SimpleSword") as Node3D
+	if not _require(view_camera != null and sword_grip != null, "Camera and sword attachment must exist"):
 		return
 	var view_right := view_camera.global_transform.basis.x.normalized()
-	var skel := game.call("_find_skeleton", visual_node) as Skeleton3D
-	print("Shoulder.R rest basis: ", skel.get_bone_rest(skel.find_bone("Shoulder.R")).basis)
-	var sword_grip := skel.get_node_or_null("SwordGrip/SimpleSword") as Node3D
-	if not _require(sword_grip != null, "Test sword attachment must be present"):
+	var attack_node := blend.get_node("SwordSlash") as AnimationNodeAnimation
+	if not _require(attack_node != null and String(attack_node.animation) == "combat/WideSwordSlash", "OneShot must play the single retained sword clip"):
 		return
-	# Verify the real player attack BEFORE temporarily letting AnimationPlayer
-	# drive the same skeleton directly for the clip-only trajectory check.
+
+	# The camera is at +X,+Z. PI rotates the hero's back toward the camera.
+	visual_node.rotation.y = PI
 	tree.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
 	tree.set("parameters/Attack/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_ABORT)
-	tree.advance(0.001)
+	tree.advance(0.01)
 	game.call("_set_locomotion", "Idle", true)
 	tree.advance(0.15)
 	game.set("attack_time_left", 0.0)
 	game.call("_start_attack")
-	var blended_screen_positions: Array[float] = []
+	if not _require(float(game.get("attack_time_left")) > 0.0, "Back-facing strike must start"):
+		return
+	var back_screen: Array[float] = []
 	var last_fraction := 0.0
-	var playback_duration: float = float(game.get("attack_duration"))
-	print("Attack playback duration: ", playback_duration, ", OneShot request: ", tree.get("parameters/Attack/request"))
+	var swing_duration: float = float(game.get("attack_duration"))
 	for fraction in [0.16, 0.24, 0.32, 0.40, 0.48, 0.56, 0.64]:
-		tree.advance(playback_duration * (fraction - last_fraction))
+		tree.advance(swing_duration * (fraction - last_fraction))
 		last_fraction = fraction
-		# BoneAttachment3D synchronizes on Skeleton3D updates, not during
-		# a chain of manual AnimationTree.advance() calls in the same frame.
 		await process_frame
-		blended_screen_positions.append(view_right.dot(sword_grip.to_global(Vector3(0.0, 1.305, 0.0))))
-	print("Blended player attack screen positions: ", blended_screen_positions, ", OneShot active: ", tree.get("parameters/Attack/active"))
-	# Independent clean-spawn check: earlier smoke checks have already played
-	# an attack and changed locomotion. Distinguish that history from a
-	# first press on a new character facing the real isometric camera.
-	var clean_game := scene.instantiate()
-	root.add_child(clean_game)
-	await process_frame
-	clean_game.set_physics_process(false)
-	var clean_tree := clean_game.get("animation_tree") as AnimationTree
-	clean_tree.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
-	var clean_visual := clean_game.get("visual") as Node3D
-	var clean_camera := clean_game.get("camera") as Camera3D
-	var clean_hero := clean_game.get("hero") as CharacterBody3D
-	var camera_heading := clean_camera.global_position - clean_hero.global_position
-	camera_heading.y = 0.0
-	clean_visual.rotation.y = atan2(-camera_heading.x, -camera_heading.z) + PI
-	var clean_skeleton := clean_game.call("_find_skeleton", clean_visual) as Skeleton3D
-	var clean_sword := clean_skeleton.get_node("SwordGrip/SimpleSword") as Node3D
-	var clean_right := clean_camera.global_transform.basis.x.normalized()
-	clean_game.call("_start_attack")
-	var clean_position_trace: Array[float] = []
-	var clean_prev := 0.0
-	var clean_duration := float(clean_game.get("attack_duration"))
-	for fraction in [0.08, 0.16, 0.24, 0.32, 0.40, 0.48, 0.56, 0.64]:
-		clean_tree.advance(clean_duration * (fraction - clean_prev))
-		clean_prev = fraction
-		await process_frame
-		clean_position_trace.append(clean_right.dot(clean_sword.to_global(Vector3(0.0, 1.305, 0.0))))
-	print("Fresh character facing camera sword trace: ", clean_position_trace, ", heading: ", clean_visual.rotation.y, ", chosen blend: ", clean_tree.get("parameters/SwordDirection/blend_amount"))
-	# The visible cut is at 8%-32%: it must start screen-right and
-	# cross the character to screen-left without reversing. The later
-	# return-to-idle is recovery, not a second attack.
-	if not _require(clean_position_trace[0] > 1.0 and clean_position_trace[3] < -1.5 and clean_position_trace[0] - clean_position_trace[3] > 3.0, "First front-facing cut must cross right-to-left across the camera"):
+		back_screen.append(view_right.dot(sword_grip.to_global(Vector3(0.0, 1.305, 0.0))))
+	print("Single sword slash / back-facing screen positions: ", back_screen)
+	if not _require(back_screen[1] - back_screen[back_screen.size() - 1] > 1.7, "Retained back-facing sword cut must travel right-to-left on screen"):
 		return
-	for i in range(1, 4):
-		if not _require(clean_position_trace[i] < clean_position_trace[i - 1] + 0.15, "First front-facing cutting phase must never reverse to the right"):
-			return
-	clean_game.queue_free()
-	# User's front-facing regression: a rightward snap BEFORE the cutting
-	# phase looks like a left-to-right strike. Check the full visible sequence,
-	# rather than only the clean tail from 32% onward.
-	if not _require(blended_screen_positions[0] - blended_screen_positions[blended_screen_positions.size() - 1] > 2.0, "Front-facing full swing must travel screen-right to screen-left"):
-		return
-	for i in range(1, blended_screen_positions.size()):
-		if not _require(blended_screen_positions[i] <= blended_screen_positions[i - 1] + 0.30, "Front-facing sword must not snap rightward mid-swing"):
-			return
-	tree.active = false
-	animator.play("combat/WideSwordSlash")
-	var tip_points: Array[Vector3] = []
-	var screen_right_positions: Array[float] = []
-	for fraction in [0.16, 0.24, 0.32, 0.40, 0.48, 0.56, 0.64]:
-		animator.seek(wide_clip.length * fraction, true)
-		await process_frame
-		var world_tip := sword_grip.to_global(Vector3(0.0, 1.305, 0.0))
-		tip_points.append(visual_node.to_local(world_tip))
-		screen_right_positions.append(view_right.dot(world_tip))
-	animator.stop()
-	tree.active = true
-	print("Horizontal sword tip positions: ", tip_points)
-	print("Camera-horizontal sword positions: ", screen_right_positions)
-	var start_tip := tip_points[0]
-	var end_tip := tip_points[tip_points.size() - 1]
-	var min_height: float = start_tip.y
-	var max_height: float = start_tip.y
-	for point in tip_points:
-		min_height = minf(min_height, point.y)
-		max_height = maxf(max_height, point.y)
-	if not _require(start_tip.x - end_tip.x > 2.5, "Sword must sweep from the hero's right side to left"):
-		return
-	if not _require(screen_right_positions[0] - screen_right_positions[screen_right_positions.size() - 1] > 2.0, "Sword must visually sweep right-to-left from the isometric camera"):
-		return
-	if not _require(start_tip.y - end_tip.y > 0.3 and max_height - min_height < 1.0, "Sword should descend slightly, not arc vertically"):
-		return
-	for point in tip_points:
-		if not _require(point.z > 0.20, "Sword blade must remain forward during the active sweep"):
-			return
 
-	# Turn the hero around. Local left/right reverses on screen, so the
-	# mirrored clip must take over without changing damage, duration or camera.
-	var mirrored_name := "combat_mirror/WideSwordSlashMirror"
-	if not _require(animator.has_animation(mirrored_name), "Mirrored attack clip must exist"):
-		return
-	var mirrored_clip := animator.get_animation(mirrored_name)
-	visual_node.rotation.y = PI
-	tree.active = false
-	animator.play(mirrored_name)
-	var mirrored_screen: Array[float] = []
-	for fraction in [0.16, 0.24, 0.32, 0.40, 0.48, 0.56, 0.64]:
-		animator.seek(mirrored_clip.length * fraction, true)
-		await process_frame
-		mirrored_screen.append(view_right.dot(sword_grip.to_global(Vector3(0.0, 1.305, 0.0))))
-	animator.stop()
-	tree.active = true
-	print("Opposite facing mirrored attack screen positions: ", mirrored_screen)
-	if not _require(mirrored_screen[0] - mirrored_screen[mirrored_screen.size() - 1] > 2.0, "Mirrored sword clip must move right-to-left on screen when hero faces backwards"):
-		return
-	# The actual input handler must select the appropriate variant, not just
-	# keep the correct mirrored animation unused in the resource library.
+	# Turning the hero cannot switch clips: the only branch is the same
+	# SwordSlash node for all positions. Verify another attack can start.
 	tree.set("parameters/Attack/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_ABORT)
 	tree.advance(0.01)
+	visual_node.rotation.y = 0.0
 	game.set("attack_time_left", 0.0)
 	game.call("_start_attack")
-	tree.advance(0.04)
-	if not _require(is_equal_approx(float(tree.get("parameters/SwordDirection/blend_amount")), 1.0), "Turning around must select mirrored animation in the live AnimationTree"):
+	tree.advance(0.02)
+	if not _require(float(game.get("attack_time_left")) > 0.0 and bool(tree.get("parameters/Attack/active")), "Same sword slash must start when hero turns around"):
 		return
-	var mirrored_blended: Array[float] = []
-	var previous_fraction := 0.0
-	var mirror_duration: float = float(game.get("attack_duration"))
-	for fraction in [0.16, 0.24, 0.32, 0.40, 0.48, 0.56, 0.64]:
-		tree.advance(mirror_duration * (fraction - previous_fraction))
-		previous_fraction = fraction
-		await process_frame
-		mirrored_blended.append(view_right.dot(sword_grip.to_global(Vector3(0.0, 1.305, 0.0))))
-	print("Opposite facing blended attack screen positions: ", mirrored_blended)
-	if not _require(mirrored_blended[2] - mirrored_blended[mirrored_blended.size() - 1] > 1.7, "Live reverse-facing attack cutting phase must move right-to-left"):
-		return
-	for i in range(3, mirrored_blended.size()):
-		if not _require(mirrored_blended[i] < mirrored_blended[i - 1] + 0.25, "Reverse-facing cutting phase must not reverse direction"):
-			return
 
-	print("Gameplay smoke test passed: camera-selected right-to-left sword attack from both facing directions, descent, FPS cap, offline ping, movement, dash, world, training hits, HP and respawn.")
+	print("Gameplay smoke test passed: one back-facing-derived sword slash, FPS cap, offline ping, movement, dash, world, training hits, HP and respawn.")
 	quit(0)
-
 
 func _require(value: bool, message: String) -> bool:
 	if not value:
