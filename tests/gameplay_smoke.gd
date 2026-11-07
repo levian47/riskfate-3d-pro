@@ -1,6 +1,7 @@
 extends SceneTree
 
 const ANIMATION_BUILDER := preload("res://characters/player/animation_builder.gd")
+const MOVEMENT_MATH := preload("res://characters/player/movement_math.gd")
 
 func _initialize() -> void:
 	call_deferred("_run_checks")
@@ -191,6 +192,33 @@ func _run_checks() -> void:
 	await process_frame
 	if not _require(String(tree.get("parameters/Locomotion/current_state")) == "Jump", "Jump animation must remain selectable during attack"):
 		return
+
+	# Isolated movement helper must preserve exact camera-relative steering,
+	# jump release, ground reset and imported model facing correction.
+	var camera_for_movement := game.get("camera") as Camera3D
+	var camera_right := camera_for_movement.global_transform.basis.x
+	camera_right.y = 0.0
+	var expected_right := camera_right.normalized()
+	var actual_right := MOVEMENT_MATH.camera_relative_direction(camera_for_movement, Vector2.RIGHT)
+	if not _require(actual_right.distance_to(expected_right) < 0.001, "Extracted movement must preserve camera-right steering"):
+		return
+	var physics_body := CharacterBody3D.new()
+	physics_body.velocity.y = 4.0
+	MOVEMENT_MATH.apply_vertical_velocity(physics_body, false, false, false, 0.1, 8.0, 22.0, 0.55)
+	if not _require(absf(physics_body.velocity.y - (4.0 - 22.0 * 0.1 / 0.55)) < 0.001, "Jump release must preserve early-release gravity"):
+		return
+	var jumped := MOVEMENT_MATH.apply_vertical_velocity(physics_body, true, true, true, 0.016, 8.0, 22.0, 0.55)
+	if not _require(jumped and is_equal_approx(physics_body.velocity.y, 8.0), "Buffered jump must preserve takeoff velocity"):
+		return
+	MOVEMENT_MATH.apply_vertical_velocity(physics_body, true, false, false, 0.016, 8.0, 22.0, 0.55)
+	if not _require(is_equal_approx(physics_body.velocity.y, -0.1), "Grounded vertical reset must remain unchanged"):
+		return
+	physics_body.free()
+	var test_visual := Node3D.new()
+	MOVEMENT_MATH.apply_facing(test_visual, Vector3.FORWARD)
+	if not _require(absf(test_visual.rotation.y) < 0.001, "Imported rig facing correction must remain unchanged"):
+		return
+	test_visual.free()
 
 	# Direction reversal and stopping must be immediate, without braking inertia.
 	var touch_controls = load("res://touch_hud.gd").new()
