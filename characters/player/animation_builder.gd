@@ -4,6 +4,7 @@ extends RefCounted
 const STANDARD_SWORD_CLIP := preload("res://assets/animations/standard_sword_slash.tres")
 const SWEEPING_SWORD_CLIP := preload("res://assets/animations/sweeping_sword_slash.tres")
 const NARUTO_RUN_FULL_CLIP := preload("res://assets/animations/naruto_run_fullbody.tres")
+const NARUTO_PELVIS_MODIFIER := preload("res://characters/player/naruto_pelvis_modifier.gd")
 const UPPER_BODY_BONES := [
 	"Abdomen", "Torso", "Neck", "Head",
 	"Shoulder.L", "UpperArm.L", "LowerArm.L", "Fist.L",
@@ -27,6 +28,62 @@ static func preserve_naruto_pose_during_attack(tree: AnimationTree, active: bool
 	for bone in UPPER_BODY_BONES:
 		var path := NodePath("CharacterArmature/Skeleton3D:" + bone)
 		attack.set_filter_path(path, not active or bone in NARUTO_ATTACK_ARM_BONES)
+
+
+# Native two-bone IK follows the Ninja rig's animated Foot.* and PoleTarget.*
+# control bones. These controls are siblings of Body_2, so the original
+# footstep path stays fixed as the pelvis is lowered only during Naruto.
+static func install_naruto_grounding(model: Node) -> bool:
+	var skeleton := model.find_child("Skeleton3D", true, false) as Skeleton3D
+	if skeleton == null:
+		push_error("Cannot attach Naruto grounding without Ninja Skeleton3D")
+		return false
+	for bone_name in ["Body_2", "UpperLeg.L", "LowerLeg.L", "UpperLeg.R", "LowerLeg.R", "Foot.L", "Foot.R", "PoleTarget.L", "PoleTarget.R"]:
+		if skeleton.find_bone(bone_name) < 0:
+			push_error("Naruto grounding needs Ninja bone: " + bone_name)
+			return false
+
+	# BoneAttachment3D reads the original animated control bones without
+	# overriding their poses. No continuous target-position script is needed.
+	for side in ["L", "R"]:
+		for label in ["Foot", "PoleTarget"]:
+			var target := BoneAttachment3D.new()
+			target.name = "Naruto" + label + side
+			target.bone_name = label + "." + side
+			skeleton.add_child(target)
+
+	var pelvis := NARUTO_PELVIS_MODIFIER.new() as SkeletonModifier3D
+	pelvis.name = "NarutoPelvisLowering"
+	pelvis.active = false
+	skeleton.add_child(pelvis)
+
+	for side in ["L", "R"]:
+		var solver := TwoBoneIK3D.new()
+		solver.name = "NarutoLegIK" + side
+		solver.active = false
+		skeleton.add_child(solver)
+		solver.set_setting_count(1)
+		solver.set_root_bone_name(0, "UpperLeg." + side)
+		solver.set_middle_bone_name(0, "LowerLeg." + side)
+		# LowerLeg is the terminal bone: Ninja has no child ankle bone.
+		solver.set_use_virtual_end(0, true)
+		solver.set_extend_end_bone(0, true)
+		solver.set_end_bone_length(0, 0.45)
+		solver.set_end_bone_direction(0, SkeletonModifier3D.BONE_DIRECTION_PLUS_Y)
+		solver.set_pole_direction_vector(0, Vector3.FORWARD)
+		solver.set_target_node(0, solver.get_path_to(skeleton.get_node("NarutoFoot" + side)))
+		solver.set_pole_node(0, solver.get_path_to(skeleton.get_node("NarutoPoleTarget" + side)))
+	return true
+
+
+static func set_naruto_grounding_active(model: Node, enabled: bool) -> void:
+	var skeleton := model.find_child("Skeleton3D", true, false) as Skeleton3D
+	if skeleton == null:
+		return
+	for modifier_name in ["NarutoPelvisLowering", "NarutoLegIKL", "NarutoLegIKR"]:
+		var modifier := skeleton.get_node_or_null(modifier_name) as SkeletonModifier3D
+		if modifier != null:
+			modifier.active = enabled
 
 
 static func find_animation_player(node: Node) -> AnimationPlayer:
@@ -181,6 +238,8 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 	model.add_child(animation_tree)
 	animation_tree.anim_player = animation_tree.get_path_to(animator)
 	animation_tree.tree_root = root
+	if not install_naruto_grounding(model):
+		return null
 	animator.stop()
 	animation_tree.active = true
 	animation_tree.set("parameters/AttackSpeed/scale", attack_speed_value)
