@@ -22,6 +22,15 @@ func _run_checks() -> void:
 	game.call("_process", 0.51)
 	if not _require(fps_label.text.begins_with("FPS: ") and fps_label.text != "FPS: --", "FPS counter must update from Engine FPS"):
 		return
+	# The standalone HUD builder must preserve the original scene paths
+	# and the desktop fullscreen action; the mobile HUD remains unchanged.
+	var hud_panel := game.get_node_or_null("HUD/FPSCounter") as PanelContainer
+	if not _require(hud_panel != null and hud_panel.get_node_or_null("Stats/FPSLabel") == fps_label and hud_panel.get_node_or_null("Stats/PingLabel") == ping_label, "HUD counter hierarchy must survive extraction"):
+		return
+	if not DisplayServer.is_touchscreen_available():
+		var fullscreen_control := game.get_node_or_null("HUD/FullscreenButton") as Button
+		if not _require(fullscreen_control != null and fullscreen_control.pressed.is_connected(Callable(game, "_toggle_fullscreen")), "Desktop fullscreen callback must survive HUD extraction"):
+			return
 	var hero := game.get("hero") as CharacterBody3D
 	var tree := game.get("animation_tree") as AnimationTree
 	if not _require(hero != null and tree != null and tree.active, "Character and AnimationTree must initialize"):
