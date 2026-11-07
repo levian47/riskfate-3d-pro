@@ -1,58 +1,88 @@
 extends SkeletonModifier3D
-# Naruto-only crouch layer. Applies pelvis lean after the native running pose
-# and before the existing leg IK. Approved attacks and the source clips stay intact.
+# Naruto-only pelvis adjustment. The pelvis and Hips must lean together;
+# compensating Hips directly would cancel the visible hip deformation.
+# This modifier runs after AnimationTree and before the existing foot IK.
 const PELVIS_BONE := "Body_2"
-const SPINE_BONE := "Hips"
+const HIPS_BONE := "Hips"
+const ABDOMEN_BONE := "Abdomen"
 const LEG_ROOT_BONES := ["UpperLeg.L", "UpperLeg.R"]
 const DROP_METERS := 0.14
-# Small anatomical hip tilt, not the full ~65-degree torso lean.
 const PELVIS_TILT_DEGREES := 20.0
 
-var pelvis_bone_index := -1
-var compensated_bone_indices: Array[int] = []
-var compensations: Array[Quaternion] = []
+var pelvis_index := -1
+var hips_index := -1
+var abdomen_index := -1
+var leg_indices: Array[int] = []
+var leg_counter_rotations: Array[Quaternion] = []
+
+var hips_rest_rotation := Quaternion.IDENTITY
+var abdomen_rest_rotation := Quaternion.IDENTITY
+var tilt := Quaternion.IDENTITY
+var tilt_inverse := Quaternion.IDENTITY
 
 
 func _ready() -> void:
 	var skeleton := get_skeleton()
 	if skeleton == null:
 		return
-	pelvis_bone_index = skeleton.find_bone(PELVIS_BONE)
-	var tilt_inverse := Quaternion(Vector3.RIGHT, -deg_to_rad(PELVIS_TILT_DEGREES))
-	for bone_name in [SPINE_BONE] + LEG_ROOT_BONES:
+	pelvis_index = skeleton.find_bone(PELVIS_BONE)
+	hips_index = skeleton.find_bone(HIPS_BONE)
+	abdomen_index = skeleton.find_bone(ABDOMEN_BONE)
+	if hips_index < 0 or abdomen_index < 0:
+		return
+	tilt = Quaternion(Vector3.RIGHT, deg_to_rad(PELVIS_TILT_DEGREES))
+	tilt_inverse = tilt.inverse()
+	hips_rest_rotation = skeleton.get_bone_rest(hips_index).basis.orthonormalized().get_rotation_quaternion()
+	abdomen_rest_rotation = skeleton.get_bone_rest(abdomen_index).basis.orthonormalized().get_rotation_quaternion()
+	for bone_name in LEG_ROOT_BONES:
 		var index := skeleton.find_bone(bone_name)
-		compensated_bone_indices.append(index)
+		leg_indices.append(index)
 		if index >= 0:
-			# Bone rests are static; cache the leg/spine compensation to avoid
-			# rebuilding quaternions every frame on mobile devices.
 			var rest_rotation := skeleton.get_bone_rest(index).basis.orthonormalized().get_rotation_quaternion()
-			compensations.append((rest_rotation.inverse() * tilt_inverse * rest_rotation).normalized())
+			leg_counter_rotations.append((rest_rotation.inverse() * tilt_inverse * rest_rotation).normalized())
 		else:
-			compensations.append(Quaternion.IDENTITY)
+			leg_counter_rotations.append(Quaternion.IDENTITY)
 
 
 func _process_modification_with_delta(_delta: float) -> void:
-	if pelvis_bone_index < 0 or compensated_bone_indices.size() != 3:
+	if pelvis_index < 0 or hips_index < 0 or abdomen_index < 0:
 		return
-	for index in compensated_bone_indices:
+	if leg_indices.size() != LEG_ROOT_BONES.size():
+		return
+	for index in leg_indices:
 		if index < 0:
 			return
 	var skeleton := get_skeleton()
 	if skeleton == null:
 		return
 
-	# Body_2 is parent to BOTH the spine and the legs. Rotating it without
-	# correction would pitch the already-approved torso farther forward and
-	# turn the legs away from the original run's stride.
-	var tilt := Quaternion(Vector3.RIGHT, deg_to_rad(PELVIS_TILT_DEGREES))
-	for i in range(compensated_bone_indices.size()):
-		var index := compensated_bone_indices[i]
-		var source_rotation := skeleton.get_bone_pose_rotation(index)
-		skeleton.set_bone_pose_rotation(index, (compensations[i] * source_rotation).normalized())
+	# Body_2 carries the pelvic mesh, while Hips carries further pelvic weights.
+	# Do NOT undo the tilt on Hips: that is why the former implementation made
+	# only a small part of the pelvis move.
+	#
+	# Abdomen is the first bone above the pelvis. Counter-rotate it instead.
+	# The counter-rotation must include the current animated Hips pose and the
+	# two rest rotations, otherwise the upper body turns by an unwanted angle.
+	var hips_animation := skeleton.get_bone_pose_rotation(hips_index)
+	var hips_chain := (hips_rest_rotation * hips_animation).normalized()
+	var abdomen_counter := (
+		abdomen_rest_rotation.inverse()
+		* hips_chain.inverse()
+		* tilt_inverse
+		* hips_chain
+		* abdomen_rest_rotation
+	).normalized()
+	var abdomen_animation := skeleton.get_bone_pose_rotation(abdomen_index)
+	skeleton.set_bone_pose_rotation(abdomen_index, (abdomen_counter * abdomen_animation).normalized())
 
-	# Translate and pitch the pelvis only in Naruto mode. The following two
-	# stock TwoBoneIK3D modifiers restore the animated foot targets.
-	var source_position := skeleton.get_bone_pose_position(pelvis_bone_index)
-	var source_rotation := skeleton.get_bone_pose_rotation(pelvis_bone_index)
-	skeleton.set_bone_pose_position(pelvis_bone_index, source_position + Vector3.DOWN * DROP_METERS)
-	skeleton.set_bone_pose_rotation(pelvis_bone_index, (source_rotation * tilt).normalized())
+	# Restore the imported Run orientation of both leg roots; foot IK then
+	# handles any positional change in the feet caused by lowering the pelvis.
+	for i in range(leg_indices.size()):
+		var index := leg_indices[i]
+		var source_rotation := skeleton.get_bone_pose_rotation(index)
+		skeleton.set_bone_pose_rotation(index, (leg_counter_rotations[i] * source_rotation).normalized())
+
+	var source_position := skeleton.get_bone_pose_position(pelvis_index)
+	var source_rotation := skeleton.get_bone_pose_rotation(pelvis_index)
+	skeleton.set_bone_pose_position(pelvis_index, source_position + Vector3.DOWN * DROP_METERS)
+	skeleton.set_bone_pose_rotation(pelvis_index, (source_rotation * tilt).normalized())
