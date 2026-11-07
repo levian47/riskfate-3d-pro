@@ -287,7 +287,6 @@ func _run_checks() -> void:
 			return
 		if not _require(float(current_modified["head_angle"]) >= 48.0 and float(current_modified["head_angle"]) <= 64.0, "Naruto corrected torso angle must survive the full stride"):
 			return
-	print("Naruto processed pose over full gait: ", finished_pose_samples.slice(maxi(0, finished_pose_samples.size() - 8)))
 	var leg_samples: Array[Quaternion] = []
 	for sample in range(4):
 		for frame in range(5):
