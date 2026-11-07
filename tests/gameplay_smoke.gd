@@ -266,7 +266,11 @@ func _run_checks() -> void:
 		var current_axis := current_head - current_hip
 		var current_angle := rad_to_deg(atan2(current_axis.z, current_axis.y))
 		var current_width := absf(locomotion_skeleton.get_bone_global_pose(left_hand_index).origin.x - locomotion_skeleton.get_bone_global_pose(right_hand_index).origin.x)
+		var current_pelvis_up := locomotion_skeleton.get_bone_pose_rotation(body_index) * Vector3.UP
+		var current_pelvis_pitch := rad_to_deg(atan2(current_pelvis_up.z, current_pelvis_up.y))
 		if not _require(current_angle >= 62.0 and current_angle <= 74.0 and current_width > 1.65, "Naruto full-body lean and wide arms must survive the whole run cycle"):
+			return
+		if not _require(current_pelvis_pitch > 12.0 and current_pelvis_pitch < 28.0, "Naruto pelvic tilt must persist through the full stride"):
 			return
 	var leg_samples: Array[Quaternion] = []
 	for sample in range(4):
