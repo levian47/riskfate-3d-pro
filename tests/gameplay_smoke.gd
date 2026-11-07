@@ -302,7 +302,22 @@ func _run_checks() -> void:
 	tree.active = true
 	print("Standard sword tip positions in hero local space: ", standard_tips)
 	print("Sweeping sword tip positions in hero local space: ", sweeping_tips)
-	if not _require(sweeping_tips[0].y < sweeping_tips[sweeping_tips.size() - 1].y, "New sword slash must rise during the cutting phase"):
+	var standard_min_x := INF
+	var standard_max_x := -INF
+	var sweeping_min_x := INF
+	var sweeping_max_x := -INF
+	for point in standard_tips:
+		standard_min_x = minf(standard_min_x, point.x)
+		standard_max_x = maxf(standard_max_x, point.x)
+	for point in sweeping_tips:
+		sweeping_min_x = minf(sweeping_min_x, point.x)
+		sweeping_max_x = maxf(sweeping_max_x, point.x)
+	var standard_span := standard_max_x - standard_min_x
+	var sweeping_span := sweeping_max_x - sweeping_min_x
+	print("Sword horizontal spans: Standard=", standard_span, ", Sweeping=", sweeping_span)
+	if not _require(sweeping_span > standard_span + 0.25, "Sweeping swing must actually cover a wider horizontal span"):
+		return
+	if not _require(sweeping_tips[sweeping_tips.size() - 1].y - sweeping_tips[0].y > 0.30, "Sweeping swing must clearly rise across the cut"):
 		return
 
 	# Turning the hero must not change the selected test attack.
