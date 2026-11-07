@@ -15,7 +15,7 @@ const NARUTO_ATTACK_ARM_BONES := ["Shoulder.R", "UpperArm.R", "LowerArm.R", "Fis
 # Body is the shared pelvis and thigh root; Hips is the separate spine hinge.
 # Naruto lowers Body, bends the ORIGINAL Ninja legs to preserve ankle targets,
 # and keeps Foot.L / Foot.R helpers unchanged. No runtime IK solver needed.
-const NARUTO_POSE_BONES := ["Body", "Hips", "UpperLeg.L", "LowerLeg.L", "UpperLeg.R", "LowerLeg.R"] + UPPER_BODY_BONES
+const NARUTO_POSE_BONES := ["Body_2", "Hips", "UpperLeg.L", "LowerLeg.L", "UpperLeg.R", "LowerLeg.R"] + UPPER_BODY_BONES
 
 static func preserve_naruto_pose_during_attack(tree: AnimationTree, active: bool) -> void:
 	if tree == null:

@@ -98,10 +98,10 @@ func _run_checks() -> void:
 	for bone_name in ANIMATION_BUILDER.NARUTO_POSE_BONES:
 		if not _require(naruto_bones.has(bone_name) and naruto_layer.is_path_filtered(NodePath("CharacterArmature/Skeleton3D:" + bone_name)), "Naruto crouch must animate each mapped bone: " + bone_name):
 			return
-	for bone_name in ["Body", "UpperLeg.L", "LowerLeg.L", "UpperLeg.R", "LowerLeg.R"]:
+	for bone_name in ["Body_2", "UpperLeg.L", "LowerLeg.L", "UpperLeg.R", "LowerLeg.R"]:
 		if not _require(position_tracks.has(bone_name) and rotation_tracks.has(bone_name), "Native leg crouch must supply both position and rotation: " + bone_name):
 			return
-	for bone_name in ["Body_2", "Foot.L", "Foot.R"]:
+	for bone_name in ["Foot.L", "Foot.R"]:
 		if not _require(not naruto_bones.has(bone_name) and not naruto_layer.is_path_filtered(NodePath("CharacterArmature/Skeleton3D:" + bone_name)), "Naruto must preserve original independent foot helpers: " + bone_name):
 			return
 	# The Ninja Run input must have a separate branch: Godot rejects connecting
@@ -110,7 +110,7 @@ func _run_checks() -> void:
 		return
 	var source_run := ANIMATION_BUILDER.find_clip(game.get("animator") as AnimationPlayer, "Run")
 	var run_asset := (game.get("animator") as AnimationPlayer).get_animation(source_run)
-	var body_path := NodePath("CharacterArmature/Skeleton3D:Body")
+	var body_path := NodePath("CharacterArmature/Skeleton3D:Body_2")
 	var native_body_track := run_asset.find_track(body_path, Animation.TYPE_POSITION_3D)
 	var crouch_body_track := NARUTO_FULL.find_track(body_path, Animation.TYPE_POSITION_3D)
 	if not _require(native_body_track >= 0 and crouch_body_track >= 0, "Both runs must provide the pelvis position curve"):
@@ -143,7 +143,7 @@ func _run_checks() -> void:
 	if not _require(locomotion_skeleton != null and locomotion_skeleton.find_bone("UpperLeg.L") >= 0, "Ninja skeleton needs left upper leg to test Naruto stride"):
 		return
 	var leg_index := locomotion_skeleton.find_bone("UpperLeg.L")
-	var body_index := locomotion_skeleton.find_bone("Body")
+	var body_index := locomotion_skeleton.find_bone("Body_2")
 	var lower_left_index := locomotion_skeleton.find_bone("LowerLeg.L")
 	var lower_right_index := locomotion_skeleton.find_bone("LowerLeg.R")
 	var foot_left_index := locomotion_skeleton.find_bone("Foot.L")
