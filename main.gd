@@ -25,38 +25,12 @@ const PREVIOUS_ATTACK_SWING_AMPLITUDE := 130.0 / 90.0
 const ATTACK_SWING_AMPLITUDE := PREVIOUS_ATTACK_SWING_AMPLITUDE * 1.5
 # Avoid quaternion shortest-arc wraparound when extrapolation exceeds 180°.
 const ATTACK_SWING_MAX_ANGLE := deg_to_rad(170.0)
-# Model-specific sampled upper-body correction for Ninja_Female.gltf (26 keys).
-# Aims the actual sword tip across the front at roughly 2.35 m -> 1.80 m
-# instead of making an overhead rainbow. The original SwordSlash is unchanged.
-# Do not reuse on another rig without re-authoring the pose.
-const SWORD_SWING_SHOULDER_KEYS := [
-	Quaternion(0.00000, 0.00000, 0.00000, 1.00000),
-	Quaternion(0.05579, -0.16007, 0.01877, 0.98535),
-	Quaternion(0.03319, -0.46755, -0.05720, 0.88149),
-	Quaternion(0.06778, -0.46041, -0.03828, 0.88429),
-	Quaternion(0.06728, -0.48253, -0.04301, 0.87223),
-	Quaternion(0.09006, -0.51492, -0.04709, 0.85120),
-	Quaternion(0.12142, -0.63181, -0.05165, 0.76381),
-	Quaternion(0.11679, -0.81182, -0.10726, 0.56197),
-	Quaternion(0.09109, -0.91500, -0.22541, 0.32198),
-	Quaternion(0.12286, -0.91035, -0.38521, 0.08816),
-	Quaternion(-0.24093, 0.80074, 0.54245, 0.08072),
-	Quaternion(-0.40232, 0.70416, 0.56347, 0.15746),
-	Quaternion(-0.51044, 0.64519, 0.53381, 0.19553),
-	Quaternion(-0.56679, 0.59795, 0.52729, 0.20779),
-	Quaternion(-0.59542, 0.55723, 0.55011, 0.17985),
-	Quaternion(-0.59664, 0.51963, 0.59989, 0.11895),
-	Quaternion(-0.58546, 0.46148, 0.66379, 0.06048),
-	Quaternion(-0.57446, 0.38807, 0.72021, 0.02645),
-	Quaternion(-0.55358, 0.25834, 0.76315, 0.21076),
-	Quaternion(-0.49112, 0.12240, 0.70593, 0.49545),
-	Quaternion(-0.36586, 0.01692, 0.52527, 0.76808),
-	Quaternion(-0.20235, -0.02595, 0.28099, 0.93778),
-	Quaternion(-0.05979, -0.01609, 0.07844, 0.99499),
-	Quaternion(0.00000, 0.00000, 0.00000, 1.00000),
-	Quaternion(0.00000, 0.00000, 0.00000, 1.00000),
-	Quaternion(0.00000, 0.00000, 0.00000, 1.00000),
-]
+# A horizontal sword arc is authored once from the actual imported Godot
+# skeleton poses on startup, avoiding glTF-versus-Godot bone-space mistakes.
+# The broad original upper-arm swing is preserved as the starting motion.
+const SWORD_ARC_START_HEIGHT := 0.78
+const SWORD_ARC_END_HEIGHT := 0.22
+const SWORD_ARC_SWEEP_ANGLE := 65.0
 # Prototype combat parameters. Not approved balance values.
 const TRAINING_HIT_DAMAGE := 25
 const TRAINING_HIT_REACH := 3.1
@@ -383,93 +357,103 @@ func _find_clip(short_name: String) -> String:
 	return ""
 
 
-func _shoulder_strike_correction(phase: float, shoulder_rest_rotation: Quaternion) -> Quaternion:
-	# Interpolate model-specific sampled poses; Godot may omit constant
-	# glTF shoulder tracks, so the generated animation adds this track.
-	var key_position := clampf(phase, 0.0, 1.0) * float(SWORD_SWING_SHOULDER_KEYS.size() - 1)
-	var index := mini(int(floorf(key_position)), SWORD_SWING_SHOULDER_KEYS.size() - 2)
-	var amount := key_position - float(index)
-	var parent_space_rotation: Quaternion = SWORD_SWING_SHOULDER_KEYS[index].slerp(SWORD_SWING_SHOULDER_KEYS[index + 1], amount).normalized()
-	# Animation rotation tracks use bone POSE space, after the bone's rest.
-	# Convert our parent-space correction into Shoulder.R rest-local axes.
-	return (shoulder_rest_rotation.inverse() * parent_space_rotation * shoulder_rest_rotation).normalized()
-
-
 func _make_wider_sword_slash(source_name: String, model: Node) -> String:
-	# Keep the imported clip untouched; build an independently editable variation.
-	# Extrapolate the upper arm as before, then steer the right shoulder so the
-	# active swing passes further in front, without touching the lower body.
+	# Preserve the imported source. First widen the upper arm as before,
+	# then solve the right-shoulder rotation for a near-horizontal sword tip.
 	var source := animator.get_animation(source_name)
-	if source == null:
+	var skeleton := _find_skeleton(model)
+	if source == null or skeleton == null:
 		return ""
-	var shoulder_skeleton := _find_skeleton(model)
-	if shoulder_skeleton == null:
+	var shoulder_idx := skeleton.find_bone("Shoulder.R")
+	var fist_idx := skeleton.find_bone("Fist.R")
+	if shoulder_idx < 0 or fist_idx < 0:
 		return ""
-	var shoulder_index := shoulder_skeleton.find_bone("Shoulder.R")
-	if shoulder_index < 0:
-		return ""
-	var shoulder_rest_rotation := shoulder_skeleton.get_bone_rest(shoulder_index).basis.get_rotation_quaternion()
 	var wide := source.duplicate(true) as Animation
-	var altered_keys := 0
-	var upper_arm_track := -1
-	var shoulder_track_found := false
+	var arm_track := -1
 	for track in range(wide.get_track_count()):
 		if wide.track_get_type(track) != Animation.TYPE_ROTATION_3D:
 			continue
-		var track_path := wide.track_get_path(track)
-		if track_path.get_subname_count() == 0:
+		var path := wide.track_get_path(track)
+		if path.get_subname_count() == 0:
 			continue
-		var bone_name := String(track_path.get_subname(track_path.get_subname_count() - 1))
-		if wide.track_is_compressed(track):
+		var bone := String(path.get_subname(path.get_subname_count() - 1))
+		if bone != "UpperArm.R" or wide.track_is_compressed(track):
 			continue
-		var key_count := wide.track_get_key_count(track)
-		if key_count < 2:
-			continue
-		if bone_name == "UpperArm.R":
-			upper_arm_track = track
-			# Keep the previously accepted size of the sweep unchanged.
-			var start_rotation: Quaternion = wide.track_get_key_value(track, 0)
-			for key_index in range(1, key_count):
-				var original: Quaternion = wide.track_get_key_value(track, key_index)
-				var relative: Quaternion = (start_rotation.inverse() * original).normalized()
-				if relative.w < 0.0:
-					relative = Quaternion(-relative.x, -relative.y, -relative.z, -relative.w)
-				var angle := relative.get_angle()
-				if angle <= 0.001:
-					continue
-				var wider_angle := minf(angle * ATTACK_SWING_AMPLITUDE, ATTACK_SWING_MAX_ANGLE)
-				var wider_rotation := start_rotation * Quaternion(relative.get_axis(), wider_angle)
-				wide.track_set_key_value(track, key_index, wider_rotation.normalized())
-				altered_keys += 1
-		elif bone_name == "Shoulder.R":
-			shoulder_track_found = true
-			for key_index in range(key_count):
-				var phase: float = wide.track_get_key_time(track, key_index) / wide.length
-				var correction := _shoulder_strike_correction(phase, shoulder_rest_rotation)
-				var shoulder_rotation: Quaternion = wide.track_get_key_value(track, key_index)
-				wide.track_set_key_value(track, key_index, (correction * shoulder_rotation).normalized())
-				altered_keys += 1
+		arm_track = track
+		var first: Quaternion = wide.track_get_key_value(track, 0)
+		for key_index in range(1, wide.track_get_key_count(track)):
+			var original: Quaternion = wide.track_get_key_value(track, key_index)
+			var relative := (first.inverse() * original).normalized()
+			if relative.w < 0.0:
+				relative = Quaternion(-relative.x, -relative.y, -relative.z, -relative.w)
+			var angle := relative.get_angle()
+			if angle <= 0.001:
+				continue
+			var applied_angle := minf(angle * ATTACK_SWING_AMPLITUDE, ATTACK_SWING_MAX_ANGLE)
+			var changed_rotation := first * Quaternion(relative.get_axis(), applied_angle)
+			wide.track_set_key_value(track, key_index, changed_rotation.normalized())
+	if arm_track < 0:
+		return ""
+	var lib := AnimationLibrary.new()
+	if lib.add_animation("WideSwordSlash", wide) != OK:
+		return ""
+	if animator.add_animation_library("combat", lib) != OK:
+		return ""
 
-	# Imported glTF often drops constant Shoulder.R tracks. Build the missing
-	# rotation track using the existing upper-arm key times and bone NodePath.
-	if not shoulder_track_found and upper_arm_track >= 0:
-		var upper_path := String(wide.track_get_path(upper_arm_track))
-		var shoulder_path := upper_path.replace("UpperArm.R", "Shoulder.R")
-		var new_track := wide.add_track(Animation.TYPE_ROTATION_3D)
-		wide.track_set_path(new_track, NodePath(shoulder_path))
-		for key_index in range(wide.track_get_key_count(upper_arm_track)):
-			var key_time := wide.track_get_key_time(upper_arm_track, key_index)
-			var correction := _shoulder_strike_correction(key_time / wide.length, shoulder_rest_rotation)
-			wide.rotation_track_insert_key(new_track, key_time, correction.normalized())
-			altered_keys += 1
-	if altered_keys == 0:
-		push_warning("SwordSlash: upper-arm animation track cannot be widened")
+	# AnimationPlayer.seek() gives the REAL post-import Godot bone pose.
+	# Aim the tip of the existing 1.305-unit test blade on a forward,
+	# almost horizontal left-to-right arc with a small downward gradient.
+	var key_times: Array[float] = []
+	var shoulder_rotations: Array[Quaternion] = []
+	var previous_pose := Quaternion.IDENTITY
+	animator.play("combat/WideSwordSlash")
+	for i in range(wide.track_get_key_count(arm_track)):
+		var time: float = wide.track_get_key_time(arm_track, i)
+		animator.seek(time, true)
+		animator.advance(0.0)
+		var fraction := clampf(time / wide.length, 0.0, 1.0)
+		var shoulder_transform := skeleton.get_bone_global_pose(shoulder_idx)
+		var fist_transform := skeleton.get_bone_global_pose(fist_idx)
+		var tip: Vector3 = fist_transform * Vector3(0.0, 1.305, 0.0)
+		var offset := tip - shoulder_transform.origin
+		var radius := offset.length()
+		if radius < 0.5:
+			continue
+		var progress := smoothstep(0.14, 0.59, fraction)
+		var horizontal_angle := deg_to_rad(lerpf(SWORD_ARC_SWEEP_ANGLE, -SWORD_ARC_SWEEP_ANGLE, progress))
+		var desired_height := lerpf(SWORD_ARC_START_HEIGHT, SWORD_ARC_END_HEIGHT, progress)
+		desired_height = clampf(desired_height, -radius * 0.95, radius * 0.95)
+		var horizontal_length := sqrt(maxf(0.001, radius * radius - desired_height * desired_height))
+		var desired_offset := Vector3(sinf(horizontal_angle) * horizontal_length, desired_height, cosf(horizontal_angle) * horizontal_length)
+		var delta_rotation := Quaternion(offset.normalized(), desired_offset.normalized())
+		var shoulder_pose := skeleton.get_bone_pose_rotation(shoulder_idx)
+		var global_rotation := shoulder_transform.basis.get_rotation_quaternion()
+		var rest_world_rotation := (global_rotation * shoulder_pose.inverse()).normalized()
+		var envelope := smoothstep(0.01, 0.15, fraction) * (1.0 - smoothstep(0.68, 0.94, fraction))
+		# Every valid shoulder solution can twist about the target direction.
+		# Choose the nearest one to the previous key to avoid sudden flips.
+		var best_pose := Quaternion.IDENTITY
+		var best_score := INF
+		for twist_step in range(-12, 13):
+			var twist := Quaternion(desired_offset.normalized(), deg_to_rad(float(twist_step) * 15.0))
+			var target_rotation := (rest_world_rotation.inverse() * twist * delta_rotation * global_rotation).normalized()
+			var sampled_rotation := Quaternion.IDENTITY.slerp(target_rotation, envelope).normalized()
+			var score := previous_pose.angle_to(sampled_rotation) + 0.03 * Quaternion.IDENTITY.angle_to(target_rotation)
+			if score < best_score:
+				best_score = score
+				best_pose = sampled_rotation
+		key_times.append(time)
+		shoulder_rotations.append(best_pose)
+		previous_pose = best_pose
+	animator.stop()
+
+	if shoulder_rotations.size() < 20:
 		return ""
-	var library := AnimationLibrary.new()
-	if library.add_animation("WideSwordSlash", wide) != OK:
-		return ""
-	if animator.add_animation_library("combat", library) != OK:
-		return ""
+	var shoulder_track := wide.add_track(Animation.TYPE_ROTATION_3D)
+	var arm_path := String(wide.track_get_path(arm_track))
+	wide.track_set_path(shoulder_track, NodePath(arm_path.replace("UpperArm.R", "Shoulder.R")))
+	for key_index in range(key_times.size()):
+		wide.rotation_track_insert_key(shoulder_track, key_times[key_index], shoulder_rotations[key_index])
 	return "combat/WideSwordSlash"
 
 
