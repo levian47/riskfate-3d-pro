@@ -518,6 +518,9 @@ func _setup_animation_tree(model: Node) -> void:
 	swing_direction.xfade_time = 0.0
 	swing_direction.set_input_name(0, "Normal")
 	swing_direction.set_input_name(1, "Mirrored")
+	# Entering a different direction must begin its clip at frame zero.
+	swing_direction.set_input_reset(0, true)
+	swing_direction.set_input_reset(1, true)
 	var attack_speed := AnimationNodeTimeScale.new()
 	var attack_layer := AnimationNodeOneShot.new()
 	attack_layer.fadein_time = 0.06
