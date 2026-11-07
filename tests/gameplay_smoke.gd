@@ -79,7 +79,7 @@ func _run_checks() -> void:
 		return
 	# The Ninja Run input must have a separate branch: Godot rejects connecting
 	# the same RunSpeed output to both Locomotion and NarutoUpperBlend.
-	if not _require(blend.has_node("NarutoBaseRun") and blend.has_node("NarutoBaseRunSpeed") and blend.is_node_connected("NarutoUpperBlend", 0) and blend.is_node_connected("NarutoUpperBlend", 1), "Naruto layer needs both a connected Run base and connected upper-body overlay"):
+	if not _require(blend.get_node("NarutoBaseRun") is AnimationNodeAnimation and blend.get_node("NarutoBaseRunSpeed") is AnimationNodeTimeScale, "Naruto layer needs both a connected Run base and connected upper-body overlay"):
 		return
 	var source_run := ANIMATION_BUILDER.find_clip(game.get("animator") as AnimationPlayer, "Run")
 	var run_asset := (game.get("animator") as AnimationPlayer).get_animation(source_run)
