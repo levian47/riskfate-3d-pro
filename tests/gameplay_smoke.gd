@@ -230,6 +230,26 @@ func _run_checks() -> void:
 	var sword_grip := skel.get_node_or_null("SwordGrip/SimpleSword") as Node3D
 	if not _require(sword_grip != null, "Test sword attachment must be present"):
 		return
+	# Verify the real player attack BEFORE temporarily letting AnimationPlayer
+	# drive the same skeleton directly for the clip-only trajectory check.
+	tree.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
+	tree.set("parameters/Attack/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_ABORT)
+	tree.advance(0.001)
+	game.call("_set_locomotion", "Idle", true)
+	tree.advance(0.15)
+	game.set("attack_time_left", 0.0)
+	game.call("_start_attack")
+	var blended_screen_positions: Array[float] = []
+	var last_fraction := 0.0
+	var playback_duration: float = float(game.get("attack_duration"))
+	print("Attack playback duration: ", playback_duration, ", OneShot request: ", tree.get("parameters/Attack/request"))
+	for fraction in [0.16, 0.24, 0.32, 0.40, 0.48, 0.56, 0.64]:
+		tree.advance(playback_duration * (fraction - last_fraction))
+		last_fraction = fraction
+		blended_screen_positions.append(view_right.dot(sword_grip.to_global(Vector3(0.0, 1.305, 0.0))))
+	print("Blended player attack screen positions: ", blended_screen_positions, ", OneShot active: ", tree.get("parameters/Attack/active"))
+	if not _require(blended_screen_positions[0] - blended_screen_positions[blended_screen_positions.size() - 1] > 1.7, "In-game AnimationTree attack must move right-to-left on screen"):
+		return
 	tree.active = false
 	animator.play("combat/WideSwordSlash")
 	var tip_points: Array[Vector3] = []
@@ -260,28 +280,6 @@ func _run_checks() -> void:
 	for point in tip_points:
 		if not _require(point.z > 0.20, "Sword blade must remain forward during the active sweep"):
 			return
-
-	# Also inspect the actual AnimationTree OneShot path used by player attacks.
-	# A correct source clip alone does not prove that the blended result is correct.
-	tree.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
-	tree.set("parameters/Attack/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_ABORT)
-	tree.advance(0.001)
-	game.call("_set_locomotion", "Idle", true)
-	tree.advance(0.15)
-	game.set("attack_time_left", 0.0)
-	game.call("_start_attack")
-	if not _require(bool(tree.get("parameters/Attack/request")) or bool(tree.get("parameters/Attack/active")), "Attack must request an AnimationTree OneShot"):
-		return
-	var blended_screen_positions: Array[float] = []
-	var last_fraction := 0.0
-	var playback_duration: float = float(game.get("attack_duration"))
-	for fraction in [0.16, 0.24, 0.32, 0.40, 0.48, 0.56, 0.64]:
-		tree.advance(playback_duration * (fraction - last_fraction))
-		last_fraction = fraction
-		blended_screen_positions.append(view_right.dot(sword_grip.to_global(Vector3(0.0, 1.305, 0.0))))
-	print("Blended player attack screen positions: ", blended_screen_positions)
-	if not _require(blended_screen_positions[0] - blended_screen_positions[blended_screen_positions.size() - 1] > 1.7, "In-game AnimationTree attack must move right-to-left on screen"):
-		return
 
 	print("Gameplay smoke test passed: visible right-to-left sword attack in direct clip and AnimationTree, descent, FPS cap, offline ping, movement, dash, world, training hits, HP and respawn.")
 	quit(0)
