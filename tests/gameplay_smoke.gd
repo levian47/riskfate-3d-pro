@@ -97,6 +97,38 @@ func _run_checks() -> void:
 	game.call("_toggle_naruto_run")
 	if not _require(not bool(game.get("naruto_run_enabled")) and String(game.get("locomotion_state")) == "Run", "Turning Naruto mode off must restore the normal Run state"):
 		return
+	# Regression: a valid state and non-zero character velocity are not enough.
+	# The old Naruto blend at 100% could leave the legs in a static pose.
+	if not _require(naruto_layer.sync, "Naruto blend must keep the base Run clip synchronized"):
+		return
+	var locomotion_skeleton := WEAPON_VISUALS.find_skeleton(game.get("visual") as Node3D) as Skeleton3D
+	if not _require(locomotion_skeleton != null and locomotion_skeleton.find_bone("UpperLeg.L") >= 0, "Ninja skeleton needs left upper leg to test Naruto stride"):
+		return
+	var leg_index := locomotion_skeleton.find_bone("UpperLeg.L")
+	game.set_physics_process(false)
+	tree.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
+	game.call("_set_locomotion", "Naruto")
+	# Transition fade lasts 0.10s; sample several settled moments afterwards.
+	tree.advance(0.15)
+	var leg_samples: Array[Quaternion] = []
+	for step in range(4):
+		tree.advance(0.14)
+		leg_samples.append(locomotion_skeleton.get_bone_pose_rotation(leg_index))
+	var leg_motion := 0.0
+	for step in range(1, leg_samples.size()):
+		leg_motion = maxf(leg_motion, leg_samples[step - 1].angle_to(leg_samples[step]))
+	if not _require(leg_motion > 0.05, "Naruto mode must actually animate leg rotations, not slide with frozen pose"):
+		return
+	game.call("_set_locomotion", "Run")
+	tree.advance(0.15)
+	var ordinary_before := locomotion_skeleton.get_bone_pose_rotation(leg_index)
+	tree.advance(0.19)
+	var ordinary_after := locomotion_skeleton.get_bone_pose_rotation(leg_index)
+	if not _require(ordinary_before.angle_to(ordinary_after) > 0.05, "Normal Run stride must still animate after Naruto mode"):
+		return
+	tree.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_PHYSICS
+	game.call("_set_locomotion", "Idle")
+	game.set_physics_process(true)
 	var combat_state := game.get("combat_controller") as RefCounted
 	if not _require(combat_state != null, "Combat state must be owned by the dedicated player combat controller"):
 		return

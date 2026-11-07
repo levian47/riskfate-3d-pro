@@ -90,6 +90,9 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 		return null
 	var naruto_source_speed_ratio := NARUTO_RUN_UPPER_CLIP.length / run_clip.length
 	var naruto_blend := AnimationNodeBlend2.new()
+	# At full upper-body blend, keep the base Ninja Run evaluating so
+	# unfiltered leg tracks never freeze while the character moves.
+	naruto_blend.sync = true
 	naruto_blend.filter_enabled = true
 	for bone in ["Body_2", "Hips", "Abdomen", "Torso", "Neck", "Head",
 			"Shoulder.L", "UpperArm.L", "LowerArm.L", "Fist.L",
