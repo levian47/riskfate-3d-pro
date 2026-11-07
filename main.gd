@@ -8,6 +8,7 @@ const RUN_SPEED := MOVEMENT_CONTROLLER.RUN_SPEED
 const MOVE_ANIMATION_THRESHOLD := 0.45
 const TOUCH_HUD_SCRIPT := preload("res://touch_hud.gd")
 const HUD_BUILDER := preload("res://ui/hud_builder.gd")
+const SKELETON_DEBUG := preload("res://ui/skeleton_debug.gd")
 const ANIMATION_BUILDER := preload("res://characters/player/animation_builder.gd")
 const COMBAT_CONTROLLER := preload("res://characters/player/combat_controller.gd")
 const WEAPON_VISUALS := preload("res://characters/player/weapon_visuals.gd")
@@ -19,10 +20,11 @@ var hero: CharacterBody3D
 var visual: Node3D
 var animator: AnimationPlayer
 var camera: Camera3D
+var skeleton_debug: MeshInstance3D
 var camera_distance := 13.0
 var camera_zoom := 12.0
 # Orthographic camera sizes: lower value = closer view.
-const MOBILE_ZOOM_LEVELS := [8.0, 12.0, 18.0]
+const MOBILE_ZOOM_LEVELS := [18.0, 12.0, 8.0, 6.0]
 var mobile_zoom_index := 1
 var animation_tree: AnimationTree
 var locomotion_state := ""
@@ -85,6 +87,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_R:
 		_toggle_naruto_run()
 		return
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_K:
+		_toggle_skeleton_debug()
+		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_E:
 		_cycle_weapon()
 		return
@@ -107,6 +112,15 @@ func _toggle_naruto_run() -> void:
 		touch_hud.naruto_run_enabled = naruto_run_enabled
 		touch_hud.queue_redraw()
 	_update_weapon_display()
+
+
+func _toggle_skeleton_debug() -> void:
+	if skeleton_debug == null:
+		return
+	skeleton_debug.visible = not skeleton_debug.visible
+	if touch_hud != null:
+		touch_hud.skeleton_enabled = skeleton_debug.visible
+		touch_hud.queue_redraw()
 
 
 func _cycle_weapon() -> void:
@@ -161,6 +175,12 @@ func _build_hero() -> void:
 	hero.add_child(visual)
 	var model := MODEL.instantiate()
 	visual.add_child(model)
+	var rig := WEAPON_VISUALS.find_skeleton(model) as Skeleton3D
+	if rig != null:
+		skeleton_debug = SKELETON_DEBUG.new() as MeshInstance3D
+		skeleton_debug.name = "SkeletonDebug"
+		rig.add_child(skeleton_debug)
+		skeleton_debug.setup(rig)
 	animator = ANIMATION_BUILDER.find_animation_player(model)
 	if animator != null:
 		# Preserve imported locomotion loop behavior and accepted attack clips.
@@ -245,6 +265,7 @@ func _build_ui() -> void:
 		touch_hud.fullscreen_requested.connect(_toggle_fullscreen)
 		touch_hud.weapon_requested.connect(_cycle_weapon)
 		touch_hud.naruto_requested.connect(_toggle_naruto_run)
+		touch_hud.skeleton_requested.connect(_toggle_skeleton_debug)
 		_update_weapon_display()
 		touch_hud.zoom_level = mobile_zoom_index + 1
 		return
