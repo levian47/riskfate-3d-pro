@@ -402,7 +402,8 @@ func _make_wider_sword_slash(source_name: String, model: Node) -> String:
 
 	# AnimationPlayer.seek() gives the REAL post-import Godot bone pose.
 	# Aim the tip of the existing 1.305-unit test blade on a forward,
-	# almost horizontal reverse sweep (right-to-left as viewed by the player),
+	# almost horizontal sword sweep from the character's right side to left
+	# (screen-right to screen-left while facing the +Z training target),
 	# with a small downward gradient.
 	var key_times: Array[float] = []
 	var shoulder_rotations: Array[Quaternion] = []
@@ -421,7 +422,7 @@ func _make_wider_sword_slash(source_name: String, model: Node) -> String:
 		if radius < 0.5:
 			continue
 		var progress := smoothstep(0.14, 0.59, fraction)
-		var horizontal_angle := deg_to_rad(lerpf(-SWORD_ARC_SWEEP_ANGLE, SWORD_ARC_SWEEP_ANGLE, progress))
+		var horizontal_angle := deg_to_rad(lerpf(SWORD_ARC_SWEEP_ANGLE, -SWORD_ARC_SWEEP_ANGLE, progress))
 		var desired_height := lerpf(SWORD_ARC_START_HEIGHT, SWORD_ARC_END_HEIGHT, progress)
 		desired_height = clampf(desired_height, -radius * 0.95, radius * 0.95)
 		var horizontal_length := sqrt(maxf(0.001, radius * radius - desired_height * desired_height))
