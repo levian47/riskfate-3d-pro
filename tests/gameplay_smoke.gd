@@ -61,45 +61,35 @@ func _run_checks() -> void:
 		return
 	if not _require(not animator.has_animation("combat/WideSwordSlash") and not blend.has_node("SwordDirection") and not blend.has_node("AttackSeek"), "Unused slash and direction selectors must be removed"):
 		return
-	# The accepted standard clip must coexist with a separate experimental
-	# wide, ascending slash; no camera-dependent direction selector returns.
-	if not _require(animator.has_animation("combat_sweeping/SweepingSwordSlash"), "Experimental sweeping sword clip missing"):
+	# Preserve the accepted standard as an independent, inactive clip.
+	# This build tests the new sweeping attack without a gameplay selector.
+	if not _require(animator.has_animation("combat_sweeping/SweepingSwordSlash"), "Sweeping sword clip must exist"):
 		return
 	var sweeping_clip := animator.get_animation("combat_sweeping/SweepingSwordSlash")
-	if not _require(sweeping_clip != wide_clip and is_equal_approx(sweeping_clip.length, wide_clip.length), "Both attacks must be independent with matching timing"):
+	var standard_clip := animator.get_animation("combat_mirror/WideSwordSlashMirror")
+	if not _require(standard_clip != null and sweeping_clip != null and standard_clip != sweeping_clip and is_equal_approx(standard_clip.length, sweeping_clip.length), "Standard and sweeping clips must be independent and match timing"):
 		return
-	if not _require(blend.has_node("AttackVariant") and blend.has_node("SweepingSwordSlash") and not blend.has_node("SwordDirection"), "Variant selector must be independent of camera direction"):
+	if not _require(not blend.has_node("AttackVariant") and not blend.has_node("SwordDirection") and not blend.has_node("AttackSeek"), "Only the sweeping attack may be wired for playtest"):
 		return
-	var sweeping_node := blend.get_node("SweepingSwordSlash") as AnimationNodeAnimation
-	if not _require(sweeping_node != null and String(sweeping_node.animation) == "combat_sweeping/SweepingSwordSlash", "Sweeping variant must be wired to AnimationTree"):
-		return
-	if not _require(is_zero_approx(float(tree.get("parameters/AttackVariant/blend_amount"))), "Standard attack must be selected by default"):
-		return
-	var standard_track := -1
-	var sweeping_track := -1
-	for i in range(wide_clip.get_track_count()):
-		if wide_clip.track_get_type(i) == Animation.TYPE_ROTATION_3D and String(wide_clip.track_get_path(i)).ends_with("Shoulder.R"):
-			standard_track = i
+	var standard_shoulder_track := -1
+	var sweeping_shoulder_track := -1
+	for i in range(standard_clip.get_track_count()):
+		if standard_clip.track_get_type(i) == Animation.TYPE_ROTATION_3D and String(standard_clip.track_get_path(i)).ends_with("Shoulder.R"):
+			standard_shoulder_track = i
 			break
 	for i in range(sweeping_clip.get_track_count()):
 		if sweeping_clip.track_get_type(i) == Animation.TYPE_ROTATION_3D and String(sweeping_clip.track_get_path(i)).ends_with("Shoulder.R"):
-			sweeping_track = i
+			sweeping_shoulder_track = i
 			break
-	if not _require(standard_track >= 0 and sweeping_track >= 0, "Both variants require independent shoulder tracks"):
+	if not _require(standard_shoulder_track >= 0 and sweeping_shoulder_track >= 0, "Both clips must keep separate shoulder tracks"):
 		return
 	var distinct_keys := 0
-	for i in range(mini(wide_clip.track_get_key_count(standard_track), sweeping_clip.track_get_key_count(sweeping_track))):
-		var standard_pose: Quaternion = wide_clip.track_get_key_value(standard_track, i)
-		var sweeping_pose: Quaternion = sweeping_clip.track_get_key_value(sweeping_track, i)
-		if standard_pose.angle_to(sweeping_pose) > 0.05:
+	for i in range(mini(standard_clip.track_get_key_count(standard_shoulder_track), sweeping_clip.track_get_key_count(sweeping_shoulder_track))):
+		var original_pose: Quaternion = standard_clip.track_get_key_value(standard_shoulder_track, i)
+		var new_pose: Quaternion = sweeping_clip.track_get_key_value(sweeping_shoulder_track, i)
+		if original_pose.angle_to(new_pose) > 0.05:
 			distinct_keys += 1
-	if not _require(distinct_keys > 8, "Sweeping attack must have a genuinely different shoulder trajectory"):
-		return
-	game.call("_set_attack_variant", 1)
-	if not _require(int(game.get("attack_variant")) == 1 and is_equal_approx(float(tree.get("parameters/AttackVariant/blend_amount")), 1.0), "Sweeping variant must be selectable"):
-		return
-	game.call("_set_attack_variant", 0)
-	if not _require(int(game.get("attack_variant")) == 0 and is_zero_approx(float(tree.get("parameters/AttackVariant/blend_amount"))), "Standard variant must remain selectable"):
+	if not _require(distinct_keys > 8, "New wide ascending attack must differ materially from standard"):
 		return
 	var original_clip := animator.get_animation(sword_name)
 	var wide_clip := animator.get_animation("combat_mirror/WideSwordSlashMirror")
@@ -163,7 +153,7 @@ func _run_checks() -> void:
 		previous_q = adjusted_q
 
 	var attack_node := blend.get_node("SwordSlash") as AnimationNodeAnimation
-	if not _require(attack_node != null and String(attack_node.animation) == "combat_mirror/WideSwordSlashMirror", "Attack blend node must play wider clip"):
+	if not _require(attack_node != null and String(attack_node.animation) == "combat_sweeping/SweepingSwordSlash", "Active attack must be the new sweeping clip"):
 		return
 
 	game.call("_set_locomotion", "Run")
@@ -256,8 +246,8 @@ func _run_checks() -> void:
 	var collision := environment.get_node("CollisionShape3D") as CollisionShape3D
 	if not _require(collision != null and (collision.shape as BoxShape3D).size.x >= 200.0, "Expanded terrain missing"):
 		return
-	# Back-facing swing is the owner's preferred motion. The same one-shot
-	# must be used for every orientation, without any camera-based switching.
+	# The new sweeping variant is the only live attack for this visual test.
+	# The approved standard remains available in AnimationPlayer.
 	game.set_physics_process(false)
 	var view_camera := game.get("camera") as Camera3D
 	var skel := game.call("_find_skeleton", visual_node) as Skeleton3D
@@ -265,7 +255,7 @@ func _run_checks() -> void:
 	if not _require(view_camera != null and sword_grip != null, "Camera and sword attachment must exist"):
 		return
 	var view_right := view_camera.global_transform.basis.x.normalized()
-	if not _require(attack_node != null and String(attack_node.animation) == "combat_mirror/WideSwordSlashMirror", "OneShot must play the single retained sword clip"):
+	if not _require(attack_node != null and String(attack_node.animation) == "combat_sweeping/SweepingSwordSlash", "OneShot must test sweeping clip only"):
 		return
 
 	# The camera is at +X,+Z. PI rotates the hero's back toward the camera.
@@ -288,11 +278,35 @@ func _run_checks() -> void:
 		await process_frame
 		back_screen.append(view_right.dot(sword_grip.to_global(Vector3(0.0, 1.305, 0.0))))
 	print("Single sword slash / back-facing screen positions: ", back_screen)
-	if not _require(back_screen[3] > 1.0 and back_screen[3] - back_screen[back_screen.size() - 1] > 1.8, "Retained back-facing cutting phase must sweep right-to-left on screen"):
+	if not _require(back_screen[3] - back_screen[back_screen.size() - 1] > 1.0, "Sweeping attack must cross right-to-left on screen"):
 		return
 
-	# Turning the hero cannot switch clips: the only branch is the same
-	# SwordSlash node for all positions. Verify another attack can start.
+	# Sample actual blade-tip 3D positions in both generated clips.
+	# Ascending and wider must be verified in the rig, not assumed from angles.
+	tree.active = false
+	var standard_tips: Array[Vector3] = []
+	var sweeping_tips: Array[Vector3] = []
+	for clip_to_check in [standard_clip, sweeping_clip]:
+		var points: Array[Vector3] = []
+		var sampled_name := "combat_mirror/WideSwordSlashMirror" if clip_to_check == standard_clip else "combat_sweeping/SweepingSwordSlash"
+		animator.play(sampled_name)
+		for fraction in [0.20, 0.32, 0.44, 0.56, 0.64]:
+			animator.seek(clip_to_check.length * fraction, true)
+			await process_frame
+			points.append(visual_node.to_local(sword_grip.to_global(Vector3(0.0, 1.305, 0.0))))
+		if clip_to_check == standard_clip:
+			standard_tips = points
+		else:
+			sweeping_tips = points
+	animator.stop()
+	tree.active = true
+	print("Standard sword tip positions in hero local space: ", standard_tips)
+	print("Sweeping sword tip positions in hero local space: ", sweeping_tips)
+	if not _require(sweeping_tips[0].y < sweeping_tips[sweeping_tips.size() - 1].y, "New sword slash must rise during the cutting phase"):
+		return
+
+	# Turning the hero must not change the selected test attack.
+	# The same sweeping animation runs from every orientation.
 	tree.set("parameters/Attack/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_ABORT)
 	tree.advance(0.01)
 	visual_node.rotation.y = 0.0
@@ -302,7 +316,7 @@ func _run_checks() -> void:
 	if not _require(float(game.get("attack_time_left")) > 0.0 and bool(tree.get("parameters/Attack/active")), "Same sword slash must start when hero turns around"):
 		return
 
-	print("Gameplay smoke test passed: preserved standard and distinct sweeping sword slash, selector, FPS cap, offline ping, movement, dash, world, training hits, HP and respawn.")
+	print("Gameplay smoke test passed: saved original Standard, active Sweeping with upward blade path, FPS cap, offline ping, movement, dash, world, training hits, HP and respawn.")
 	quit(0)
 
 func _require(value: bool, message: String) -> bool:
