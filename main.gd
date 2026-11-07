@@ -356,6 +356,16 @@ func _find_clip(short_name: String) -> String:
 	return ""
 
 
+func _shoulder_strike_correction(phase: float) -> Quaternion:
+	# Godot can optimize an unchanging glTF shoulder animation track away.
+	# Corrected rotations in a generated track are relative to its rest pose.
+	var influence := smoothstep(0.02, 0.16, phase) * (1.0 - smoothstep(0.65, 0.98, phase))
+	var sweep_progress := smoothstep(0.16, 0.45, phase)
+	var yaw := deg_to_rad(lerpf(ATTACK_FORWARD_START_YAW, ATTACK_FORWARD_FINISH_YAW, sweep_progress) * influence)
+	var pitch := deg_to_rad(ATTACK_FORWARD_PITCH * influence)
+	return Quaternion(Vector3.RIGHT, pitch) * Quaternion(Vector3.UP, yaw)
+
+
 func _make_wider_sword_slash(source_name: String) -> String:
 	# Keep the imported clip untouched; build an independently editable variation.
 	# Extrapolate the upper arm as before, then steer the right shoulder so the
@@ -365,6 +375,8 @@ func _make_wider_sword_slash(source_name: String) -> String:
 		return ""
 	var wide := source.duplicate(true) as Animation
 	var altered_keys := 0
+	var upper_arm_track := -1
+	var shoulder_track_found := false
 	for track in range(wide.get_track_count()):
 		if wide.track_get_type(track) != Animation.TYPE_ROTATION_3D:
 			continue
@@ -378,6 +390,7 @@ func _make_wider_sword_slash(source_name: String) -> String:
 		if key_count < 2:
 			continue
 		if bone_name == "UpperArm.R":
+			upper_arm_track = track
 			# Keep the previously accepted size of the sweep unchanged.
 			var start_rotation: Quaternion = wide.track_get_key_value(track, 0)
 			for key_index in range(1, key_count):
@@ -393,20 +406,26 @@ func _make_wider_sword_slash(source_name: String) -> String:
 				wide.track_set_key_value(track, key_index, wider_rotation.normalized())
 				altered_keys += 1
 		elif bone_name == "Shoulder.R":
-			# Turn the strike's sector across the front of the body.
-			# Smooth fade at the start/end prevents a snap back to idle.
+			shoulder_track_found = true
 			for key_index in range(key_count):
 				var phase: float = wide.track_get_key_time(track, key_index) / wide.length
-				var influence := smoothstep(0.02, 0.16, phase) * (1.0 - smoothstep(0.65, 0.98, phase))
-				if influence <= 0.001:
-					continue
-				var sweep_progress := smoothstep(0.16, 0.45, phase)
-				var yaw := deg_to_rad(lerpf(ATTACK_FORWARD_START_YAW, ATTACK_FORWARD_FINISH_YAW, sweep_progress) * influence)
-				var pitch := deg_to_rad(ATTACK_FORWARD_PITCH * influence)
-				var correction := Quaternion(Vector3.RIGHT, pitch) * Quaternion(Vector3.UP, yaw)
+				var correction := _shoulder_strike_correction(phase)
 				var shoulder_rotation: Quaternion = wide.track_get_key_value(track, key_index)
 				wide.track_set_key_value(track, key_index, (correction * shoulder_rotation).normalized())
 				altered_keys += 1
+
+	# Imported glTF often drops constant Shoulder.R tracks. Build the missing
+	# rotation track using the existing upper-arm key times and bone NodePath.
+	if not shoulder_track_found and upper_arm_track >= 0:
+		var upper_path := String(wide.track_get_path(upper_arm_track))
+		var shoulder_path := upper_path.replace("UpperArm.R", "Shoulder.R")
+		var new_track := wide.add_track(Animation.TYPE_ROTATION_3D)
+		wide.track_set_path(new_track, NodePath(shoulder_path))
+		for key_index in range(wide.track_get_key_count(upper_arm_track)):
+			var key_time := wide.track_get_key_time(upper_arm_track, key_index)
+			var correction := _shoulder_strike_correction(key_time / wide.length)
+			wide.rotation_track_insert_key(new_track, key_time, correction.normalized())
+			altered_keys += 1
 	if altered_keys == 0:
 		push_warning("SwordSlash: upper-arm animation track cannot be widened")
 		return ""

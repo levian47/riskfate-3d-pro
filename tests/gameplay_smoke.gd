@@ -113,14 +113,16 @@ func _run_checks() -> void:
 			if String(path.get_subname(path.get_subname_count() - 1)) == "Shoulder.R":
 				shoulder_wide = i
 				break
-	if not _require(shoulder_source >= 0 and shoulder_wide >= 0, "Right shoulder rotation tracks must exist"):
+	if not _require(shoulder_wide >= 0, "Right shoulder rotation must be generated in modified clip"):
 		return
-	if not _require(original_clip.track_get_key_count(shoulder_source) == wide_clip.track_get_key_count(shoulder_wide), "Shoulder timing must stay unchanged"):
+	if shoulder_source >= 0 and not _require(original_clip.track_get_key_count(shoulder_source) == wide_clip.track_get_key_count(shoulder_wide), "Existing shoulder timing must stay unchanged"):
 		return
 	var opening_shifted := false
 	var contact_shifted := false
 	for i in range(wide_clip.track_get_key_count(shoulder_wide)):
-		var original_q: Quaternion = original_clip.track_get_key_value(shoulder_source, i)
+		var original_q := Quaternion.IDENTITY
+		if shoulder_source >= 0:
+			original_q = original_clip.track_get_key_value(shoulder_source, i)
 		var adjusted_q: Quaternion = wide_clip.track_get_key_value(shoulder_wide, i)
 		var time_fraction: float = wide_clip.track_get_key_time(shoulder_wide, i) / wide_clip.length
 		var relative_q := (adjusted_q * original_q.inverse()).normalized()
@@ -131,10 +133,13 @@ func _run_checks() -> void:
 			contact_shifted = true
 	if not _require(opening_shifted and contact_shifted, "Sword swing must steer across the frontal sector"):
 		return
-	var first_q: Quaternion = original_clip.track_get_key_value(shoulder_source, 0)
+	var first_q := Quaternion.IDENTITY
+	var last_q := Quaternion.IDENTITY
+	if shoulder_source >= 0:
+		first_q = original_clip.track_get_key_value(shoulder_source, 0)
+		last_q = original_clip.track_get_key_value(shoulder_source, original_clip.track_get_key_count(shoulder_source) - 1)
 	var first_wide_q: Quaternion = wide_clip.track_get_key_value(shoulder_wide, 0)
 	var last_index := wide_clip.track_get_key_count(shoulder_wide) - 1
-	var last_q: Quaternion = original_clip.track_get_key_value(shoulder_source, last_index)
 	var last_wide_q: Quaternion = wide_clip.track_get_key_value(shoulder_wide, last_index)
 	if not _require(first_q.angle_to(first_wide_q) < 0.01 and last_q.angle_to(last_wide_q) < 0.01, "Shoulder must smoothly return to original pose"):
 		return
