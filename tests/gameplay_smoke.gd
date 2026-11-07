@@ -321,6 +321,13 @@ func _run_checks() -> void:
 	for step in range(1, sweeping_start.size()):
 		early_max_step = maxf(early_max_step, sweeping_start[step].distance_to(sweeping_start[step - 1]))
 	print("Sweeping early maximum 4%-interval sword travel: ", early_max_step)
+	var sweeping_early_high := -INF
+	for point in sweeping_start:
+		sweeping_early_high = maxf(sweeping_early_high, point.y)
+	if not _require(sweeping_early_high < 2.05 and sweeping_start[1].y < standard_start[1].y - 0.8, "Sweeping strike must start low rather than inherit the imported overhead pose"):
+		return
+	if not _require(early_max_step < 0.65, "Sweeping first frames must not have sudden jumps"):
+		return
 	print("Standard sword tip positions in hero local space: ", standard_tips)
 	print("Sweeping sword tip positions in hero local space: ", sweeping_tips)
 	var standard_min_x := INF
@@ -340,6 +347,30 @@ func _run_checks() -> void:
 		return
 	if not _require(sweeping_tips[sweeping_tips.size() - 1].y - sweeping_tips[0].y > 0.30, "Sweeping swing must clearly rise across the cut"):
 		return
+
+	# Test a freshly spawned hero through the real AnimationTree and
+	# OneShot fade. Clip-only checks do not reveal a high idle-to-attack blend.
+	var fresh_game := scene.instantiate()
+	root.add_child(fresh_game)
+	await process_frame
+	fresh_game.set_physics_process(false)
+	var fresh_visual := fresh_game.get("visual") as Node3D
+	fresh_visual.rotation.y = PI
+	var fresh_tree := fresh_game.get("animation_tree") as AnimationTree
+	fresh_tree.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
+	var fresh_skeleton := fresh_game.call("_find_skeleton", fresh_visual) as Skeleton3D
+	var fresh_sword := fresh_skeleton.get_node_or_null("SwordGrip/SimpleSword") as Node3D
+	fresh_game.call("_start_attack")
+	var blended_start_trace: Array[Vector3] = []
+	var previous_fraction := 0.0
+	var attack_period := float(fresh_game.get("attack_duration"))
+	for fraction in [0.0, 0.04, 0.08, 0.12, 0.16, 0.20]:
+		fresh_tree.advance(attack_period * (fraction - previous_fraction))
+		previous_fraction = fraction
+		await process_frame
+		blended_start_trace.append(fresh_visual.to_local(fresh_sword.to_global(Vector3(0.0, 1.305, 0.0))))
+	print("Fresh hero blended sweeping start positions: ", blended_start_trace)
+	fresh_game.queue_free()
 
 	# Turning the hero must not change the selected test attack.
 	# The same sweeping animation runs from every orientation.
