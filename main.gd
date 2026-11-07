@@ -264,7 +264,7 @@ func _start_attack() -> void:
 	var camera_right := camera.global_transform.basis.x
 	var hero_right := visual.global_transform.basis.x
 	var use_mirror := camera_right.dot(hero_right) < 0.0
-	animation_tree.set("parameters/SwordDirection/transition_request", "Mirrored" if use_mirror else "Normal")
+	animation_tree.set("parameters/SwordDirection/blend_amount", 1.0 if use_mirror else 0.0)
 	animation_tree.set("parameters/Attack/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
 
 
@@ -401,14 +401,6 @@ func _make_wider_sword_slash(source_name: String, model: Node, mirrored: bool = 
 			wide.track_set_key_value(track, key_index, changed_rotation.normalized())
 	if arm_track < 0:
 		return ""
-	if not mirrored:
-		# The imported right-arm swing contradicts the camera-facing slash
-		# during the start of the OneShot blend. Keep the upper arm stable;
-		# the generated shoulder rotation drives the right-to-left sword arc.
-		# The already-accepted back-facing mirrored animation stays untouched.
-		var stable_arm_pose: Quaternion = wide.track_get_key_value(arm_track, 0)
-		for key_index in range(1, wide.track_get_key_count(arm_track)):
-			wide.track_set_key_value(arm_track, key_index, stable_arm_pose)
 	var lib := AnimationLibrary.new()
 	var clip_name := "WideSwordSlashMirror" if mirrored else "WideSwordSlash"
 	var library_name := "combat_mirror" if mirrored else "combat"
@@ -521,17 +513,10 @@ func _setup_animation_tree(model: Node) -> void:
 	attack_node.animation = attack_clip_name
 	var mirror_node := AnimationNodeAnimation.new()
 	mirror_node.animation = mirror_clip_name
-	var swing_direction := AnimationNodeTransition.new()
-	swing_direction.input_count = 2
-	swing_direction.xfade_time = 0.0
-	# A repeated strike frequently reselects the current variant. Without
-	# self-transition the child animation may continue from an old position.
-	swing_direction.allow_transition_to_self = true
-	swing_direction.set_input_name(0, "Normal")
-	swing_direction.set_input_name(1, "Mirrored")
-	# Entering a different direction must begin its clip at frame zero.
-	swing_direction.set_input_reset(0, true)
-	swing_direction.set_input_reset(1, true)
+	# A Blend2 selector avoids a state-transition restart during the slash.
+	# Amount 0 = normal, 1 = mirrored. OneShot owns the attack lifecycle.
+	var swing_direction := AnimationNodeBlend2.new()
+	swing_direction.sync = false
 	var attack_speed := AnimationNodeTimeScale.new()
 	var attack_layer := AnimationNodeOneShot.new()
 	attack_layer.fadein_time = 0.06
@@ -570,7 +555,7 @@ func _setup_animation_tree(model: Node) -> void:
 	animator.stop()
 	animation_tree.active = true
 	animation_tree.set("parameters/AttackSpeed/scale", ATTACK_SPEED)
-	animation_tree.set("parameters/SwordDirection/transition_request", "Normal")
+	animation_tree.set("parameters/SwordDirection/blend_amount", 0.0)
 	_set_locomotion("Idle")
 
 
