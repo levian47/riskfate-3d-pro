@@ -107,6 +107,19 @@ https://levian47.github.io/riskfate-3d-pro/
 
 **Не перенесено до гри:** Soldier із [Poly Pizza](https://poly.pizza/m/oAArCNHjFB) (ліцензія **Creative Commons Attribution**) та весь Kenney UI Pack. Оригінальні **7 завантажень**, включно з повними архівами, збережено в особистій бібліотеці ChatGPT за шляхом `Riskfate 3D Pro / Asset Library`. Вона не є частиною Web-збірки.
 
+## Додаткові моделі зброї та персонажа (07.11.2026)
+
+На прохання власника додано **шість окремих 3D-моделей** із наданих файлів, без змін геометрії, ігрових сцен, контролерів чи бойових анімацій:
+
+- `assets/equipment/weapons/quaternius_sword_01.glb` — [Sword (Quaternius)](https://poly.pizza/m/ajOJ2NLz5m), CC0.
+- `assets/equipment/weapons/quaternius_sword_02.glb` — [Sword (Quaternius)](https://poly.pizza/m/9lLmH8Et4K), CC0.
+- `assets/equipment/weapons/quaternius_dagger_01.glb` — [Dagger (Quaternius)](https://poly.pizza/m/kSMpR711Y2), CC0.
+- `assets/equipment/weapons/quaternius_knife_01.glb` — [Knife (Quaternius)](https://poly.pizza/m/0g8M6yYtE4), CC0.
+- `assets/equipment/weapons/quaternius_cutlass_01.fbx` — [Cutlass (Quaternius)](https://poly.pizza/m/tzwQ8g5dBy), CC0. З оригінального ZIP узято лише файл FBX, сам ZIP не додавався.
+- `assets/characters/wizardus_maximus.glb` — **Wizardus Maximus**, автор **madtrollstudio**, [джерело Poly Pizza](https://poly.pizza/m/6oDxK0wqyL), ліцензія **Creative Commons Attribution**. Авторство й посилання необхідно зберігати під час використання моделі; точну версію CC BY слід перевірити перед публічним використанням.
+
+**Статус перевірок:** п'ять GLB мають коректні заголовки та довжини glTF 2.0, FBX — двійковий FBX 7400; байти перенесених моделей звірено за Git blob SHA. Це **лише бібліотечні ресурси**, без інтеграції в сцени та без візуального затвердження. Імпорт у Godot 4.7.2, реальна геометрія, масштаб, матеріали та Web-поведінка потребують окремої перевірки. Каталог зброї наразі виключений із Web-експорту; файл Wizardus Maximus у нейтральному каталозі персонажів може потрапляти в Web-експорт навіть до інтеграції.
+
 ## Чинна документація
 
 | Файл | Призначення |
