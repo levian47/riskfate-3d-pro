@@ -360,6 +360,11 @@ func _run_checks() -> void:
 	fresh_tree.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
 	var fresh_skeleton := fresh_game.call("_find_skeleton", fresh_visual) as Skeleton3D
 	var fresh_sword := fresh_skeleton.get_node_or_null("SwordGrip/SimpleSword") as Node3D
+	# Let the newly created AnimationTree evaluate Idle before the OneShot.
+	# This mirrors a character that has actually stood still in the game.
+	fresh_tree.advance(0.15)
+	await process_frame
+	print("Fresh hero stabilized idle sword position: ", fresh_visual.to_local(fresh_sword.to_global(Vector3(0.0, 1.305, 0.0))))
 	fresh_game.call("_start_attack")
 	var blended_start_trace: Array[Vector3] = []
 	var previous_fraction := 0.0
