@@ -2,8 +2,6 @@ name: Godot Web / GitHub Pages
 
 on:
   push:
-    branches: [main, test/naruto-pelvis-native-ik]
-  pull_request:
     branches: [main]
   workflow_dispatch:
 
@@ -96,7 +94,6 @@ jobs:
           path: dist
 
   deploy:
-    if: github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     environment:
