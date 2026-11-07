@@ -19,6 +19,9 @@ var hips_rest_rotation := Quaternion.IDENTITY
 var abdomen_rest_rotation := Quaternion.IDENTITY
 var tilt := Quaternion.IDENTITY
 var tilt_inverse := Quaternion.IDENTITY
+# Diagnostics are sampled inside modification_processed during smoke tests.
+var applied_count := 0
+var last_source_y := 0.0
 
 
 func _ready() -> void:
@@ -84,5 +87,7 @@ func _process_modification_with_delta(_delta: float) -> void:
 
 	var source_position := skeleton.get_bone_pose_position(pelvis_index)
 	var source_rotation := skeleton.get_bone_pose_rotation(pelvis_index)
+	last_source_y = source_position.y
+	applied_count += 1
 	skeleton.set_bone_pose_position(pelvis_index, source_position + Vector3.DOWN * DROP_METERS)
 	skeleton.set_bone_pose_rotation(pelvis_index, (source_rotation * tilt).normalized())
