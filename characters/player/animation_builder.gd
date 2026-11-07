@@ -12,10 +12,8 @@ const UPPER_BODY_BONES := [
 # Naruto sprint attacks must not straighten the leaning torso or reset gaze.
 # Only the weapon arm is allowed to leave the running pose during the strike.
 const NARUTO_ATTACK_ARM_BONES := ["Shoulder.R", "UpperArm.R", "LowerArm.R", "Fist.R"]
-# Body is the shared pelvis and thigh root; Hips is the separate spine hinge.
-# Naruto lowers Body, bends the ORIGINAL Ninja legs to preserve ankle targets,
-# and keeps Foot.L / Foot.R helpers unchanged. No runtime IK solver needed.
-const NARUTO_POSE_BONES := ["Body_2", "Hips", "UpperLeg.L", "LowerLeg.L", "UpperLeg.R", "LowerLeg.R"] + UPPER_BODY_BONES
+# Hips is the first spine segment under Body_2, not the parent of either leg.
+const NARUTO_POSE_BONES := ["Hips"] + UPPER_BODY_BONES
 
 static func preserve_naruto_pose_during_attack(tree: AnimationTree, active: bool) -> void:
 	if tree == null:
@@ -114,8 +112,8 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 	var naruto_full_speed := AnimationNodeTimeScale.new()
 	var naruto_blend := AnimationNodeBlend2.new()
 	naruto_blend.filter_enabled = true
-	# Retargeted upper body + native-leg crouch solved against the original
-	# ankle path. Independent Foot.* helper paths remain on the base Run input.
+	# Tilt the spine from Hips, while the two leg chains and foot helpers
+	# stay attached to Body_2 and play the original Ninja Run unmodified.
 	for bone in NARUTO_POSE_BONES:
 		naruto_blend.set_filter_path(NodePath("CharacterArmature/Skeleton3D:" + bone), true)
 	root.add_node("NarutoBaseRun", naruto_base_run)
