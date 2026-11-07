@@ -217,8 +217,14 @@ func _run_checks() -> void:
 	var collision := environment.get_node("CollisionShape3D") as CollisionShape3D
 	if not _require(collision != null and (collision.shape as BoxShape3D).size.x >= 200.0, "Expanded terrain missing"):
 		return
-	# Sample the actual sword tip in the imported rig, checking right-to-left motion
-	# rather than only comparing shoulder rotation angles.
+	# Test the visible right-to-left swing with the actual isometric camera
+	# while the player faces the training dummy (+Z), not just the model's axes.
+	game.set_physics_process(false)
+	visual_node.rotation.y = 0.0
+	var view_camera := game.get("camera") as Camera3D
+	if not _require(view_camera != null, "Isometric camera must exist for screen-direction test"):
+		return
+	var view_right := view_camera.global_transform.basis.x.normalized()
 	var skel := game.call("_find_skeleton", visual_node) as Skeleton3D
 	print("Shoulder.R rest basis: ", skel.get_bone_rest(skel.find_bone("Shoulder.R")).basis)
 	var sword_grip := skel.get_node_or_null("SwordGrip/SimpleSword") as Node3D
@@ -227,13 +233,17 @@ func _run_checks() -> void:
 	tree.active = false
 	animator.play("combat/WideSwordSlash")
 	var tip_points: Array[Vector3] = []
+	var screen_right_positions: Array[float] = []
 	for fraction in [0.16, 0.24, 0.32, 0.40, 0.48, 0.56, 0.64]:
 		animator.seek(wide_clip.length * fraction, true)
 		await process_frame
-		tip_points.append(visual_node.to_local(sword_grip.to_global(Vector3(0.0, 1.305, 0.0))))
+		var world_tip := sword_grip.to_global(Vector3(0.0, 1.305, 0.0))
+		tip_points.append(visual_node.to_local(world_tip))
+		screen_right_positions.append(view_right.dot(world_tip))
 	animator.stop()
 	tree.active = true
 	print("Horizontal sword tip positions: ", tip_points)
+	print("Camera-horizontal sword positions: ", screen_right_positions)
 	var start_tip := tip_points[0]
 	var end_tip := tip_points[tip_points.size() - 1]
 	var min_height: float = start_tip.y
@@ -241,7 +251,9 @@ func _run_checks() -> void:
 	for point in tip_points:
 		min_height = minf(min_height, point.y)
 		max_height = maxf(max_height, point.y)
-	if not _require(end_tip.x - start_tip.x > 2.5, "Sword must sweep across the front in the reversed direction"):
+	if not _require(start_tip.x - end_tip.x > 2.5, "Sword must sweep from the hero's right side to left"):
+		return
+	if not _require(screen_right_positions[0] - screen_right_positions[screen_right_positions.size() - 1] > 2.0, "Sword must visually sweep right-to-left from the isometric camera"):
 		return
 	if not _require(start_tip.y - end_tip.y > 0.3 and max_height - min_height < 1.0, "Sword should descend slightly, not arc vertically"):
 		return
@@ -249,7 +261,7 @@ func _run_checks() -> void:
 		if not _require(point.z > 0.20, "Sword blade must remain forward during the active sweep"):
 			return
 
-	print("Gameplay smoke test passed: horizontal descending sword arc, FPS cap, offline ping, movement, dash, world, training hits, HP and respawn.")
+	print("Gameplay smoke test passed: camera-visible right-to-left sword arc, descent, FPS cap, offline ping, movement, dash, world, training hits, HP and respawn.")
 	quit(0)
 
 
