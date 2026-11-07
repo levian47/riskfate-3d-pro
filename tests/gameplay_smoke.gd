@@ -3,6 +3,7 @@ extends SceneTree
 const ANIMATION_BUILDER := preload("res://characters/player/animation_builder.gd")
 const MOVEMENT_MATH := preload("res://characters/player/movement_math.gd")
 const MOVEMENT_CONTROLLER := preload("res://characters/player/movement_controller.gd")
+const COMBAT_CONTROLLER := preload("res://characters/player/combat_controller.gd")
 
 func _initialize() -> void:
 	call_deferred("_run_checks")
@@ -44,6 +45,11 @@ func _run_checks() -> void:
 		return
 	var attack := blend.get_node("Attack") as AnimationNodeOneShot
 	var animator := game.get("animator") as AnimationPlayer
+	var combat_state := game.get("combat_controller") as RefCounted
+	if not _require(combat_state != null, "Combat state must be owned by the dedicated player combat controller"):
+		return
+	if not _require(is_equal_approx(float(COMBAT_CONTROLLER.ATTACK_SPEED), 1.65) and int(COMBAT_CONTROLLER.TRAINING_HIT_DAMAGE) == 25, "Attack speed and provisional damage must remain unchanged"):
+		return
 	if not _require(attack != null and animator != null and attack.filter_enabled, "Upper-body attack layer missing"):
 		return
 
@@ -185,7 +191,7 @@ func _run_checks() -> void:
 	game.call("_set_locomotion", "Run")
 	game.call("_start_attack")
 	await process_frame
-	if not _require(float(game.get("attack_time_left")) > 0.0, "Attack must begin"):
+	if not _require(float(combat_state.get("attack_time_left")) > 0.0, "Attack must begin"):
 		return
 	if not _require(String(tree.get("parameters/Locomotion/current_state")) == "Run", "Running animation must remain active during attack"):
 		return
@@ -298,6 +304,31 @@ func _run_checks() -> void:
 	dummy.call("_process", 2.6)
 	if not _require(int(dummy.get("hp")) == 100 and bool(dummy.get("is_available")), "Training dummy must respawn"):
 		return
+
+	# The refactored combat timer must retain the approved moment of impact.
+	# Repeated input cannot restart the swing or deal damage twice.
+	combat_state.set("attack_time_left", 0.0)
+	game.call("_start_attack")
+	var full_attack_duration := float(combat_state.get("attack_duration"))
+	if not _require(full_attack_duration > 0.0 and is_equal_approx(full_attack_duration, animator.get_animation(sword_name).length / COMBAT_CONTROLLER.ATTACK_SPEED), "Combat controller must retain original attack duration"):
+		return
+	game.call("_start_attack")
+	if not _require(is_equal_approx(float(combat_state.get("attack_time_left")), full_attack_duration), "Repeated attack input must not restart the active swing"):
+		return
+	var before_hit := full_attack_duration * COMBAT_CONTROLLER.TRAINING_HIT_MOMENT - 0.001
+	combat_state.physics_step(before_hit, game, hero, visual_node)
+	if not _require(int(dummy.get("hp")) == 100 and bool(combat_state.get("attack_hit_pending")), "Attack must not hit before the existing impact frame"):
+		return
+	combat_state.physics_step(0.002, game, hero, visual_node)
+	if not _require(int(dummy.get("hp")) == 75 and not bool(combat_state.get("attack_hit_pending")), "Impact frame must deal exactly 25 damage once"):
+		return
+	combat_state.physics_step(0.02, game, hero, visual_node)
+	if not _require(int(dummy.get("hp")) == 75, "One swing must not damage the same target twice"):
+		return
+	dummy.take_damage(75)
+	dummy.call("_process", 2.6)
+	if not _require(int(dummy.get("hp")) == 100, "Target must reset after combat timing test"):
+		return
 	hero.global_position = original_position
 	visual_node.rotation.y = original_rotation
 
@@ -326,13 +357,13 @@ func _run_checks() -> void:
 	tree.advance(0.01)
 	game.call("_set_locomotion", "Idle", true)
 	tree.advance(0.15)
-	game.set("attack_time_left", 0.0)
+	combat_state.set("attack_time_left", 0.0)
 	game.call("_start_attack")
-	if not _require(float(game.get("attack_time_left")) > 0.0, "Back-facing strike must start"):
+	if not _require(float(combat_state.get("attack_time_left")) > 0.0, "Back-facing strike must start"):
 		return
 	var back_screen: Array[float] = []
 	var last_fraction := 0.0
-	var swing_duration: float = float(game.get("attack_duration"))
+	var swing_duration: float = float(combat_state.get("attack_duration"))
 	for fraction in [0.16, 0.24, 0.32, 0.40, 0.48, 0.56, 0.64]:
 		tree.advance(swing_duration * (fraction - last_fraction))
 		last_fraction = fraction
@@ -432,10 +463,11 @@ func _run_checks() -> void:
 	fresh_tree.advance(0.15)
 	await process_frame
 	print("Fresh hero stabilized idle sword position: ", fresh_visual.to_local(fresh_sword.to_global(Vector3(0.0, 1.305, 0.0))))
+	var fresh_combat_state := fresh_game.get("combat_controller") as RefCounted
 	fresh_game.call("_start_attack")
 	var blended_start_trace: Array[Vector3] = []
 	var previous_fraction := 0.0
-	var attack_period := float(fresh_game.get("attack_duration"))
+	var attack_period := float(fresh_combat_state.get("attack_duration"))
 	for fraction in [0.0, 0.04, 0.08, 0.12, 0.16, 0.20]:
 		fresh_tree.advance(attack_period * (fraction - previous_fraction))
 		previous_fraction = fraction
@@ -449,10 +481,10 @@ func _run_checks() -> void:
 	tree.set("parameters/Attack/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_ABORT)
 	tree.advance(0.01)
 	visual_node.rotation.y = 0.0
-	game.set("attack_time_left", 0.0)
+	combat_state.set("attack_time_left", 0.0)
 	game.call("_start_attack")
 	tree.advance(0.02)
-	if not _require(float(game.get("attack_time_left")) > 0.0 and bool(tree.get("parameters/Attack/active")), "Same sword slash must start when hero turns around"):
+	if not _require(float(combat_state.get("attack_time_left")) > 0.0 and bool(tree.get("parameters/Attack/active")), "Same sword slash must start when hero turns around"):
 		return
 
 	print("Gameplay smoke test passed: independent baked sword resources retain approved poses; active Sweeping, movement, dash, world, training hits, HP and respawn.")
