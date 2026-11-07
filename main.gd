@@ -1,24 +1,14 @@
 extends Node3D
 
 const MODEL := preload("res://assets/Ninja_Female.gltf")
-# Ninja movement tuning. The approved v4 camera directions stay unchanged.
-const WALK_SPEED := 7.0
-const RUN_SPEED := 12.0
-# Steering responds directly to the joystick, without acceleration or turning lag.
-# Dash values are provisional until playtested on a real phone.
-const DASH_SPEED := 24.0
-const DASH_DURATION := 0.18
-const DASH_COOLDOWN := 0.85
-const JUMP_SPEED := 8.0
-const GRAVITY := 22.0
-const JUMP_RELEASE_MULTIPLIER := 0.55
-const COYOTE_TIME := 0.11
-const JUMP_BUFFER_TIME := 0.13
+# Approved movement values and physics are owned by the player component.
+const MOVEMENT_CONTROLLER := preload("res://characters/player/movement_controller.gd")
+const WALK_SPEED := MOVEMENT_CONTROLLER.WALK_SPEED
+const RUN_SPEED := MOVEMENT_CONTROLLER.RUN_SPEED
 const MOVE_ANIMATION_THRESHOLD := 0.45
 const TOUCH_HUD_SCRIPT := preload("res://touch_hud.gd")
 const HUD_BUILDER := preload("res://ui/hud_builder.gd")
 const ANIMATION_BUILDER := preload("res://characters/player/animation_builder.gd")
-const MOVEMENT_MATH := preload("res://characters/player/movement_math.gd")
 const WORLD_SCRIPT := preload("res://world/environment.gd")
 # The attack runs on the upper body while the legs retain their movement animation.
 const ATTACK_SPEED := 1.65
@@ -42,13 +32,7 @@ var locomotion_state := ""
 var attack_time_left := 0.0
 var attack_duration := 0.0
 var attack_hit_pending := false
-var coyote_left := 0.0
-var jump_buffer_left := 0.0
-var jump_was_pressed := false
-var last_move_direction := Vector3.FORWARD
-var dash_direction := Vector3.FORWARD
-var dash_time_left := 0.0
-var dash_cooldown_left := 0.0
+var movement_controller = MOVEMENT_CONTROLLER.new()
 var touch_hud
 var fps_label: Label
 var fps_update_elapsed := 0.0
@@ -70,64 +54,14 @@ func _process(delta: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	var grounded_before := hero.is_on_floor()
-	dash_cooldown_left = maxf(0.0, dash_cooldown_left - delta)
 	if attack_time_left > 0.0:
 		attack_time_left = maxf(0.0, attack_time_left - delta)
 		if attack_hit_pending and attack_time_left <= attack_duration * (1.0 - TRAINING_HIT_MOMENT):
 			attack_hit_pending = false
 			_resolve_training_hit()
 
-	# Keyboard polling is retained for the existing desktop prototype.
-	# Edge detection and input buffering make short taps more reliable.
-	var jump_pressed: bool = Input.is_key_pressed(KEY_SPACE)
-	if touch_hud != null:
-		jump_pressed = jump_pressed or bool(touch_hud.jump_held)
-	if jump_pressed and not jump_was_pressed:
-		jump_buffer_left = JUMP_BUFFER_TIME
-	jump_was_pressed = jump_pressed
-	jump_buffer_left = maxf(0.0, jump_buffer_left - delta)
-	if grounded_before:
-		coyote_left = COYOTE_TIME
-	else:
-		coyote_left = maxf(0.0, coyote_left - delta)
-
-	var keyboard_input := MOVEMENT_MATH.read_keyboard_move()
-	# Joystick has analog strength; stick pushed fully outward = running.
-	var input_vector := keyboard_input
-	var mobile_running := false
-	if touch_hud != null and touch_hud.move_vector.length_squared() > 0.0001:
-		input_vector = touch_hud.move_vector
-		mobile_running = input_vector.length() >= 0.77
-	# Ground and air steering match the joystick immediately, including reversals.
-	var direction := MOVEMENT_MATH.camera_relative_direction(camera, input_vector)
-	if direction.length_squared() > 0.01:
-		last_move_direction = direction.normalized()
-	var target_speed := RUN_SPEED if Input.is_key_pressed(KEY_SHIFT) or mobile_running else WALK_SPEED
-	var facing_direction := direction
-	if dash_time_left > 0.0:
-		facing_direction = dash_direction
-		var dash_velocity := MOVEMENT_MATH.horizontal_velocity(dash_direction, DASH_SPEED)
-		hero.velocity.x = dash_velocity.x
-		hero.velocity.z = dash_velocity.z
-		dash_time_left = maxf(0.0, dash_time_left - delta)
-	else:
-		var move_velocity := MOVEMENT_MATH.horizontal_velocity(direction, target_speed)
-		hero.velocity.x = move_velocity.x
-		hero.velocity.z = move_velocity.z
-
-	var launched := MOVEMENT_MATH.apply_vertical_velocity(
-		hero, grounded_before, jump_pressed,
-		jump_buffer_left > 0.0 and coyote_left > 0.0,
-		delta, JUMP_SPEED, GRAVITY, JUMP_RELEASE_MULTIPLIER
-	)
-	if launched:
-		jump_buffer_left = 0.0
-		coyote_left = 0.0
-
-	hero.move_and_slide()
-
-	MOVEMENT_MATH.apply_facing(visual, facing_direction)
+	# Motion is isolated from combat and animation state transitions.
+	var launched: bool = movement_controller.physics_step(hero, visual, camera, touch_hud, delta)
 
 	# Locomotion keeps updating throughout the attack (including jumps).
 	if launched:
@@ -163,16 +97,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			camera.size = camera_zoom
 
 func _start_dash() -> void:
-	if dash_cooldown_left > 0.0 or dash_time_left > 0.0:
-		return
-	var intended_direction := Vector3.ZERO
-	if touch_hud != null:
-		intended_direction = MOVEMENT_MATH.camera_relative_direction(camera, touch_hud.move_vector)
-	if intended_direction.length_squared() < 0.01:
-		intended_direction = last_move_direction
-	dash_direction = intended_direction.normalized()
-	dash_time_left = DASH_DURATION
-	dash_cooldown_left = DASH_COOLDOWN
+	# Keep the same callback name for Q, the touch HUD and existing tests.
+	movement_controller.start_dash(touch_hud, camera)
 
 
 func _toggle_fullscreen() -> void:
