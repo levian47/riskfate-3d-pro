@@ -8,6 +8,7 @@ signal zoom_requested
 signal fullscreen_requested
 signal weapon_requested
 signal naruto_requested
+signal skeleton_requested
 
 var move_vector := Vector2.ZERO
 var jump_held := false
@@ -19,7 +20,9 @@ var zoom_finger := -1
 var fullscreen_finger := -1
 var weapon_finger := -1
 var naruto_finger := -1
+var skeleton_finger := -1
 var naruto_run_enabled := false
+var skeleton_enabled := false
 var weapon_index := 1
 var zoom_level := 2
 var stick_thumb := Vector2.ZERO
@@ -44,6 +47,7 @@ func _on_resized() -> void:
 		fullscreen_finger = -1
 		weapon_finger = -1
 		naruto_finger = -1
+		skeleton_finger = -1
 		move_vector = Vector2.ZERO
 		stick_thumb = Vector2.ZERO
 		jump_held = false
@@ -76,7 +80,9 @@ func _layout() -> Dictionary:
 		"fullscreen": Vector2(margin + fullscreen_radius, margin + fullscreen_radius),
 		"fullscreen_radius": fullscreen_radius,
 		"naruto": Vector2(margin + fullscreen_radius, margin + fullscreen_radius * 3.6),
-		"naruto_radius": fullscreen_radius
+		"naruto_radius": fullscreen_radius,
+		"skeleton": Vector2(margin + fullscreen_radius, margin + fullscreen_radius * 6.2),
+		"skeleton_radius": fullscreen_radius
 	}
 
 func _input(event: InputEvent) -> void:
@@ -123,6 +129,10 @@ func _press(finger: int, point: Vector2) -> void:
 		naruto_finger = finger
 		naruto_requested.emit()
 		queue_redraw()
+	elif skeleton_finger == -1 and point.distance_to(layout["skeleton"]) <= layout["skeleton_radius"] * 1.20:
+		skeleton_finger = finger
+		skeleton_requested.emit()
+		queue_redraw()
 	elif _press_fullscreen(finger, point):
 		pass
 	elif attack_finger == -1 and point.distance_to(layout["attack"]) <= layout["attack_radius"] * 1.18:
@@ -158,6 +168,8 @@ func _release(finger: int) -> void:
 		weapon_finger = -1
 	if finger == naruto_finger:
 		naruto_finger = -1
+	if finger == skeleton_finger:
+		skeleton_finger = -1
 	queue_redraw()
 
 func _update_stick(point: Vector2) -> void:
@@ -203,7 +215,7 @@ func _draw() -> void:
 	var zoom_r: float = layout["zoom_radius"]
 	_draw_button(zoom_center, zoom_r, Color(0.15, 0.25, 0.39, 0.94 if zoom_finger != -1 else 0.76), Color(0.76, 0.87, 1.0, 0.92))
 	_draw_label(zoom_center + Vector2(0, -zoom_r * 0.18), "ZOOM", zoom_r * 0.29)
-	_draw_label(zoom_center + Vector2(0, zoom_r * 0.28), "%d/3" % zoom_level, zoom_r * 0.34)
+	_draw_label(zoom_center + Vector2(0, zoom_r * 0.28), "%d/4" % zoom_level, zoom_r * 0.34)
 	var weapon_center: Vector2 = layout["weapon"]
 	var weapon_r: float = layout["weapon_radius"]
 	_draw_button(weapon_center, weapon_r, Color(0.33, 0.27, 0.44, 0.94 if weapon_finger != -1 else 0.83), Color(0.90, 0.82, 1.0, 0.96))
@@ -214,6 +226,11 @@ func _draw() -> void:
 	_draw_button(naruto_center, naruto_r, Color(0.27, 0.45, 0.24, 0.95 if naruto_run_enabled else 0.65), Color(0.82, 0.98, 0.77, 0.94))
 	_draw_label(naruto_center + Vector2(0, -naruto_r * 0.17), "RUN", naruto_r * 0.31)
 	_draw_label(naruto_center + Vector2(0, naruto_r * 0.27), "N4" if naruto_run_enabled else "OFF", naruto_r * 0.27)
+	var skeleton_center: Vector2 = layout["skeleton"]
+	var skeleton_r: float = layout["skeleton_radius"]
+	_draw_button(skeleton_center, skeleton_r, Color(0.16, 0.46, 0.47, 0.92 if skeleton_enabled else 0.70), Color(0.58, 1.0, 0.91, 0.98))
+	_draw_label(skeleton_center + Vector2(0, -skeleton_r * 0.17), "SKEL", skeleton_r * 0.30)
+	_draw_label(skeleton_center + Vector2(0, skeleton_r * 0.29), "ON" if skeleton_enabled else "OFF", skeleton_r * 0.27)
 	_draw_fullscreen_control(layout)
 
 func _draw_fullscreen_control(layout: Dictionary) -> void:

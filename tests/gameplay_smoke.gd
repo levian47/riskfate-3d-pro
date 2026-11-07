@@ -67,6 +67,32 @@ func _run_checks() -> void:
 	var tree := game.get("animation_tree") as AnimationTree
 	if not _require(hero != null and tree != null and tree.active, "Character and AnimationTree must initialize"):
 		return
+	# Skeleton inspection must not alter the model or animation; it is a
+	# disabled-by-default runtime drawing overlay.
+	var debug_rig := WEAPON_VISUALS.find_skeleton(game.get("visual") as Node3D) as Skeleton3D
+	var debug_overlay := debug_rig.get_node_or_null("SkeletonDebug") as MeshInstance3D if debug_rig != null else null
+	if not _require(debug_overlay != null and debug_overlay.mesh is ImmediateMesh and not debug_overlay.visible, "Skeleton inspection must be available and disabled by default"):
+		return
+	game.call("_toggle_skeleton_debug")
+	await process_frame
+	if not _require(debug_overlay.visible and debug_overlay.mesh.get_surface_count() > 0, "Skeleton debug must draw live bone chains when enabled"):
+		return
+	game.call("_toggle_skeleton_debug")
+	if not _require(not debug_overlay.visible, "Skeleton debug must turn off without altering animations"):
+		return
+	# The camera gains one close zoom step without losing its original 12
+	# size and without changing the mobile joystick/attack controls.
+	var gameplay_camera := game.get("camera") as Camera3D
+	if not _require(gameplay_camera != null and is_equal_approx(gameplay_camera.size, 12.0), "Default camera zoom must remain unchanged"):
+		return
+	for expected_zoom in [8.0, 6.0, 18.0, 12.0]:
+		game.call("_cycle_mobile_zoom")
+		if not _require(is_equal_approx(gameplay_camera.size, expected_zoom), "Camera must cycle through four zoom settings, including close-up"):
+			return
+	if DisplayServer.is_touchscreen_available():
+		var mobile_controls := game.get("touch_hud") as Control
+		if not _require(int(mobile_controls.zoom_level) == 2 and not bool(mobile_controls.skeleton_enabled), "Mobile skeleton and zoom indicators must reset correctly"):
+			return
 	# Naruto state must be independently selectable without replacing the
 	# previously accepted Run or either sword slash.
 	if not _require(NARUTO_FULL != null and NARUTO_FULL.loop_mode == Animation.LOOP_LINEAR and NARUTO_FULL.get_track_count() == 13, "Naruto overlay must contain spine-root Hips and twelve upper-body tracks; legs stay native Ninja Run"):
