@@ -60,8 +60,6 @@ var locomotion_state := ""
 var attack_time_left := 0.0
 var attack_duration := 0.0
 var attack_hit_pending := false
-# 0 = approved Standard, 1 = experimental Sweeping. Not camera-dependent.
-var attack_variant := 0
 var coyote_left := 0.0
 var jump_buffer_left := 0.0
 var jump_was_pressed := false
@@ -176,12 +174,6 @@ func _physics_process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_1:
-		_set_attack_variant(0)
-		return
-	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_2:
-		_set_attack_variant(1)
-		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_Q:
 		_start_dash()
 		return
@@ -260,15 +252,6 @@ func _build_hero() -> void:
 		_setup_animation_tree(model)
 	else:
 		push_warning("AnimationPlayer not found in imported model")
-
-func _set_attack_variant(variant: int) -> void:
-	# Selection is allowed only between attacks; never change a live swing.
-	if variant < 0 or variant > 1 or attack_time_left > 0.0:
-		return
-	attack_variant = variant
-	if animation_tree != null:
-		animation_tree.set("parameters/AttackVariant/blend_amount", float(variant))
-
 
 func _start_attack() -> void:
 	if animation_tree == null or attack_time_left > 0.0:
@@ -529,14 +512,12 @@ func _setup_animation_tree(model: Node) -> void:
 	if sweeping_clip.is_empty():
 		push_error("Could not build the sweeping sword slash")
 		return
-	attack_clip_name = retained_clip
+	# Keep the approved standard clip in AnimationPlayer for future use.
+	# For this playtest, the only active combat node runs SweepingSwordSlash.
+	attack_clip_name = sweeping_clip
 	var attack_clip := animator.get_animation(attack_clip_name)
 	var attack_node := AnimationNodeAnimation.new()
 	attack_node.animation = attack_clip_name
-	var sweeping_node := AnimationNodeAnimation.new()
-	sweeping_node.animation = sweeping_clip
-	var attack_selector := AnimationNodeBlend2.new()
-	attack_selector.sync = false
 	var attack_speed := AnimationNodeTimeScale.new()
 	var attack_layer := AnimationNodeOneShot.new()
 	attack_layer.fadein_time = 0.06
@@ -556,13 +537,9 @@ func _setup_animation_tree(model: Node) -> void:
 		return
 
 	root.add_node("SwordSlash", attack_node)
-	root.add_node("SweepingSwordSlash", sweeping_node)
-	root.add_node("AttackVariant", attack_selector)
 	root.add_node("AttackSpeed", attack_speed)
 	root.add_node("Attack", attack_layer)
-	root.connect_node("AttackVariant", 0, "SwordSlash")
-	root.connect_node("AttackVariant", 1, "SweepingSwordSlash")
-	root.connect_node("AttackSpeed", 0, "AttackVariant")
+	root.connect_node("AttackSpeed", 0, "SwordSlash")
 	root.connect_node("Attack", 0, "Locomotion")
 	root.connect_node("Attack", 1, "AttackSpeed")
 	root.connect_node("output", 0, "Attack")
@@ -575,7 +552,6 @@ func _setup_animation_tree(model: Node) -> void:
 	animator.stop()
 	animation_tree.active = true
 	animation_tree.set("parameters/AttackSpeed/scale", ATTACK_SPEED)
-	animation_tree.set("parameters/AttackVariant/blend_amount", 0.0)
 	_set_locomotion("Idle")
 
 
@@ -684,7 +660,7 @@ func _build_ui() -> void:
 	panel.position = Vector2(18, 18)
 	canvas.add_child(panel)
 	var label := Label.new()
-	label.text = "NINJA 3D TEST\nWASD — рух   |   SHIFT — біг   |   Q — ривок\nSPACE — стрибок   |   ЛКМ — удар мечем   |   1/2 — тип удару\nКолесо миші — масштаб"
+	label.text = "NINJA 3D TEST\nWASD — рух   |   SHIFT — біг   |   Q — ривок\nSPACE — стрибок   |   ЛКМ — удар мечем\nКолесо миші — масштаб"
 	panel.add_child(label)
 	# Also expose fullscreen on desktop without relying on browser controls.
 	var fullscreen_button := Button.new()
