@@ -287,6 +287,7 @@ func _run_checks() -> void:
 			return
 		if not _require(float(current_modified["head_angle"]) >= 62.0 and float(current_modified["head_angle"]) <= 74.0, "Naruto corrected torso angle must survive the full stride"):
 			return
+	print("Naruto processed pose over full gait: ", finished_pose_samples.slice(maxi(0, finished_pose_samples.size() - 8)))
 	var leg_samples: Array[Quaternion] = []
 	for sample in range(4):
 		for frame in range(5):
@@ -776,7 +777,23 @@ func _capture_naruto_modifier_pose(skeleton: Skeleton3D, body_index: int, hips_i
 	var head_axis := head - hips
 	var pelvis_segment := rad_to_deg(atan2(pelvis_axis.z, pelvis_axis.y))
 	var head_angle := rad_to_deg(atan2(head_axis.z, head_axis.y))
+	var left_upper := skeleton.get_bone_global_pose(skeleton.find_bone("UpperLeg.L")).origin
+	var right_upper := skeleton.get_bone_global_pose(skeleton.find_bone("UpperLeg.R")).origin
+	var left_knee := skeleton.get_bone_global_pose(skeleton.find_bone("LowerLeg.L")).origin
+	var right_knee := skeleton.get_bone_global_pose(skeleton.find_bone("LowerLeg.R")).origin
+	var left_foot := skeleton.get_bone_global_pose(skeleton.find_bone("Foot.L")).origin
+	var right_foot := skeleton.get_bone_global_pose(skeleton.find_bone("Foot.R")).origin
 	output.append({
+		"hip_joint_y": hips.y,
+		"head_y": head.y,
+		"left_upper_y": left_upper.y,
+		"right_upper_y": right_upper.y,
+		"left_knee_y": left_knee.y,
+		"right_knee_y": right_knee.y,
+		"left_foot_y": left_foot.y,
+		"right_foot_y": right_foot.y,
+		"left_shin_distance": left_knee.distance_to(left_foot),
+		"right_shin_distance": right_knee.distance_to(right_foot),
 		"body_y": body_y,
 		"body_rotation": body_rotation,
 		"pitch": pitch,
