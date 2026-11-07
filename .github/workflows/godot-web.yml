@@ -80,6 +80,12 @@ jobs:
           test -s dist/index.html
           touch dist/.nojekyll
 
+      - name: Verify exported pack without project sources
+        run: |
+          # Test the actual packed resources, not the original repository.
+          cd "$RUNNER_TEMP"
+          "$GODOT_BIN" --headless --main-pack "$GITHUB_WORKSPACE/dist/builds/${GITHUB_SHA:0:12}/index.pck" --script res://tests/gameplay_smoke.gd
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
