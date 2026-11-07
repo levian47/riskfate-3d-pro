@@ -225,7 +225,7 @@ func _run_checks() -> void:
 	if not _require(view_camera != null and sword_grip != null, "Camera and sword attachment must exist"):
 		return
 	var view_right := view_camera.global_transform.basis.x.normalized()
-	if not _require(attack_node != null and String(attack_node.animation) == "combat/WideSwordSlash", "OneShot must play the single retained sword clip"):
+	if not _require(attack_node != null and String(attack_node.animation) == "combat_mirror/WideSwordSlashMirror", "OneShot must play the single retained sword clip"):
 		return
 
 	# The camera is at +X,+Z. PI rotates the hero's back toward the camera.
