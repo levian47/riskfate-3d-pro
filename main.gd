@@ -425,7 +425,9 @@ func _make_wider_sword_slash(source_name: String, model: Node, mirrored: bool = 
 		var radius := offset.length()
 		if radius < 0.5:
 			continue
-		var progress := smoothstep(0.14, 0.59, fraction)
+		# Give the new sweeping attack a longer, ease-in/ease-out cutting
+		# phase. The standard attack retains its approved timing curve.
+		var progress := smoothstep(0.08, 0.66, fraction) if sweeping else smoothstep(0.14, 0.59, fraction)
 		var arc_direction := -1.0 if mirrored else 1.0
 		var sweep_angle := SWEEPING_ARC_ANGLE if sweeping else SWORD_ARC_SWEEP_ANGLE
 		var start_height := SWEEPING_ARC_START_HEIGHT if sweeping else SWORD_ARC_START_HEIGHT
@@ -439,7 +441,11 @@ func _make_wider_sword_slash(source_name: String, model: Node, mirrored: bool = 
 		var shoulder_pose := skeleton.get_bone_pose_rotation(shoulder_idx)
 		var global_rotation := shoulder_transform.basis.get_rotation_quaternion()
 		var rest_world_rotation := (global_rotation * shoulder_pose.inverse()).normalized()
-		var envelope := smoothstep(0.01, 0.15, fraction) * (1.0 - smoothstep(0.68, 0.94, fraction))
+		# The imported clip begins with the sword unusually high. For the
+		# sweeping test attack, solve its low starting pose from frame zero
+		# rather than fading the shoulder correction in during the first 15%.
+		# Leave the approved Standard branch bit-for-bit identical.
+		var envelope := (1.0 - smoothstep(0.70, 0.94, fraction)) if sweeping else (smoothstep(0.01, 0.15, fraction) * (1.0 - smoothstep(0.68, 0.94, fraction)))
 		# Every valid shoulder solution can twist about the target direction.
 		# Choose the nearest one to the previous key to avoid sudden flips.
 		var best_pose := Quaternion.IDENTITY
@@ -520,7 +526,9 @@ func _setup_animation_tree(model: Node) -> void:
 	attack_node.animation = attack_clip_name
 	var attack_speed := AnimationNodeTimeScale.new()
 	var attack_layer := AnimationNodeOneShot.new()
-	attack_layer.fadein_time = 0.06
+	# Slightly soften the transition from locomotion to the new test pose.
+	# Only the sweeping animation is currently attached to the OneShot.
+	attack_layer.fadein_time = 0.09
 	attack_layer.fadeout_time = 0.10
 	attack_layer.filter_enabled = true
 	var filtered := 0
