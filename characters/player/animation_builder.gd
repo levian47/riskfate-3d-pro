@@ -98,11 +98,20 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 			"Shoulder.L", "UpperArm.L", "LowerArm.L", "Fist.L",
 			"Shoulder.R", "UpperArm.R", "LowerArm.R", "Fist.R"]:
 		naruto_blend.set_filter_path(NodePath("CharacterArmature/Skeleton3D:" + bone), true)
+	# AnimationNodeBlendTree does not allow the same output to feed two
+	# consumers. Give Naruto its own Run playback; reusing RunSpeed here
+	# silently rejects the connection and leaves the character sliding.
+	var naruto_base_run := AnimationNodeAnimation.new()
+	naruto_base_run.animation = find_clip(animator, "Run")
+	var naruto_base_speed := AnimationNodeTimeScale.new()
+	root.add_node("NarutoBaseRun", naruto_base_run)
+	root.add_node("NarutoBaseRunSpeed", naruto_base_speed)
 	root.add_node("NarutoUpper", naruto_upper)
 	root.add_node("NarutoUpperSpeed", naruto_upper_speed)
 	root.add_node("NarutoUpperBlend", naruto_blend)
+	root.connect_node("NarutoBaseRunSpeed", 0, "NarutoBaseRun")
 	root.connect_node("NarutoUpperSpeed", 0, "NarutoUpper")
-	root.connect_node("NarutoUpperBlend", 0, "RunSpeed")
+	root.connect_node("NarutoUpperBlend", 0, "NarutoBaseRunSpeed")
 	root.connect_node("NarutoUpperBlend", 1, "NarutoUpperSpeed")
 	locomotion.set_input_name(4, "Naruto")
 	root.connect_node("Locomotion", 4, "NarutoUpperBlend")

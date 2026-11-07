@@ -74,6 +74,7 @@ func _physics_process(delta: float) -> void:
 			animation_tree.set("parameters/WalkSpeed/scale", clampf(actual_speed / WALK_SPEED, 0.85, 1.25))
 			var run_scale := clampf(actual_speed / RUN_SPEED, 0.85, 1.25)
 			animation_tree.set("parameters/RunSpeed/scale", run_scale)
+			animation_tree.set("parameters/NarutoBaseRunSpeed/scale", run_scale)
 			animation_tree.set("parameters/NarutoUpperSpeed/scale", run_scale * naruto_source_speed_ratio)
 
 
