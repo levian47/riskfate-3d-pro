@@ -213,7 +213,7 @@ func _draw() -> void:
 	var naruto_r: float = layout["naruto_radius"]
 	_draw_button(naruto_center, naruto_r, Color(0.27, 0.45, 0.24, 0.95 if naruto_run_enabled else 0.65), Color(0.82, 0.98, 0.77, 0.94))
 	_draw_label(naruto_center + Vector2(0, -naruto_r * 0.17), "RUN", naruto_r * 0.31)
-	_draw_label(naruto_center + Vector2(0, naruto_r * 0.27), "N2" if naruto_run_enabled else "OFF", naruto_r * 0.27)
+	_draw_label(naruto_center + Vector2(0, naruto_r * 0.27), "N3" if naruto_run_enabled else "OFF", naruto_r * 0.27)
 	_draw_fullscreen_control(layout)
 
 func _draw_fullscreen_control(layout: Dictionary) -> void:
