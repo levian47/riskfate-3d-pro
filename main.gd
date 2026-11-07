@@ -19,6 +19,9 @@ const TOUCH_HUD_SCRIPT := preload("res://touch_hud.gd")
 const WORLD_SCRIPT := preload("res://world/environment.gd")
 # The attack runs on the upper body while the legs retain their movement animation.
 const ATTACK_SPEED := 1.65
+# Approximate visual swing target: ~130 degrees instead of the reported ~90.
+# Scales the right upper-arm excursion, NOT combat damage or timing.
+const ATTACK_SWING_AMPLITUDE := 130.0 / 90.0
 # Prototype combat parameters. Not approved balance values.
 const TRAINING_HIT_DAMAGE := 25
 const TRAINING_HIT_REACH := 3.1
@@ -345,6 +348,51 @@ func _find_clip(short_name: String) -> String:
 	return ""
 
 
+func _make_wider_sword_slash(source_name: String) -> String:
+	# Keep the imported clip untouched; build an independently editable variation.
+	# Extrapolating upper-arm key rotations widens the existing slash without
+	# reorienting the sword in the grip or disturbing the locomotion layer.
+	var source := animator.get_animation(source_name)
+	if source == null:
+		return ""
+	var wide := source.duplicate(true) as Animation
+	var altered_keys := 0
+	for track in range(wide.get_track_count()):
+		if wide.track_get_type(track) != Animation.TYPE_ROTATION_3D:
+			continue
+		var track_path := wide.track_get_path(track)
+		if track_path.get_subname_count() == 0:
+			continue
+		var bone_name := String(track_path.get_subname(track_path.get_subname_count() - 1))
+		if bone_name != "UpperArm.R" or wide.track_is_compressed(track):
+			continue
+		var key_count := wide.track_get_key_count(track)
+		if key_count < 2:
+			continue
+		var start_rotation: Quaternion = wide.track_get_key_value(track, 0)
+		for key_index in range(1, key_count):
+			var original: Quaternion = wide.track_get_key_value(track, key_index)
+			var relative: Quaternion = (start_rotation.inverse() * original).normalized()
+			# Quaternions q and -q encode the same rotation; choose shortest arc.
+			if relative.w < 0.0:
+				relative = Quaternion(-relative.x, -relative.y, -relative.z, -relative.w)
+			var angle := relative.get_angle()
+			if angle <= 0.001:
+				continue
+			var wider_rotation := start_rotation * Quaternion(relative.get_axis(), angle * ATTACK_SWING_AMPLITUDE)
+			wide.track_set_key_value(track, key_index, wider_rotation.normalized())
+			altered_keys += 1
+	if altered_keys == 0:
+		push_warning("SwordSlash: upper-arm animation track cannot be widened")
+		return ""
+	var library := AnimationLibrary.new()
+	if library.add_animation("WideSwordSlash", wide) != OK:
+		return ""
+	if animator.add_animation_library("combat", library) != OK:
+		return ""
+	return "combat/WideSwordSlash"
+
+
 func _setup_animation_tree(model: Node) -> void:
 	var root := AnimationNodeBlendTree.new()
 	var locomotion := AnimationNodeTransition.new()
@@ -375,6 +423,9 @@ func _setup_animation_tree(model: Node) -> void:
 	if attack_clip_name.is_empty():
 		push_error("SwordSlash clip missing")
 		return
+	var wide_clip_name := _make_wider_sword_slash(attack_clip_name)
+	if not wide_clip_name.is_empty():
+		attack_clip_name = wide_clip_name
 	var attack_clip := animator.get_animation(attack_clip_name)
 	var attack_node := AnimationNodeAnimation.new()
 	attack_node.animation = attack_clip_name

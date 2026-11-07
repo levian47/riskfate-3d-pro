@@ -51,6 +51,46 @@ func _run_checks() -> void:
 	if not _require(arm_found and not leg_found, "Attack must affect arms, not legs"):
 		return
 
+	# The modified clip must be distinct, have a wider right-arm arc, and
+	# preserve the imported source animation and the filtered attack layer.
+	if not _require(animator.has_animation("combat/WideSwordSlash"), "Wider attack clip must exist"):
+		return
+	var original_clip := animator.get_animation(sword_name)
+	var wide_clip := animator.get_animation("combat/WideSwordSlash")
+	if not _require(wide_clip != original_clip and is_equal_approx(wide_clip.length, original_clip.length), "Wide clip must be independent with identical timing"):
+		return
+	var arm_source := -1
+	var arm_wide := -1
+	for i in range(original_clip.get_track_count()):
+		var track_path := original_clip.track_get_path(i)
+		if original_clip.track_get_type(i) == Animation.TYPE_ROTATION_3D and track_path.get_subname_count() > 0:
+			if String(track_path.get_subname(track_path.get_subname_count() - 1)) == "UpperArm.R":
+				arm_source = i
+				break
+	for i in range(wide_clip.get_track_count()):
+		var track_path := wide_clip.track_get_path(i)
+		if wide_clip.track_get_type(i) == Animation.TYPE_ROTATION_3D and track_path.get_subname_count() > 0:
+			if String(track_path.get_subname(track_path.get_subname_count() - 1)) == "UpperArm.R":
+				arm_wide = i
+				break
+	if not _require(arm_source >= 0 and arm_wide >= 0, "Right upper arm rotation tracks must be available"):
+		return
+	var source_base: Quaternion = original_clip.track_get_key_value(arm_source, 0)
+	var wide_base: Quaternion = wide_clip.track_get_key_value(arm_wide, 0)
+	var source_max := 0.0
+	var wide_max := 0.0
+	for key in range(original_clip.track_get_key_count(arm_source)):
+		var q: Quaternion = original_clip.track_get_key_value(arm_source, key)
+		source_max = maxf(source_max, source_base.angle_to(q))
+	for key in range(wide_clip.track_get_key_count(arm_wide)):
+		var q: Quaternion = wide_clip.track_get_key_value(arm_wide, key)
+		wide_max = maxf(wide_max, wide_base.angle_to(q))
+	if not _require(source_max > 0.05 and wide_max > source_max * 1.25, "Right-arm swing must increase visibly"):
+		return
+	var attack_node := blend.get_node("SwordSlash") as AnimationNodeAnimation
+	if not _require(attack_node != null and String(attack_node.animation) == "combat/WideSwordSlash", "Attack blend node must play wider clip"):
+		return
+
 	game.call("_set_locomotion", "Run")
 	game.call("_start_attack")
 	await process_frame
@@ -141,7 +181,7 @@ func _run_checks() -> void:
 	var collision := environment.get_node("CollisionShape3D") as CollisionShape3D
 	if not _require(collision != null and (collision.shape as BoxShape3D).size.x >= 200.0, "Expanded terrain missing"):
 		return
-	print("Gameplay smoke test passed: movement, animation, dash, world, training hits, HP and respawn.")
+	print("Gameplay smoke test passed: widened sword swing, movement, dash, world, training hits, HP and respawn.")
 	quit(0)
 
 
