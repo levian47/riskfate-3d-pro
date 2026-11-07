@@ -516,6 +516,9 @@ func _setup_animation_tree(model: Node) -> void:
 	var swing_direction := AnimationNodeTransition.new()
 	swing_direction.input_count = 2
 	swing_direction.xfade_time = 0.0
+	# A repeated strike frequently reselects the current variant. Without
+	# self-transition the child animation may continue from an old position.
+	swing_direction.allow_transition_to_self = true
 	swing_direction.set_input_name(0, "Normal")
 	swing_direction.set_input_name(1, "Mirrored")
 	# Entering a different direction must begin its clip at frame zero.
@@ -523,8 +526,7 @@ func _setup_animation_tree(model: Node) -> void:
 	swing_direction.set_input_reset(1, true)
 	var attack_speed := AnimationNodeTimeScale.new()
 	var attack_layer := AnimationNodeOneShot.new()
-	# Avoid blending a reverse idle-to-slash windup over the forward cut.
-	attack_layer.fadein_time = 0.0
+	attack_layer.fadein_time = 0.06
 	attack_layer.fadeout_time = 0.10
 	attack_layer.filter_enabled = true
 	var filtered := 0
