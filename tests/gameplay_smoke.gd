@@ -175,6 +175,7 @@ func _run_checks() -> void:
 	# The head remains physically low, but its local forward (+Z) should
 	# face near-horizontally along the run, not down into the ground.
 	var gaze := locomotion_skeleton.get_bone_global_pose(head_index).basis.z.normalized()
+	print("Naruto clean-pose gaze vector: ", gaze)
 	if not _require(gaze.z > 0.90 and absf(gaze.y) < 0.18, "Naruto face must look forward while the torso leans down"):
 		return
 	# Attack animation must not override the sprinting spine, head or left arm.
