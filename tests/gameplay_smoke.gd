@@ -176,7 +176,10 @@ func _run_checks() -> void:
 	var modified_pelvis: Dictionary = pelvis_pose_samples.back()
 	var finished_pose: Dictionary = finished_pose_samples.back()
 	print("Naruto actual modified pelvis and IK pose: ", finished_pose)
-	if not _require(float(modified_pelvis["body_y"]) < 0.82, "Naruto Body_2 must be visibly lowered when modifier executes"):
+	var source_body_y := float(pelvis_modifier.get("last_source_y"))
+	if not _require(int(pelvis_modifier.get("applied_count")) > 0, "Naruto pelvis modifier callback must run"):
+		return
+	if not _require(absf(float(modified_pelvis["body_y"]) - (source_body_y - 0.14)) < 0.02, "Naruto Body_2 must move down 0.14 relative to its animated source, not a guessed absolute height"):
 		return
 	if not _require(float(modified_pelvis["pitch"]) > 12.0 and float(modified_pelvis["pitch"]) < 28.0, "Naruto pelvis must pitch forward in actual modified pose"):
 		return
