@@ -145,14 +145,23 @@ func _run_checks() -> void:
 	var neck_pose := locomotion_skeleton.get_bone_global_pose(neck_index).origin
 	var spine_direction := neck_pose - abdomen_pose
 	var forward_lean_degrees := rad_to_deg(atan2(spine_direction.z, spine_direction.y))
-	if not _require(forward_lean_degrees >= 35.0 and forward_lean_degrees <= 45.0, "Naruto body lean must stay near the requested 40 degrees"):
+	# Lean is measured on the spine, not by tilting the root or the legs.
+	# The entire native lower-body run chain remains the support and foot contact.
+	if not _require(forward_lean_degrees >= 64.0 and forward_lean_degrees <= 74.0, "Naruto sprint torso must lean forward roughly 70 degrees"):
 		return
-	if not _require(head_pose.y > torso_pose.y + 0.35 and head_pose.z < torso_pose.z + 0.50, "Naruto sprint must not fold the character into a crawling pose"):
+	if not _require(head_pose.y > 1.0 and head_pose.z > torso_pose.z + 0.30, "Naruto sprint head must be forward and remain above the ground"):
 		return
-	for hand_index in [left_hand_index, right_hand_index]:
-		var hand_pose := locomotion_skeleton.get_bone_global_pose(hand_index).origin
-		if not _require(hand_pose.y < torso_pose.y - 0.10 and hand_pose.z < torso_pose.z - 0.15, "Naruto sprint hands must trail below and behind the torso"):
+	var left_hand_pose := locomotion_skeleton.get_bone_global_pose(left_hand_index).origin
+	var right_hand_pose := locomotion_skeleton.get_bone_global_pose(right_hand_index).origin
+	var left_shoulder_pose := locomotion_skeleton.get_bone_global_pose(locomotion_skeleton.find_bone("Shoulder.L")).origin
+	var right_shoulder_pose := locomotion_skeleton.get_bone_global_pose(locomotion_skeleton.find_bone("Shoulder.R")).origin
+	for hand_pose in [left_hand_pose, right_hand_pose]:
+		if not _require(hand_pose.y < torso_pose.y - 0.10 and hand_pose.z < torso_pose.z - 0.15, "Naruto hands must still trail low and behind the torso"):
 			return
+	var hand_width := absf(left_hand_pose.x - right_hand_pose.x)
+	var shoulder_width := absf(left_shoulder_pose.x - right_shoulder_pose.x)
+	if not _require(hand_width > 0.85 and hand_width > shoulder_width + 0.50, "Naruto hands must spread outward farther than the shoulders"):
+		return
 	var leg_samples: Array[Quaternion] = []
 	for sample in range(4):
 		for frame in range(5):
