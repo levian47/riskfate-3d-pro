@@ -518,8 +518,8 @@ func _build_fps_counter(canvas: CanvasLayer) -> void:
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.anchor_left = 0.5
 	panel.anchor_right = 0.5
-	panel.offset_left = -54.0
-	panel.offset_right = 54.0
+	panel.offset_left = -156.0
+	panel.offset_right = 156.0
 	panel.offset_top = 12.0
 	panel.offset_bottom = 45.0
 	var background := StyleBoxFlat.new()
@@ -527,6 +527,13 @@ func _build_fps_counter(canvas: CanvasLayer) -> void:
 	background.set_corner_radius_all(8)
 	panel.add_theme_stylebox_override("panel", background)
 	canvas.add_child(panel)
+	var stats := HBoxContainer.new()
+	stats.name = "Stats"
+	stats.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stats.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	stats.alignment = BoxContainer.ALIGNMENT_CENTER
+	stats.add_theme_constant_override("separation", 10)
+	panel.add_child(stats)
 
 	fps_label = Label.new()
 	fps_label.name = "FPSLabel"
@@ -535,7 +542,16 @@ func _build_fps_counter(canvas: CanvasLayer) -> void:
 	fps_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	fps_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	fps_label.add_theme_font_size_override("font_size", 18)
-	panel.add_child(fps_label)
+	stats.add_child(fps_label)
+
+	# No network session exists in this prototype. Do not fabricate ping values.
+	var ping_label := Label.new()
+	ping_label.name = "PingLabel"
+	ping_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ping_label.text = "PING: — (offline)"
+	ping_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	ping_label.add_theme_font_size_override("font_size", 15)
+	stats.add_child(ping_label)
 
 
 func _build_ui() -> void:

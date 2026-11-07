@@ -3,6 +3,7 @@ config_version=5
 [application]
 config/name="Ninja Isometric Demo v7 Mobile FIX"
 run/main_scene="res://main.tscn"
+run/max_fps=60
 config/features=PackedStringArray("4.3", "GL Compatibility")
 
 [rendering]

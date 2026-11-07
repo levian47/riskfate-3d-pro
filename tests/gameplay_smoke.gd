@@ -11,6 +11,11 @@ func _run_checks() -> void:
 	var game := scene.instantiate()
 	root.add_child(game)
 	await process_frame
+	if not _require(Engine.max_fps == 60, "Engine must read the 60 FPS project limit"):
+		return
+	var ping_label := game.get_node_or_null("HUD/FPSCounter/Stats/PingLabel") as Label
+	if not _require(ping_label != null and ping_label.text == "PING: — (offline)", "Ping must show offline while no game server exists"):
+		return
 	var fps_label := game.get("fps_label") as Label
 	if not _require(fps_label != null and fps_label.text == "FPS: --", "FPS counter should initialize in HUD"):
 		return
@@ -186,7 +191,7 @@ func _run_checks() -> void:
 	var collision := environment.get_node("CollisionShape3D") as CollisionShape3D
 	if not _require(collision != null and (collision.shape as BoxShape3D).size.x >= 200.0, "Expanded terrain missing"):
 		return
-	print("Gameplay smoke test passed: widened sword swing, movement, dash, world, training hits, HP and respawn.")
+	print("Gameplay smoke test passed: FPS cap 60, offline ping, widened sword swing, movement, dash, world, training hits, HP and respawn.")
 	quit(0)
 
 
