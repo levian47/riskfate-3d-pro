@@ -59,46 +59,40 @@ func _run_checks() -> void:
 	if not _require(arm_found and not leg_found, "Attack must affect arms, not legs"):
 		return
 
-	# The modified clip must be distinct, have a wider right-arm arc, and
-	# preserve the imported source animation and the filtered attack layer.
-	if not _require(animator.has_animation("combat/WideSwordSlash"), "Wider attack clip must exist"):
+	# The camera-facing clip must not replay the imported opposing arm
+	# windup; the accepted back-facing mirrored clip keeps its full arm motion.
+	if not _require(animator.has_animation("combat/WideSwordSlash") and animator.has_animation("combat_mirror/WideSwordSlashMirror"), "Both combat clips must exist"):
 		return
 	var original_clip := animator.get_animation(sword_name)
 	var wide_clip := animator.get_animation("combat/WideSwordSlash")
-	if not _require(wide_clip != original_clip and is_equal_approx(wide_clip.length, original_clip.length), "Wide clip must be independent with identical timing"):
+	var mirror_clip := animator.get_animation("combat_mirror/WideSwordSlashMirror")
+	if not _require(wide_clip != original_clip and is_equal_approx(wide_clip.length, original_clip.length) and is_equal_approx(mirror_clip.length, original_clip.length), "Combat clip copies must preserve original timing"):
 		return
 	var arm_source := -1
 	var arm_wide := -1
 	for i in range(original_clip.get_track_count()):
-		var track_path := original_clip.track_get_path(i)
-		if original_clip.track_get_type(i) == Animation.TYPE_ROTATION_3D and track_path.get_subname_count() > 0:
-			if String(track_path.get_subname(track_path.get_subname_count() - 1)) == "UpperArm.R":
-				arm_source = i
-				break
+		var path := original_clip.track_get_path(i)
+		if original_clip.track_get_type(i) == Animation.TYPE_ROTATION_3D and path.get_subname_count() > 0 and String(path.get_subname(path.get_subname_count() - 1)) == "UpperArm.R":
+			arm_source = i
+			break
 	for i in range(wide_clip.get_track_count()):
-		var track_path := wide_clip.track_get_path(i)
-		if wide_clip.track_get_type(i) == Animation.TYPE_ROTATION_3D and track_path.get_subname_count() > 0:
-			if String(track_path.get_subname(track_path.get_subname_count() - 1)) == "UpperArm.R":
-				arm_wide = i
-				break
-	if not _require(arm_source >= 0 and arm_wide >= 0, "Right upper arm rotation tracks must be available"):
+		var path := wide_clip.track_get_path(i)
+		if wide_clip.track_get_type(i) == Animation.TYPE_ROTATION_3D and path.get_subname_count() > 0 and String(path.get_subname(path.get_subname_count() - 1)) == "UpperArm.R":
+			arm_wide = i
+			break
+	if not _require(arm_source >= 0 and arm_wide >= 0, "Right arm rotation tracks must exist"):
 		return
 	var source_base: Quaternion = original_clip.track_get_key_value(arm_source, 0)
-	var wide_base: Quaternion = wide_clip.track_get_key_value(arm_wide, 0)
+	var front_pose: Quaternion = wide_clip.track_get_key_value(arm_wide, 0)
 	var source_max := 0.0
-	var wide_max := 0.0
-	var added_swing := 0.0
-	for key in range(original_clip.track_get_key_count(arm_source)):
-		var q: Quaternion = original_clip.track_get_key_value(arm_source, key)
+	for i in range(original_clip.track_get_key_count(arm_source)):
+		var q: Quaternion = original_clip.track_get_key_value(arm_source, i)
 		source_max = maxf(source_max, source_base.angle_to(q))
-	for key in range(wide_clip.track_get_key_count(arm_wide)):
-		var q: Quaternion = wide_clip.track_get_key_value(arm_wide, key)
-		wide_max = maxf(wide_max, wide_base.angle_to(q))
-		if key < original_clip.track_get_key_count(arm_source):
-			var original_key: Quaternion = original_clip.track_get_key_value(arm_source, key)
-			var previous_angle := source_base.angle_to(original_key) * (130.0 / 90.0)
-			added_swing = maxf(added_swing, wide_base.angle_to(q) - previous_angle)
-	if not _require(source_max > 0.05 and added_swing > 0.10 and wide_max <= deg_to_rad(171.0), "Wide attack must add forward arm swing without a 180-degree wrap"):
+	for i in range(wide_clip.track_get_key_count(arm_wide)):
+		var q: Quaternion = wide_clip.track_get_key_value(arm_wide, i)
+		if not _require(front_pose.angle_to(q) < 0.01, "Front-facing upper arm must not swing against the sword direction"):
+			return
+	if not _require(source_max > 0.05, "Original source arm animation must be preserved"):
 		return
 	# The re-authored sword arc should be smooth rather than an overhead pose.
 	var shoulder_wide := -1
