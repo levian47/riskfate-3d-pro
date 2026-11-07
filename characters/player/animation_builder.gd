@@ -1,7 +1,6 @@
 extends RefCounted
 # Builds and configures the imported rig's animation graph.
 # No gameplay input, attack damage or state transitions live here.
-const ATTACK_SPEED := 1.65
 const STANDARD_SWORD_CLIP := preload("res://assets/animations/standard_sword_slash.tres")
 const SWEEPING_SWORD_CLIP := preload("res://assets/animations/sweeping_sword_slash.tres")
 const UPPER_BODY_BONES := [
@@ -44,7 +43,7 @@ static func find_clip(animator: AnimationPlayer, short_name: String) -> String:
 	return ""
 
 
-static func setup_animation_tree(model: Node, animator: AnimationPlayer) -> AnimationTree:
+static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_speed_value: float) -> AnimationTree:
 	var root := AnimationNodeBlendTree.new()
 	var locomotion := AnimationNodeTransition.new()
 	locomotion.input_count = 4
@@ -125,7 +124,7 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer) -> Anim
 	animation_tree.tree_root = root
 	animator.stop()
 	animation_tree.active = true
-	animation_tree.set("parameters/AttackSpeed/scale", ATTACK_SPEED)
+	animation_tree.set("parameters/AttackSpeed/scale", attack_speed_value)
 	return animation_tree
 
 
