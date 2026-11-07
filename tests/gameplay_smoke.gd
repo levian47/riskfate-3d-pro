@@ -165,6 +165,13 @@ func _run_checks() -> void:
 	var body_index := locomotion_skeleton.find_bone("Body_2")
 	if not _require(body_index >= 0 and locomotion_skeleton.get_bone_pose_position(body_index).y < 0.82, "Naruto Body_2 must be visibly lowered below its native Run position"):
 		return
+	# Verify that the pelvis itself now pitches forward, not only Hips/Torso.
+	# Run has no equivalent modifier, so this is a Naruto-only animation.
+	var naruto_pelvis_rotation := locomotion_skeleton.get_bone_pose_rotation(body_index)
+	var pelvis_up := naruto_pelvis_rotation * Vector3.UP
+	var pelvis_forward_pitch := rad_to_deg(atan2(pelvis_up.z, pelvis_up.y))
+	if not _require(pelvis_forward_pitch > 12.0 and pelvis_forward_pitch < 28.0, "Naruto pelvis must lean forward approximately 20 degrees"):
+		return
 	var foot_target_distances: Array[float] = []
 	for side in ["L", "R"]:
 		var lower_index := locomotion_skeleton.find_bone("LowerLeg." + side)
@@ -175,7 +182,7 @@ func _run_checks() -> void:
 		foot_target_distances.append(ankle_end.distance_to(foot_goal))
 	if not _require(foot_target_distances[0] < 0.35 and foot_target_distances[1] < 0.35, "Both Naruto legs must reach their source foot targets without disconnecting"):
 		return
-		var torso_pose := locomotion_skeleton.get_bone_global_pose(torso_index).origin
+	var torso_pose := locomotion_skeleton.get_bone_global_pose(torso_index).origin
 	var head_pose := locomotion_skeleton.get_bone_global_pose(head_index).origin
 	var abdomen_pose := locomotion_skeleton.get_bone_global_pose(abdomen_index).origin
 	var neck_pose := locomotion_skeleton.get_bone_global_pose(neck_index).origin
@@ -285,6 +292,8 @@ func _run_checks() -> void:
 		await physics_frame
 	var ordinary_after := locomotion_skeleton.get_bone_pose_rotation(leg_index)
 	if not _require(ordinary_before.angle_to(ordinary_after) > 0.01, "Normal Run stride must still animate after Naruto mode"):
+		return
+	if not _require(naruto_pelvis_rotation.angle_to(locomotion_skeleton.get_bone_pose_rotation(body_index)) > deg_to_rad(10.0), "Normal Run must restore the original untilted pelvis"):
 		return
 	game.call("_set_locomotion", "Idle")
 	game.set_physics_process(true)
