@@ -50,24 +50,6 @@ jobs:
         run: |
           "$GODOT_BIN" --headless --path . --script res://tests/gameplay_smoke.gd
 
-      - name: Capture Naruto visual QA frames (temporary PR test)
-        if: github.event_name == 'pull_request'
-        shell: bash
-        run: |
-          set -euo pipefail
-          command -v xvfb-run
-          xvfb-run -a -s "-screen 0 1280x720x24" "$GODOT_BIN" --path . --rendering-method gl_compatibility --script res://tests/naruto_visual_capture.gd
-          test -s naruto-preview/Run_side_0.png
-          test -s naruto-preview/Naruto_diagonal_0.png
-
-      - name: Upload Naruto pose visual QA
-        if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v4
-        with:
-          name: naruto-pose-qa
-          path: naruto-preview/
-          retention-days: 1
-
       - name: Export Web build
         run: |
           mkdir -p dist
