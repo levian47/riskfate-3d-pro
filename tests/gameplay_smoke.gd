@@ -61,6 +61,46 @@ func _run_checks() -> void:
 		return
 	if not _require(not animator.has_animation("combat/WideSwordSlash") and not blend.has_node("SwordDirection") and not blend.has_node("AttackSeek"), "Unused slash and direction selectors must be removed"):
 		return
+	# The accepted standard clip must coexist with a separate experimental
+	# wide, ascending slash; no camera-dependent direction selector returns.
+	if not _require(animator.has_animation("combat_sweeping/SweepingSwordSlash"), "Experimental sweeping sword clip missing"):
+		return
+	var sweeping_clip := animator.get_animation("combat_sweeping/SweepingSwordSlash")
+	if not _require(sweeping_clip != wide_clip and is_equal_approx(sweeping_clip.length, wide_clip.length), "Both attacks must be independent with matching timing"):
+		return
+	if not _require(blend.has_node("AttackVariant") and blend.has_node("SweepingSwordSlash") and not blend.has_node("SwordDirection"), "Variant selector must be independent of camera direction"):
+		return
+	var sweeping_node := blend.get_node("SweepingSwordSlash") as AnimationNodeAnimation
+	if not _require(sweeping_node != null and String(sweeping_node.animation) == "combat_sweeping/SweepingSwordSlash", "Sweeping variant must be wired to AnimationTree"):
+		return
+	if not _require(is_zero_approx(float(tree.get("parameters/AttackVariant/blend_amount"))), "Standard attack must be selected by default"):
+		return
+	var standard_track := -1
+	var sweeping_track := -1
+	for i in range(wide_clip.get_track_count()):
+		if wide_clip.track_get_type(i) == Animation.TYPE_ROTATION_3D and String(wide_clip.track_get_path(i)).ends_with("Shoulder.R"):
+			standard_track = i
+			break
+	for i in range(sweeping_clip.get_track_count()):
+		if sweeping_clip.track_get_type(i) == Animation.TYPE_ROTATION_3D and String(sweeping_clip.track_get_path(i)).ends_with("Shoulder.R"):
+			sweeping_track = i
+			break
+	if not _require(standard_track >= 0 and sweeping_track >= 0, "Both variants require independent shoulder tracks"):
+		return
+	var distinct_keys := 0
+	for i in range(mini(wide_clip.track_get_key_count(standard_track), sweeping_clip.track_get_key_count(sweeping_track))):
+		var standard_pose: Quaternion = wide_clip.track_get_key_value(standard_track, i)
+		var sweeping_pose: Quaternion = sweeping_clip.track_get_key_value(sweeping_track, i)
+		if standard_pose.angle_to(sweeping_pose) > 0.05:
+			distinct_keys += 1
+	if not _require(distinct_keys > 8, "Sweeping attack must have a genuinely different shoulder trajectory"):
+		return
+	game.call("_set_attack_variant", 1)
+	if not _require(int(game.get("attack_variant")) == 1 and is_equal_approx(float(tree.get("parameters/AttackVariant/blend_amount")), 1.0), "Sweeping variant must be selectable"):
+		return
+	game.call("_set_attack_variant", 0)
+	if not _require(int(game.get("attack_variant")) == 0 and is_zero_approx(float(tree.get("parameters/AttackVariant/blend_amount"))), "Standard variant must remain selectable"):
+		return
 	var original_clip := animator.get_animation(sword_name)
 	var wide_clip := animator.get_animation("combat_mirror/WideSwordSlashMirror")
 	if not _require(wide_clip != original_clip and is_equal_approx(wide_clip.length, original_clip.length) , "Combat clips must preserve timing"):
@@ -262,7 +302,7 @@ func _run_checks() -> void:
 	if not _require(float(game.get("attack_time_left")) > 0.0 and bool(tree.get("parameters/Attack/active")), "Same sword slash must start when hero turns around"):
 		return
 
-	print("Gameplay smoke test passed: one back-facing-derived sword slash, FPS cap, offline ping, movement, dash, world, training hits, HP and respawn.")
+	print("Gameplay smoke test passed: preserved standard and distinct sweeping sword slash, selector, FPS cap, offline ping, movement, dash, world, training hits, HP and respawn.")
 	quit(0)
 
 func _require(value: bool, message: String) -> bool:
