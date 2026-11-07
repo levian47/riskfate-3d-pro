@@ -146,9 +146,9 @@ func _run_checks() -> void:
 		return
 	for side in ["L", "R"]:
 		var solver := left_ik if side == "L" else right_ik
-		var target := locomotion_skeleton.get_node_or_null("NarutoFoot" + side) as BoneAttachment3D
-		var pole := locomotion_skeleton.get_node_or_null("NarutoPoleTarget" + side) as BoneAttachment3D
-		if not _require(target != null and pole != null and solver.is_using_virtual_end(0), "Naruto IK needs animated foot/pole controls and a virtual ankle: " + side):
+		var target := locomotion_skeleton.get_node_or_null("NarutoFoot" + side) as ModifierBoneTarget3D
+		var pole := locomotion_skeleton.get_node_or_null("NarutoPoleTarget" + side) as ModifierBoneTarget3D
+		if not _require(target != null and pole != null and solver.is_using_virtual_end(0) and not target.active and not pole.active, "Naruto IK needs idle modifier targets and a virtual ankle: " + side):
 			return
 	if not _require(not pelvis_modifier.active and not left_ik.active and not right_ik.active, "Normal locomotion must not apply Naruto crouch or IK"):
 		return
