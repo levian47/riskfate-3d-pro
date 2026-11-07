@@ -113,6 +113,17 @@ func _run_checks() -> void:
 	var body_path := NodePath("CharacterArmature/Skeleton3D:Body_2")
 	var native_body_track := run_asset.find_track(body_path, Animation.TYPE_POSITION_3D)
 	var crouch_body_track := NARUTO_FULL.find_track(body_path, Animation.TYPE_POSITION_3D)
+	if native_body_track < 0 or crouch_body_track < 0:
+		var root_names: Array[String] = []
+		var diagnostic_rig := WEAPON_VISUALS.find_skeleton(game.get("visual") as Node3D)
+		for i in range(diagnostic_rig.get_bone_count()):
+			if String(diagnostic_rig.get_bone_name(i)).contains("Body") or String(diagnostic_rig.get_bone_name(i)).contains("Hip"):
+				root_names.append(String(diagnostic_rig.get_bone_name(i)))
+		var native_body_paths: Array[String] = []
+		for i in range(run_asset.get_track_count()):
+			if String(run_asset.track_get_path(i)).contains("Body"):
+				native_body_paths.append("%s [type %d]" % [run_asset.track_get_path(i), run_asset.track_get_type(i)])
+		print("Naruto pelvis diagnostic: skeleton roots=", root_names, "; native paths=", native_body_paths, "; requested=", body_path, "; found native=", native_body_track, " overlay=", crouch_body_track)
 	if not _require(native_body_track >= 0 and crouch_body_track >= 0, "Both runs must provide the pelvis position curve"):
 		return
 	var native_height := run_asset.position_track_interpolate(native_body_track, 0.0).y
