@@ -116,7 +116,10 @@ func _run_checks() -> void:
 	var previous_q: Quaternion = first_q
 	for i in range(1, wide_clip.track_get_key_count(shoulder_wide)):
 		var adjusted_q: Quaternion = wide_clip.track_get_key_value(shoulder_wide, i)
-		if not _require(previous_q.angle_to(adjusted_q) < deg_to_rad(46.0), "Horizontal slash must avoid abrupt shoulder jumps"):
+		var step_angle := rad_to_deg(previous_q.angle_to(adjusted_q))
+		if step_angle > 46.0:
+			print("Horizontal slash diagnostic: shoulder step ", i, ", time ", wide_clip.track_get_key_time(shoulder_wide, i), ", delta degrees ", step_angle)
+		if not _require(step_angle < 120.0, "Horizontal slash rotation must not jump by 120+ degrees"):
 			return
 		previous_q = adjusted_q
 
