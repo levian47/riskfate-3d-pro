@@ -1,4 +1,5 @@
 extends RefCounted
+const MOVEMENT_MATH := preload("res://characters/player/movement_math.gd")
 # Player locomotion state. This is the same movement model as the accepted
 # prototype: immediate steering, coyote/buffer jumps and camera-relative dash.
 # The main scene owns combat, animation-state requests, camera and UI.
@@ -23,22 +24,12 @@ var dash_time_left := 0.0
 var dash_cooldown_left := 0.0
 
 
-func camera_relative_direction(input_vector: Vector2, camera: Camera3D) -> Vector3:
-	var camera_right := camera.global_transform.basis.x
-	camera_right.y = 0.0
-	camera_right = camera_right.normalized()
-	var camera_forward := -camera.global_transform.basis.z
-	camera_forward.y = 0.0
-	camera_forward = camera_forward.normalized()
-	return camera_right * input_vector.x - camera_forward * input_vector.y
-
-
 func start_dash(touch_hud, camera: Camera3D) -> void:
 	if dash_cooldown_left > 0.0 or dash_time_left > 0.0:
 		return
 	var intended_direction := Vector3.ZERO
 	if touch_hud != null:
-		intended_direction = camera_relative_direction(touch_hud.move_vector, camera)
+		intended_direction = MOVEMENT_MATH.camera_relative_direction(camera, touch_hud.move_vector)
 	if intended_direction.length_squared() < 0.01:
 		intended_direction = last_move_direction
 	dash_direction = intended_direction.normalized()
@@ -63,45 +54,38 @@ func physics_step(hero: CharacterBody3D, visual: Node3D, camera: Camera3D, touch
 	else:
 		coyote_left = maxf(0.0, coyote_left - delta)
 
-	var keyboard_input := Vector2(
-		float(Input.is_key_pressed(KEY_D)) - float(Input.is_key_pressed(KEY_A)),
-		float(Input.is_key_pressed(KEY_S)) - float(Input.is_key_pressed(KEY_W))
-	).normalized()
+	var keyboard_input := MOVEMENT_MATH.read_keyboard_move()
 	var input_vector := keyboard_input
 	var mobile_running := false
 	if touch_hud != null and touch_hud.move_vector.length_squared() > 0.0001:
 		input_vector = touch_hud.move_vector
 		mobile_running = input_vector.length() >= 0.77
 
-	var direction := camera_relative_direction(input_vector, camera)
+	var direction := MOVEMENT_MATH.camera_relative_direction(camera, input_vector)
 	if direction.length_squared() > 0.01:
 		last_move_direction = direction.normalized()
 	var target_speed := RUN_SPEED if Input.is_key_pressed(KEY_SHIFT) or mobile_running else WALK_SPEED
 	var facing_direction := direction
 	if dash_time_left > 0.0:
 		facing_direction = dash_direction
-		hero.velocity.x = dash_direction.x * DASH_SPEED
-		hero.velocity.z = dash_direction.z * DASH_SPEED
+		var dash_velocity := MOVEMENT_MATH.horizontal_velocity(dash_direction, DASH_SPEED)
+		hero.velocity.x = dash_velocity.x
+		hero.velocity.z = dash_velocity.z
 		dash_time_left = maxf(0.0, dash_time_left - delta)
 	else:
-		hero.velocity.x = direction.x * target_speed
-		hero.velocity.z = direction.z * target_speed
+		var move_velocity := MOVEMENT_MATH.horizontal_velocity(direction, target_speed)
+		hero.velocity.x = move_velocity.x
+		hero.velocity.z = move_velocity.z
 
-	var launched := false
-	if jump_buffer_left > 0.0 and coyote_left > 0.0:
-		hero.velocity.y = JUMP_SPEED
+	var launched := MOVEMENT_MATH.apply_vertical_velocity(
+		hero, grounded_before, jump_pressed,
+		jump_buffer_left > 0.0 and coyote_left > 0.0,
+		delta, JUMP_SPEED, GRAVITY, JUMP_RELEASE_MULTIPLIER
+	)
+	if launched:
 		jump_buffer_left = 0.0
 		coyote_left = 0.0
-		launched = true
-	elif not grounded_before:
-		hero.velocity.y -= GRAVITY * delta
-		if not jump_pressed and hero.velocity.y > 0.0:
-			hero.velocity.y -= GRAVITY * (1.0 / JUMP_RELEASE_MULTIPLIER - 1.0) * delta
-	else:
-		hero.velocity.y = -0.1
 
 	hero.move_and_slide()
-	if facing_direction.length_squared() > 0.01:
-		# Retain the imported rig's 180-degree correction without turn lag.
-		visual.rotation.y = atan2(-facing_direction.x, -facing_direction.z) + PI
+	MOVEMENT_MATH.apply_facing(visual, facing_direction)
 	return launched
