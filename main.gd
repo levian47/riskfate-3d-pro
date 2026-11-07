@@ -31,6 +31,10 @@ const ATTACK_SWING_MAX_ANGLE := deg_to_rad(170.0)
 const SWORD_ARC_START_HEIGHT := 0.78
 const SWORD_ARC_END_HEIGHT := 0.22
 const SWORD_ARC_SWEEP_ANGLE := 65.0
+# Trial parameters for the second, wider, slightly ascending horizontal slash.
+const SWEEPING_ARC_ANGLE := 90.0
+const SWEEPING_ARC_START_HEIGHT := 0.22
+const SWEEPING_ARC_END_HEIGHT := 0.78
 # Prototype combat parameters. Not approved balance values.
 const TRAINING_HIT_DAMAGE := 25
 const TRAINING_HIT_REACH := 3.1
@@ -56,6 +60,8 @@ var locomotion_state := ""
 var attack_time_left := 0.0
 var attack_duration := 0.0
 var attack_hit_pending := false
+# 0 = approved Standard, 1 = experimental Sweeping. Not camera-dependent.
+var attack_variant := 0
 var coyote_left := 0.0
 var jump_buffer_left := 0.0
 var jump_was_pressed := false
@@ -170,6 +176,12 @@ func _physics_process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_1:
+		_set_attack_variant(0)
+		return
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_2:
+		_set_attack_variant(1)
+		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_Q:
 		_start_dash()
 		return
@@ -248,6 +260,15 @@ func _build_hero() -> void:
 		_setup_animation_tree(model)
 	else:
 		push_warning("AnimationPlayer not found in imported model")
+
+func _set_attack_variant(variant: int) -> void:
+	# Selection is allowed only between attacks; never change a live swing.
+	if variant < 0 or variant > 1 or attack_time_left > 0.0:
+		return
+	attack_variant = variant
+	if animation_tree != null:
+		animation_tree.set("parameters/AttackVariant/blend_amount", float(variant))
+
 
 func _start_attack() -> void:
 	if animation_tree == null or attack_time_left > 0.0:
@@ -357,7 +378,7 @@ func _find_clip(short_name: String) -> String:
 	return ""
 
 
-func _make_wider_sword_slash(source_name: String, model: Node, mirrored: bool = false) -> String:
+func _make_wider_sword_slash(source_name: String, model: Node, mirrored: bool = false, sweeping: bool = false) -> String:
 	# Preserve the imported source. First widen the upper arm as before,
 	# then solve the right-shoulder rotation for a near-horizontal sword tip.
 	var source := animator.get_animation(source_name)
@@ -395,8 +416,8 @@ func _make_wider_sword_slash(source_name: String, model: Node, mirrored: bool = 
 	if arm_track < 0:
 		return ""
 	var lib := AnimationLibrary.new()
-	var clip_name := "WideSwordSlashMirror" if mirrored else "WideSwordSlash"
-	var library_name := "combat_mirror" if mirrored else "combat"
+	var clip_name := "SweepingSwordSlash" if sweeping else ("WideSwordSlashMirror" if mirrored else "WideSwordSlash")
+	var library_name := "combat_sweeping" if sweeping else ("combat_mirror" if mirrored else "combat")
 	if lib.add_animation(clip_name, wide) != OK:
 		return ""
 	if animator.add_animation_library(library_name, lib) != OK:
@@ -423,8 +444,11 @@ func _make_wider_sword_slash(source_name: String, model: Node, mirrored: bool = 
 			continue
 		var progress := smoothstep(0.14, 0.59, fraction)
 		var arc_direction := -1.0 if mirrored else 1.0
-		var horizontal_angle := deg_to_rad(lerpf(SWORD_ARC_SWEEP_ANGLE * arc_direction, -SWORD_ARC_SWEEP_ANGLE * arc_direction, progress))
-		var desired_height := lerpf(SWORD_ARC_START_HEIGHT, SWORD_ARC_END_HEIGHT, progress)
+		var sweep_angle := SWEEPING_ARC_ANGLE if sweeping else SWORD_ARC_SWEEP_ANGLE
+		var start_height := SWEEPING_ARC_START_HEIGHT if sweeping else SWORD_ARC_START_HEIGHT
+		var end_height := SWEEPING_ARC_END_HEIGHT if sweeping else SWORD_ARC_END_HEIGHT
+		var horizontal_angle := deg_to_rad(lerpf(sweep_angle * arc_direction, -sweep_angle * arc_direction, progress))
+		var desired_height := lerpf(start_height, end_height, progress)
 		desired_height = clampf(desired_height, -radius * 0.95, radius * 0.95)
 		var horizontal_length := sqrt(maxf(0.001, radius * radius - desired_height * desired_height))
 		var desired_offset := Vector3(sin(horizontal_angle) * horizontal_length, desired_height, cos(horizontal_angle) * horizontal_length)
@@ -499,10 +523,20 @@ func _setup_animation_tree(model: Node) -> void:
 		push_error("Could not build the retained back-facing sword slash")
 		return
 	animator.remove_animation_library("combat")
+	# Build the experimental variant only AFTER the approved clip is complete.
+	# The standard animation object and its keyframes are never modified.
+	var sweeping_clip := _make_wider_sword_slash(attack_clip_name, model, true, true)
+	if sweeping_clip.is_empty():
+		push_error("Could not build the sweeping sword slash")
+		return
 	attack_clip_name = retained_clip
 	var attack_clip := animator.get_animation(attack_clip_name)
 	var attack_node := AnimationNodeAnimation.new()
 	attack_node.animation = attack_clip_name
+	var sweeping_node := AnimationNodeAnimation.new()
+	sweeping_node.animation = sweeping_clip
+	var attack_selector := AnimationNodeBlend2.new()
+	attack_selector.sync = false
 	var attack_speed := AnimationNodeTimeScale.new()
 	var attack_layer := AnimationNodeOneShot.new()
 	attack_layer.fadein_time = 0.06
@@ -522,9 +556,13 @@ func _setup_animation_tree(model: Node) -> void:
 		return
 
 	root.add_node("SwordSlash", attack_node)
+	root.add_node("SweepingSwordSlash", sweeping_node)
+	root.add_node("AttackVariant", attack_selector)
 	root.add_node("AttackSpeed", attack_speed)
 	root.add_node("Attack", attack_layer)
-	root.connect_node("AttackSpeed", 0, "SwordSlash")
+	root.connect_node("AttackVariant", 0, "SwordSlash")
+	root.connect_node("AttackVariant", 1, "SweepingSwordSlash")
+	root.connect_node("AttackSpeed", 0, "AttackVariant")
 	root.connect_node("Attack", 0, "Locomotion")
 	root.connect_node("Attack", 1, "AttackSpeed")
 	root.connect_node("output", 0, "Attack")
@@ -537,6 +575,7 @@ func _setup_animation_tree(model: Node) -> void:
 	animator.stop()
 	animation_tree.active = true
 	animation_tree.set("parameters/AttackSpeed/scale", ATTACK_SPEED)
+	animation_tree.set("parameters/AttackVariant/blend_amount", 0.0)
 	_set_locomotion("Idle")
 
 
@@ -645,7 +684,7 @@ func _build_ui() -> void:
 	panel.position = Vector2(18, 18)
 	canvas.add_child(panel)
 	var label := Label.new()
-	label.text = "NINJA 3D TEST\nWASD — рух   |   SHIFT — біг   |   Q — ривок\nSPACE — стрибок   |   ЛКМ — удар мечем\nКолесо миші — масштаб"
+	label.text = "NINJA 3D TEST\nWASD — рух   |   SHIFT — біг   |   Q — ривок\nSPACE — стрибок   |   ЛКМ — удар мечем   |   1/2 — тип удару\nКолесо миші — масштаб"
 	panel.add_child(label)
 	# Also expose fullscreen on desktop without relying on browser controls.
 	var fullscreen_button := Button.new()
