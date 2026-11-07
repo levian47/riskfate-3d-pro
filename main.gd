@@ -523,7 +523,8 @@ func _setup_animation_tree(model: Node) -> void:
 	swing_direction.set_input_reset(1, true)
 	var attack_speed := AnimationNodeTimeScale.new()
 	var attack_layer := AnimationNodeOneShot.new()
-	attack_layer.fadein_time = 0.06
+	# Avoid blending a reverse idle-to-slash windup over the forward cut.
+	attack_layer.fadein_time = 0.0
 	attack_layer.fadeout_time = 0.10
 	attack_layer.filter_enabled = true
 	var filtered := 0
