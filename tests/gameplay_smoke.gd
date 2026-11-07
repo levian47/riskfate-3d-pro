@@ -280,10 +280,13 @@ func _run_checks() -> void:
 		await process_frame
 		clean_position_trace.append(clean_right.dot(clean_sword.to_global(Vector3(0.0, 1.305, 0.0))))
 	print("Fresh character facing camera sword trace: ", clean_position_trace, ", heading: ", clean_visual.rotation.y, ", chosen blend: ", clean_tree.get("parameters/SwordDirection/blend_amount"))
-	if not _require(clean_position_trace[0] - clean_position_trace[clean_position_trace.size() - 1] > 1.7, "First front-facing attack must sweep right-to-left"):
+	# The visible cut is at 8%-32%: it must start screen-right and
+	# cross the character to screen-left without reversing. The later
+	# return-to-idle is recovery, not a second attack.
+	if not _require(clean_position_trace[0] > 1.0 and clean_position_trace[3] < -1.5 and clean_position_trace[0] - clean_position_trace[3] > 3.0, "First front-facing cut must cross right-to-left across the camera"):
 		return
-	for i in range(1, clean_position_trace.size()):
-		if not _require(clean_position_trace[i] <= clean_position_trace[i - 1] + 0.30, "First front-facing attack must never visibly travel left-to-right"):
+	for i in range(1, 4):
+		if not _require(clean_position_trace[i] < clean_position_trace[i - 1] + 0.15, "First front-facing cutting phase must never reverse to the right"):
 			return
 	clean_game.queue_free()
 	# User's front-facing regression: a rightward snap BEFORE the cutting
