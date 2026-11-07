@@ -82,6 +82,9 @@
 
 - [ ] **Тестова зміна зброї (07.11.2026):** додано п’ять моделей Sword I / Sword II / Dagger / Knife / Cutlass, кріплення до `Fist.R`, нормалізацію довжини, перемикання E (ПК) і WPN (телефон). Прийняті анімації, швидкість, дистанція, шкода, рух та HP не змінені — для всіх моделей поки діє одна розмашиста анімація. До Web-експорту включено лише ці п’ять моделей, не всю бібліотеку. Автоматичні Godot smoke-тести, імпорт усіх GLB/FBX, Web-експорт, ізольований PCK і деплой успішні: [CI №42366804431](https://github.com/levian47/riskfate-3d-pro/actions/runs/42366804431), PCK 578 776 байтів. Візуальна посадка зброї, зручність WPN та FPS на фізичному телефоні потребують приймання власником.
 
+
+- [x] **Архівування двох бібліотек анімацій (07.11.2026):** оригінальні ZIP Quaternius Universal Animation Library Standard і Kevin Iglesias Human Melee Animations FREE збережено у приватному [Google Drive / Animation Sources](https://drive.google.com/drive/folders/184B3ehg4sb0o30aCJ3KVIXI14WtpYe4g); додатково 43 кліпи CC0 Quaternius (Godot GLB без root motion) збережені в компактному ZIP `assets_source/animation_libraries/quaternius/ual1_standard_godot.zip` у публічному репозиторії. FBX Kevin Iglesias не публікувалися через обмеження Standard Asset Store EULA на перепоширення. До ігрових сцен, AnimationTree, керування та Web-пакета анімації не підключалися; retargeting і художній огляд — окреме завдання.
+
 ## Етап 4 — базовий ігровий цикл
 
 - [ ] Погодити базові 3D-пропорції героя, камеру та стиль low-poly; перевірити продуктивність.
