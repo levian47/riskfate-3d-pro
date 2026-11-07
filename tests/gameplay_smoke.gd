@@ -2,6 +2,7 @@ extends SceneTree
 
 const ANIMATION_BUILDER := preload("res://characters/player/animation_builder.gd")
 const MOVEMENT_MATH := preload("res://characters/player/movement_math.gd")
+const MOVEMENT_CONTROLLER := preload("res://characters/player/movement_controller.gd")
 
 func _initialize() -> void:
 	call_deferred("_run_checks")
@@ -220,6 +221,12 @@ func _run_checks() -> void:
 		return
 	test_visual.free()
 
+	# Movement state must be owned by its component after extraction.
+	var movement_state := game.get("movement_controller") as RefCounted
+	if not _require(movement_state != null, "Player movement controller must initialize"):
+		return
+	if not _require(is_equal_approx(float(MOVEMENT_CONTROLLER.WALK_SPEED), 7.0) and is_equal_approx(float(MOVEMENT_CONTROLLER.RUN_SPEED), 12.0), "Approved movement speeds must remain unchanged"):
+		return
 	# Direction reversal and stopping must be immediate, without braking inertia.
 	var touch_controls = load("res://touch_hud.gd").new()
 	root.add_child(touch_controls)
@@ -232,6 +239,8 @@ func _run_checks() -> void:
 	game.call("_physics_process", 1.0 / 60.0)
 	var left_velocity := Vector3(hero.velocity.x, 0.0, hero.velocity.z)
 	if not _require(right_velocity.length() > 10.0 and left_velocity.distance_to(-right_velocity) < 0.05, "Steering must reverse immediately"):
+		return
+	if not _require(movement_state.get("last_move_direction") is Vector3 and (movement_state.get("last_move_direction") as Vector3).length() > 0.99, "Movement controller must retain the most recent direction for dash fallback"):
 		return
 	touch_controls.move_vector = Vector2.ZERO
 	game.call("_physics_process", 1.0 / 60.0)
@@ -247,14 +256,14 @@ func _run_checks() -> void:
 	touch_controls.dash_requested.connect(Callable(game, "_start_dash"))
 	touch_controls.move_vector = Vector2.RIGHT
 	touch_controls.call("_press", 37, dash_center)
-	if not _require(int(touch_controls.get("dash_finger")) == 37 and float(game.get("dash_time_left")) > 0.0, "Dash button must trigger dash"):
+	if not _require(int(touch_controls.get("dash_finger")) == 37 and float(movement_state.get("dash_time_left")) > 0.0, "Dash button must trigger dash"):
 		return
 	touch_controls.call("_release", 37)
 	if not _require(int(touch_controls.get("dash_finger")) == -1, "Dash touch must release cleanly"):
 		return
-	var original_cooldown := float(game.get("dash_cooldown_left"))
+	var original_cooldown := float(movement_state.get("dash_cooldown_left"))
 	game.call("_start_dash")
-	if not _require(is_equal_approx(float(game.get("dash_cooldown_left")), original_cooldown), "Dash cooldown must reject immediate second press"):
+	if not _require(is_equal_approx(float(movement_state.get("dash_cooldown_left")), original_cooldown), "Dash cooldown must reject immediate second press"):
 		return
 	touch_controls.move_vector = Vector2.ZERO
 
