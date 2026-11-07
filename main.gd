@@ -17,23 +17,15 @@ const JUMP_BUFFER_TIME := 0.13
 const MOVE_ANIMATION_THRESHOLD := 0.45
 const TOUCH_HUD_SCRIPT := preload("res://touch_hud.gd")
 const HUD_BUILDER := preload("res://ui/hud_builder.gd")
+const ANIMATION_BUILDER := preload("res://characters/player/animation_builder.gd")
 const WORLD_SCRIPT := preload("res://world/environment.gd")
 # The attack runs on the upper body while the legs retain their movement animation.
 const ATTACK_SPEED := 1.65
-# Accepted animations are versioned as Godot resources. Do not rebuild
-# skeleton rotations at runtime: that could drift from the approved poses.
-const STANDARD_SWORD_CLIP := preload("res://assets/animations/standard_sword_slash.tres")
-const SWEEPING_SWORD_CLIP := preload("res://assets/animations/sweeping_sword_slash.tres")
 # Prototype combat parameters. Not approved balance values.
 const TRAINING_HIT_DAMAGE := 25
 const TRAINING_HIT_REACH := 3.1
 const TRAINING_HIT_FACING_DOT := 0.60
 const TRAINING_HIT_MOMENT := 0.42
-const UPPER_BODY_BONES := [
-	"Abdomen", "Torso", "Neck", "Head",
-	"Shoulder.L", "UpperArm.L", "LowerArm.L", "Fist.L",
-	"Shoulder.R", "UpperArm.R", "LowerArm.R", "Fist.R"
-]
 
 var hero: CharacterBody3D
 var visual: Node3D
@@ -232,20 +224,21 @@ func _build_hero() -> void:
 	hero.add_child(visual)
 	var model := MODEL.instantiate()
 	visual.add_child(model)
-	animator = _find_animation_player(model)
+	animator = ANIMATION_BUILDER.find_animation_player(model)
 	if animator != null:
-		# Imported glTF clips are often not marked as looping. Without this,
-		# Run/Walk stops moving the legs at the last frame while the body moves.
-		_configure_animation_loops()
+		# Preserve imported locomotion loop behavior and accepted attack clips.
+		ANIMATION_BUILDER.configure_animation_loops(animator)
 		_attach_simple_sword(model)
-		_setup_animation_tree(model)
+		animation_tree = ANIMATION_BUILDER.setup_animation_tree(model, animator, ATTACK_SPEED)
+		if animation_tree != null:
+			_set_locomotion("Idle")
 	else:
 		push_warning("AnimationPlayer not found in imported model")
 
 func _start_attack() -> void:
 	if animation_tree == null or attack_time_left > 0.0:
 		return
-	var clip_name := _find_clip("SwordSlash")
+	var clip_name := ANIMATION_BUILDER.find_clip(animator, "SwordSlash")
 	if clip_name.is_empty():
 		return
 	attack_duration = animator.get_animation(clip_name).length / ATTACK_SPEED
@@ -315,125 +308,6 @@ func _add_sword_part(parent: Node3D, part_name: String, dimensions: Vector3, off
 	part.material_override = material
 	part.position = offset
 	parent.add_child(part)
-
-func _find_animation_player(node: Node) -> AnimationPlayer:
-	if node is AnimationPlayer:
-		return node
-	for child in node.get_children():
-		var result := _find_animation_player(child)
-		if result != null:
-			return result
-	return null
-
-func _configure_animation_loops() -> void:
-	if animator == null:
-		return
-	for name in animator.get_animation_list():
-		var clip_name := String(name)
-		var animation := animator.get_animation(name)
-		if animation == null:
-			continue
-		if clip_name.ends_with("/Idle") or clip_name == "Idle" or clip_name.ends_with("/Walk") or clip_name == "Walk" or clip_name.ends_with("/Run") or clip_name == "Run":
-			animation.loop_mode = Animation.LOOP_LINEAR
-		else:
-			# Actions (SwordSlash, Jump, etc.) should play once.
-			animation.loop_mode = Animation.LOOP_NONE
-
-func _find_clip(short_name: String) -> String:
-	if animator == null:
-		return ""
-	for name in animator.get_animation_list():
-		var full_name := String(name)
-		if full_name == short_name or full_name.ends_with("/" + short_name):
-			return full_name
-	push_warning("Animation not found: " + short_name)
-	return ""
-
-
-func _setup_animation_tree(model: Node) -> void:
-	var root := AnimationNodeBlendTree.new()
-	var locomotion := AnimationNodeTransition.new()
-	locomotion.input_count = 4
-	locomotion.xfade_time = 0.10
-	root.add_node("Locomotion", locomotion)
-
-	var states := ["Idle", "Walk", "Run", "Jump"]
-	for i in range(states.size()):
-		var state: String = states[i]
-		var clip_name := _find_clip(state)
-		if clip_name.is_empty():
-			push_error("Cannot build locomotion tree without " + state)
-			return
-		locomotion.set_input_name(i, state)
-		var clip_node := AnimationNodeAnimation.new()
-		clip_node.animation = clip_name
-		root.add_node(state, clip_node)
-		if state == "Walk" or state == "Run":
-			var speed_node := AnimationNodeTimeScale.new()
-			root.add_node(state + "Speed", speed_node)
-			root.connect_node(state + "Speed", 0, state)
-			root.connect_node("Locomotion", i, state + "Speed")
-		else:
-			root.connect_node("Locomotion", i, state)
-
-	# Register both approved attacks as independent, pre-baked animations.
-	# The Standard remains available, while ATK still plays only Sweeping.
-	var standard_library := AnimationLibrary.new()
-	var sweeping_library := AnimationLibrary.new()
-	if standard_library.add_animation("WideSwordSlashMirror", STANDARD_SWORD_CLIP) != OK:
-		push_error("Could not register the Standard sword animation")
-		return
-	if sweeping_library.add_animation("SweepingSwordSlash", SWEEPING_SWORD_CLIP) != OK:
-		push_error("Could not register the Sweeping sword animation")
-		return
-	if animator.add_animation_library("combat_mirror", standard_library) != OK:
-		push_error("Could not attach Standard sword animation")
-		return
-	if animator.add_animation_library("combat_sweeping", sweeping_library) != OK:
-		push_error("Could not attach Sweeping sword animation")
-		return
-	var attack_clip_name := "combat_sweeping/SweepingSwordSlash"
-	var attack_clip := animator.get_animation(attack_clip_name)
-	var attack_node := AnimationNodeAnimation.new()
-	attack_node.animation = attack_clip_name
-	var attack_speed := AnimationNodeTimeScale.new()
-	var attack_layer := AnimationNodeOneShot.new()
-	# Slightly soften the transition from locomotion to the new test pose.
-	# Only the sweeping animation is currently attached to the OneShot.
-	attack_layer.fadein_time = 0.09
-	attack_layer.fadeout_time = 0.10
-	attack_layer.filter_enabled = true
-	var filtered := 0
-	for track_index in range(attack_clip.get_track_count()):
-		var track_path := attack_clip.track_get_path(track_index)
-		if track_path.get_subname_count() == 0:
-			continue
-		var bone := String(track_path.get_subname(track_path.get_subname_count() - 1))
-		if bone in UPPER_BODY_BONES:
-			attack_layer.set_filter_path(track_path, true)
-			filtered += 1
-	if filtered == 0:
-		push_error("The imported SwordSlash animation has no matching upper-body tracks")
-		return
-
-	root.add_node("SwordSlash", attack_node)
-	root.add_node("AttackSpeed", attack_speed)
-	root.add_node("Attack", attack_layer)
-	root.connect_node("AttackSpeed", 0, "SwordSlash")
-	root.connect_node("Attack", 0, "Locomotion")
-	root.connect_node("Attack", 1, "AttackSpeed")
-	root.connect_node("output", 0, "Attack")
-
-	animation_tree = AnimationTree.new()
-	animation_tree.name = "CharacterAnimationTree"
-	model.add_child(animation_tree)
-	animation_tree.anim_player = animation_tree.get_path_to(animator)
-	animation_tree.tree_root = root
-	animator.stop()
-	animation_tree.active = true
-	animation_tree.set("parameters/AttackSpeed/scale", ATTACK_SPEED)
-	_set_locomotion("Idle")
-
 
 func _set_locomotion(state: String, restart: bool = false) -> void:
 	if animation_tree == null:
