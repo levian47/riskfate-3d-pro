@@ -137,14 +137,45 @@ func _run_checks() -> void:
 	var head_index := locomotion_skeleton.find_bone("Head")
 	if not _require(left_hand_index >= 0 and right_hand_index >= 0 and torso_index >= 0 and hips_index >= 0 and upper_left_index >= 0 and upper_right_index >= 0 and elbow_left_index >= 0 and elbow_right_index >= 0 and abdomen_index >= 0 and neck_index >= 0 and head_index >= 0, "Naruto pose verification requires both fists, torso and head"):
 		return
+	# The source Ninja rig has detached Foot.* and PoleTarget.* control bones.
+	# Lowering Body_2 requires native IK on both two-segment leg chains.
+	var pelvis_modifier := locomotion_skeleton.get_node_or_null("NarutoPelvisLowering") as SkeletonModifier3D
+	var left_ik := locomotion_skeleton.get_node_or_null("NarutoLegIKL") as TwoBoneIK3D
+	var right_ik := locomotion_skeleton.get_node_or_null("NarutoLegIKR") as TwoBoneIK3D
+	if not _require(pelvis_modifier != null and left_ik != null and right_ik != null, "Naruto crouch must register pelvis and both Godot IK modifiers"):
+		return
+	for side in ["L", "R"]:
+		var solver := left_ik if side == "L" else right_ik
+		var target := locomotion_skeleton.get_node_or_null("NarutoFoot" + side) as BoneAttachment3D
+		var pole := locomotion_skeleton.get_node_or_null("NarutoPoleTarget" + side) as BoneAttachment3D
+		if not _require(target != null and pole != null and solver.is_using_virtual_end(0), "Naruto IK needs animated foot/pole controls and a virtual ankle: " + side):
+			return
+	if not _require(not pelvis_modifier.active and not left_ik.active and not right_ik.active, "Normal locomotion must not apply Naruto crouch or IK"):
+		return
 	game.set_physics_process(false)
 	game.call("_set_locomotion", "Naruto")
+	if not _require(pelvis_modifier.active and left_ik.active and right_ik.active, "Naruto sprint must activate pelvis and both leg IK solvers"):
+		return
 	# Let Godot's ordinary animation processing run, like a real player.
 	for frame in range(8):
 		await physics_frame
 	# Evaluate the actual blended rig. Previously the head dropped to the
 	# pelvis and the hands pointed forward like a crawling character.
-	var torso_pose := locomotion_skeleton.get_bone_global_pose(torso_index).origin
+	# Validate the real animated bone, not only the requested locomotion state.
+	var body_index := locomotion_skeleton.find_bone("Body_2")
+	if not _require(body_index >= 0 and locomotion_skeleton.get_bone_pose_position(body_index).y < 0.82, "Naruto Body_2 must be visibly lowered below its native Run position"):
+		return
+	var foot_target_distances: Array[float] = []
+	for side in ["L", "R"]:
+		var lower_index := locomotion_skeleton.find_bone("LowerLeg." + side)
+		var foot_node := locomotion_skeleton.get_node("NarutoFoot" + side) as BoneAttachment3D
+		var lower_pose := locomotion_skeleton.get_bone_global_pose(lower_index)
+		var ankle_end := lower_pose.origin + lower_pose.basis * Vector3(0.0, 0.45, 0.0)
+		var foot_goal := locomotion_skeleton.to_local(foot_node.global_position)
+		foot_target_distances.append(ankle_end.distance_to(foot_goal))
+	if not _require(foot_target_distances[0] < 0.35 and foot_target_distances[1] < 0.35, "Both Naruto legs must reach their source foot targets without disconnecting"):
+		return
+		var torso_pose := locomotion_skeleton.get_bone_global_pose(torso_index).origin
 	var head_pose := locomotion_skeleton.get_bone_global_pose(head_index).origin
 	var abdomen_pose := locomotion_skeleton.get_bone_global_pose(abdomen_index).origin
 	var neck_pose := locomotion_skeleton.get_bone_global_pose(neck_index).origin
@@ -241,6 +272,8 @@ func _run_checks() -> void:
 	if not _require(leg_motion > 0.01, "Naruto mode must actually animate leg rotations, not slide with frozen pose"):
 		return
 	game.call("_set_locomotion", "Run")
+	if not _require(not pelvis_modifier.active and not left_ik.active and not right_ik.active, "Leaving Naruto must disable pelvis lowering and both IK solvers"):
+		return
 	# Leaving Naruto must restore every approved attack track.
 	for bone_name in ANIMATION_BUILDER.UPPER_BODY_BONES:
 		if not _require(attack_pose_layer.is_path_filtered(NodePath("CharacterArmature/Skeleton3D:" + bone_name)), "Standard Run must restore the full approved sword attack: " + bone_name):
