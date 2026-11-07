@@ -252,6 +252,35 @@ func _run_checks() -> void:
 		await process_frame
 		blended_screen_positions.append(view_right.dot(sword_grip.to_global(Vector3(0.0, 1.305, 0.0))))
 	print("Blended player attack screen positions: ", blended_screen_positions, ", OneShot active: ", tree.get("parameters/Attack/active"))
+	# Independent clean-spawn check: earlier smoke checks have already played
+	# an attack and changed locomotion. Distinguish that history from a
+	# first press on a new character facing the real isometric camera.
+	var clean_game := scene.instantiate()
+	root.add_child(clean_game)
+	await process_frame
+	clean_game.set_physics_process(false)
+	var clean_tree := clean_game.get("animation_tree") as AnimationTree
+	clean_tree.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
+	var clean_visual := clean_game.get("visual") as Node3D
+	var clean_camera := clean_game.get("camera") as Camera3D
+	var clean_hero := clean_game.get("hero") as CharacterBody3D
+	var camera_heading := clean_camera.global_position - clean_hero.global_position
+	camera_heading.y = 0.0
+	clean_visual.rotation.y = atan2(-camera_heading.x, -camera_heading.z) + PI
+	var clean_skeleton := clean_game.call("_find_skeleton", clean_visual) as Skeleton3D
+	var clean_sword := clean_skeleton.get_node("SwordGrip/SimpleSword") as Node3D
+	var clean_right := clean_camera.global_transform.basis.x.normalized()
+	clean_game.call("_start_attack")
+	var clean_position_trace: Array[float] = []
+	var clean_prev := 0.0
+	var clean_duration := float(clean_game.get("attack_duration"))
+	for fraction in [0.08, 0.16, 0.24, 0.32, 0.40, 0.48, 0.56, 0.64]:
+		clean_tree.advance(clean_duration * (fraction - clean_prev))
+		clean_prev = fraction
+		await process_frame
+		clean_position_trace.append(clean_right.dot(clean_sword.to_global(Vector3(0.0, 1.305, 0.0))))
+	print("Fresh character facing camera sword trace: ", clean_position_trace, ", heading: ", clean_visual.rotation.y, ", chosen blend: ", clean_tree.get("parameters/SwordDirection/blend_amount"))
+	clean_game.queue_free()
 	# User's front-facing regression: a rightward snap BEFORE the cutting
 	# phase looks like a left-to-right strike. Check the full visible sequence,
 	# rather than only the clean tail from 32% onward.
