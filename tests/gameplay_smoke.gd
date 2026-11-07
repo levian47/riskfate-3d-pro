@@ -97,52 +97,28 @@ func _run_checks() -> void:
 			added_swing = maxf(added_swing, wide_base.angle_to(q) - previous_angle)
 	if not _require(source_max > 0.05 and added_swing > 0.10 and wide_max <= deg_to_rad(171.0), "Wide attack must add forward arm swing without a 180-degree wrap"):
 		return
-	# The source Shoulder.R track is preserved. The adjusted clip aims its
-	# active swing from one side of the forward axis to the other and eases back.
-	var shoulder_source := -1
+	# The re-authored sword arc should be smooth rather than an overhead pose.
 	var shoulder_wide := -1
-	for i in range(original_clip.get_track_count()):
-		var path := original_clip.track_get_path(i)
-		if original_clip.track_get_type(i) == Animation.TYPE_ROTATION_3D and path.get_subname_count() > 0:
-			if String(path.get_subname(path.get_subname_count() - 1)) == "Shoulder.R":
-				shoulder_source = i
-				break
 	for i in range(wide_clip.get_track_count()):
 		var path := wide_clip.track_get_path(i)
 		if wide_clip.track_get_type(i) == Animation.TYPE_ROTATION_3D and path.get_subname_count() > 0:
 			if String(path.get_subname(path.get_subname_count() - 1)) == "Shoulder.R":
 				shoulder_wide = i
 				break
-	if not _require(shoulder_wide >= 0, "Right shoulder rotation must be generated in modified clip"):
+	if not _require(shoulder_wide >= 0, "Horizontal slash requires a generated shoulder track"):
 		return
-	if shoulder_source >= 0 and not _require(original_clip.track_get_key_count(shoulder_source) == wide_clip.track_get_key_count(shoulder_wide), "Existing shoulder timing must stay unchanged"):
+	if not _require(wide_clip.track_get_key_count(shoulder_wide) >= 20, "Shoulder swing must have enough samples"):
 		return
-	var opening_shifted := false
-	var contact_shifted := false
-	for i in range(wide_clip.track_get_key_count(shoulder_wide)):
-		var original_q := Quaternion.IDENTITY
-		if shoulder_source >= 0:
-			original_q = original_clip.track_get_key_value(shoulder_source, i)
+	var first_q: Quaternion = wide_clip.track_get_key_value(shoulder_wide, 0)
+	var last_q: Quaternion = wide_clip.track_get_key_value(shoulder_wide, wide_clip.track_get_key_count(shoulder_wide) - 1)
+	if not _require(first_q.angle_to(Quaternion.IDENTITY) < 0.01 and last_q.angle_to(Quaternion.IDENTITY) < 0.01, "Horizontal slash must return to the rest shoulder pose"):
+		return
+	var previous_q: Quaternion = first_q
+	for i in range(1, wide_clip.track_get_key_count(shoulder_wide)):
 		var adjusted_q: Quaternion = wide_clip.track_get_key_value(shoulder_wide, i)
-		var time_fraction: float = wide_clip.track_get_key_time(shoulder_wide, i) / wide_clip.length
-		var relative_q := (adjusted_q * original_q.inverse()).normalized()
-		var local_forward := relative_q * Vector3.BACK
-		if time_fraction > 0.15 and time_fraction < 0.28 and local_forward.x < -0.15:
-			opening_shifted = true
-		if time_fraction > 0.39 and time_fraction < 0.53 and local_forward.x > 0.15:
-			contact_shifted = true
-	if not _require(opening_shifted and contact_shifted, "Sword swing must steer across the frontal sector"):
-		return
-	var first_q := Quaternion.IDENTITY
-	var last_q := Quaternion.IDENTITY
-	if shoulder_source >= 0:
-		first_q = original_clip.track_get_key_value(shoulder_source, 0)
-		last_q = original_clip.track_get_key_value(shoulder_source, original_clip.track_get_key_count(shoulder_source) - 1)
-	var first_wide_q: Quaternion = wide_clip.track_get_key_value(shoulder_wide, 0)
-	var last_index := wide_clip.track_get_key_count(shoulder_wide) - 1
-	var last_wide_q: Quaternion = wide_clip.track_get_key_value(shoulder_wide, last_index)
-	if not _require(first_q.angle_to(first_wide_q) < 0.01 and last_q.angle_to(last_wide_q) < 0.01, "Shoulder must smoothly return to original pose"):
-		return
+		if not _require(previous_q.angle_to(adjusted_q) < deg_to_rad(46.0), "Horizontal slash must avoid abrupt shoulder jumps"):
+			return
+		previous_q = adjusted_q
 
 	var attack_node := blend.get_node("SwordSlash") as AnimationNodeAnimation
 	if not _require(attack_node != null and String(attack_node.animation) == "combat/WideSwordSlash", "Attack blend node must play wider clip"):
@@ -238,7 +214,37 @@ func _run_checks() -> void:
 	var collision := environment.get_node("CollisionShape3D") as CollisionShape3D
 	if not _require(collision != null and (collision.shape as BoxShape3D).size.x >= 200.0, "Expanded terrain missing"):
 		return
-	print("Gameplay smoke test passed: frontal sword sector, FPS cap, offline ping, movement, dash, world, training hits, HP and respawn.")
+	# Sample the actual sword tip in the imported rig, not only bone angles.
+	var skel := game.call("_find_skeleton", visual_node) as Skeleton3D
+	var sword_grip := skel.get_node_or_null("SwordGrip/SimpleSword") as Node3D
+	if not _require(sword_grip != null, "Test sword attachment must be present"):
+		return
+	tree.active = false
+	animator.play("combat/WideSwordSlash")
+	var tip_points: Array[Vector3] = []
+	for fraction in [0.16, 0.24, 0.32, 0.40, 0.48, 0.56, 0.64]:
+		animator.seek(wide_clip.length * fraction, true)
+		await process_frame
+		tip_points.append(visual_node.to_local(sword_grip.to_global(Vector3(0.0, 1.305, 0.0))))
+	animator.stop()
+	tree.active = true
+	print("Horizontal sword tip positions: ", tip_points)
+	var start_tip := tip_points[0]
+	var end_tip := tip_points[tip_points.size() - 1]
+	var min_height: float = start_tip.y
+	var max_height: float = start_tip.y
+	for point in tip_points:
+		min_height = minf(min_height, point.y)
+		max_height = maxf(max_height, point.y)
+	if not _require(start_tip.x - end_tip.x > 2.5, "Sword must sweep across the front of the character"):
+		return
+	if not _require(start_tip.y - end_tip.y > 0.3 and max_height - min_height < 1.0, "Sword should descend slightly, not arc vertically"):
+		return
+	for point in tip_points:
+		if not _require(point.z > 0.20, "Sword blade must remain forward during the active sweep"):
+			return
+
+	print("Gameplay smoke test passed: horizontal descending sword arc, FPS cap, offline ping, movement, dash, world, training hits, HP and respawn.")
 	quit(0)
 
 

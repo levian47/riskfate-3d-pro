@@ -25,11 +25,38 @@ const PREVIOUS_ATTACK_SWING_AMPLITUDE := 130.0 / 90.0
 const ATTACK_SWING_AMPLITUDE := PREVIOUS_ATTACK_SWING_AMPLITUDE * 1.5
 # Avoid quaternion shortest-arc wraparound when extrapolation exceeds 180°.
 const ATTACK_SWING_MAX_ANGLE := deg_to_rad(170.0)
-# Test pose steering: keep the existing swing span but move its active arc
-# from the side toward the direction the character is facing.
-const ATTACK_FORWARD_START_YAW := -50.0
-const ATTACK_FORWARD_FINISH_YAW := 38.0
-const ATTACK_FORWARD_PITCH := 15.0
+# Model-specific sampled upper-body correction for Ninja_Female.gltf (26 keys).
+# Aims the actual sword tip across the front at roughly 2.35 m -> 1.80 m
+# instead of making an overhead rainbow. The original SwordSlash is unchanged.
+# Do not reuse on another rig without re-authoring the pose.
+const SWORD_SWING_SHOULDER_KEYS := [
+	Quaternion(0.00000, 0.00000, 0.00000, 1.00000),
+	Quaternion(0.05579, -0.16007, 0.01877, 0.98535),
+	Quaternion(0.03319, -0.46755, -0.05720, 0.88149),
+	Quaternion(0.06778, -0.46041, -0.03828, 0.88429),
+	Quaternion(0.06728, -0.48253, -0.04301, 0.87223),
+	Quaternion(0.09006, -0.51492, -0.04709, 0.85120),
+	Quaternion(0.12142, -0.63181, -0.05165, 0.76381),
+	Quaternion(0.11679, -0.81182, -0.10726, 0.56197),
+	Quaternion(0.09109, -0.91500, -0.22541, 0.32198),
+	Quaternion(0.12286, -0.91035, -0.38521, 0.08816),
+	Quaternion(-0.24093, 0.80074, 0.54245, 0.08072),
+	Quaternion(-0.40232, 0.70416, 0.56347, 0.15746),
+	Quaternion(-0.51044, 0.64519, 0.53381, 0.19553),
+	Quaternion(-0.56679, 0.59795, 0.52729, 0.20779),
+	Quaternion(-0.59542, 0.55723, 0.55011, 0.17985),
+	Quaternion(-0.59664, 0.51963, 0.59989, 0.11895),
+	Quaternion(-0.58546, 0.46148, 0.66379, 0.06048),
+	Quaternion(-0.57446, 0.38807, 0.72021, 0.02645),
+	Quaternion(-0.55358, 0.25834, 0.76315, 0.21076),
+	Quaternion(-0.49112, 0.12240, 0.70593, 0.49545),
+	Quaternion(-0.36586, 0.01692, 0.52527, 0.76808),
+	Quaternion(-0.20235, -0.02595, 0.28099, 0.93778),
+	Quaternion(-0.05979, -0.01609, 0.07844, 0.99499),
+	Quaternion(0.00000, 0.00000, 0.00000, 1.00000),
+	Quaternion(0.00000, 0.00000, 0.00000, 1.00000),
+	Quaternion(0.00000, 0.00000, 0.00000, 1.00000),
+]
 # Prototype combat parameters. Not approved balance values.
 const TRAINING_HIT_DAMAGE := 25
 const TRAINING_HIT_REACH := 3.1
@@ -357,13 +384,12 @@ func _find_clip(short_name: String) -> String:
 
 
 func _shoulder_strike_correction(phase: float) -> Quaternion:
-	# Godot can optimize an unchanging glTF shoulder animation track away.
-	# Corrected rotations in a generated track are relative to its rest pose.
-	var influence := smoothstep(0.02, 0.16, phase) * (1.0 - smoothstep(0.65, 0.98, phase))
-	var sweep_progress := smoothstep(0.16, 0.45, phase)
-	var yaw := deg_to_rad(lerpf(ATTACK_FORWARD_START_YAW, ATTACK_FORWARD_FINISH_YAW, sweep_progress) * influence)
-	var pitch := deg_to_rad(ATTACK_FORWARD_PITCH * influence)
-	return Quaternion(Vector3.RIGHT, pitch) * Quaternion(Vector3.UP, yaw)
+	# Interpolate model-specific sampled poses; Godot may omit constant
+	# glTF shoulder tracks, so the generated animation adds this track.
+	var key_position := clampf(phase, 0.0, 1.0) * float(SWORD_SWING_SHOULDER_KEYS.size() - 1)
+	var index := mini(int(floorf(key_position)), SWORD_SWING_SHOULDER_KEYS.size() - 2)
+	var amount := key_position - float(index)
+	return SWORD_SWING_SHOULDER_KEYS[index].slerp(SWORD_SWING_SHOULDER_KEYS[index + 1], amount).normalized()
 
 
 func _make_wider_sword_slash(source_name: String) -> String:
