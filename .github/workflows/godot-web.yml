@@ -12,11 +12,13 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: false
+  # Latest main commit supersedes a stale or stuck Web build.
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 8
     steps:
       - name: Check out game
         uses: actions/checkout@v4
