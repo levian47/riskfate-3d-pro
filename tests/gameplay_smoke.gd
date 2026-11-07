@@ -1,5 +1,7 @@
 extends SceneTree
 
+const ANIMATION_BUILDER := preload("res://characters/player/animation_builder.gd")
+
 func _initialize() -> void:
 	call_deferred("_run_checks")
 
@@ -45,13 +47,10 @@ func _run_checks() -> void:
 
 	# Animation graph ownership moved out of main.gd without changing
 	# clip names, upper-body masking or the selected test attack.
-	var animation_builder := load("res://characters/player/animation_builder.gd") as Script
-	if not _require(animation_builder != null, "Player animation builder must be loadable"):
-		return
 	if not _require(is_equal_approx(float(tree.get("parameters/AttackSpeed/scale")), 1.65), "Animation builder must preserve the accepted sword attack speed"):
 		return
 	for state in ["Idle", "Walk", "Run"]:
-		var loop_name: String = animation_builder.find_clip(animator, state)
+		var loop_name: String = ANIMATION_BUILDER.find_clip(animator, state)
 		if not _require(not loop_name.is_empty() and animator.get_animation(loop_name).loop_mode == Animation.LOOP_LINEAR, "Movement loops must survive animation builder extraction: " + state):
 			return
 	var sword_name := ""
