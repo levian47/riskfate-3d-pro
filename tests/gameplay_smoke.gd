@@ -300,6 +300,27 @@ func _run_checks() -> void:
 			sweeping_tips = points
 	animator.stop()
 	tree.active = true
+	# Inspect startup pose and early frame continuity; the old sweeping
+	# clip inherited a high initial pose from the imported SwordSlash.
+	var start_traces: Dictionary = {}
+	for clip_name in ["combat_mirror/WideSwordSlashMirror", "combat_sweeping/SweepingSwordSlash"]:
+		var sampled_clip := animator.get_animation(clip_name)
+		var first_positions: Array[Vector3] = []
+		animator.play(clip_name)
+		for fraction in [0.0, 0.04, 0.08, 0.12, 0.16, 0.20]:
+			animator.seek(sampled_clip.length * fraction, true)
+			await process_frame
+			first_positions.append(visual_node.to_local(sword_grip.to_global(Vector3(0.0, 1.305, 0.0))))
+		start_traces[clip_name] = first_positions
+	animator.stop()
+	var standard_start: Array[Vector3] = start_traces["combat_mirror/WideSwordSlashMirror"]
+	var sweeping_start: Array[Vector3] = start_traces["combat_sweeping/SweepingSwordSlash"]
+	print("Standard early sword positions: ", standard_start)
+	print("Sweeping early sword positions: ", sweeping_start)
+	var early_max_step := 0.0
+	for step in range(1, sweeping_start.size()):
+		early_max_step = maxf(early_max_step, sweeping_start[step].distance_to(sweeping_start[step - 1]))
+	print("Sweeping early maximum 4%-interval sword travel: ", early_max_step)
 	print("Standard sword tip positions in hero local space: ", standard_tips)
 	print("Sweeping sword tip positions in hero local space: ", sweeping_tips)
 	var standard_min_x := INF
