@@ -524,7 +524,7 @@ func _setup_animation_tree(model: Node) -> void:
 	var attack_speed := AnimationNodeTimeScale.new()
 	var attack_seek := AnimationNodeTimeSeek.new()
 	var attack_layer := AnimationNodeOneShot.new()
-	attack_layer.fadein_time = 0.06
+	attack_layer.fadein_time = 0.0
 	attack_layer.fadeout_time = 0.10
 	attack_layer.filter_enabled = true
 	var filtered := 0
