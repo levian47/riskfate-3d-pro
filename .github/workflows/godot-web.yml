@@ -28,7 +28,7 @@ jobs:
   # PR events never deploy Pages directly. Ask the trusted main workflow to
   # rebuild production and previews together when an opted-in PR changes.
   refresh_preview:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.body, 'riskfate:web-preview')
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.body, '<!-- riskfate:web-preview -->')
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -37,7 +37,7 @@ jobs:
       - name: Request main Pages preview refresh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run "Godot Web / GitHub Pages" --ref main
+        run: gh workflow run "Godot Web / GitHub Pages" --repo "$GITHUB_REPOSITORY" --ref main
 
   build:
     if: github.event_name != 'pull_request'
@@ -129,7 +129,7 @@ jobs:
           gh api "repos/${GITHUB_REPOSITORY}/pulls?state=open&per_page=50" \
             | jq -r --arg repo "${GITHUB_REPOSITORY}" '
               .[] | select(.head.repo.full_name == $repo)
-                  | select((.body // "") | contains("riskfate:web-preview"))
+                  | select((.body // "") | startswith("<!-- riskfate:web-preview -->"))
                   | [.number, .head.sha] | join(" ")
             ' | sed -n '1,2p' > "$RUNNER_TEMP/riskfate-web-previews.txt"
 
