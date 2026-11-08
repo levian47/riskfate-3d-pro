@@ -23,6 +23,7 @@ var weapon_finger := -1
 var naruto_finger := -1
 var skeleton_finger := -1
 var materials_finger := -1
+var ninja_visual_controls := true # Disable Ninja-only MAT/RUN buttons for VRoid.
 var naruto_run_enabled := false
 var skeleton_enabled := false
 var material_variant := 0
@@ -131,11 +132,11 @@ func _press(finger: int, point: Vector2) -> void:
 		weapon_finger = finger
 		weapon_requested.emit()
 		queue_redraw()
-	elif materials_finger == -1 and point.distance_to(layout["materials"]) <= layout["materials_radius"] * 1.20:
+	elif ninja_visual_controls and materials_finger == -1 and point.distance_to(layout["materials"]) <= layout["materials_radius"] * 1.20:
 		materials_finger = finger
 		materials_requested.emit()
 		queue_redraw()
-	elif naruto_finger == -1 and point.distance_to(layout["naruto"]) <= layout["naruto_radius"] * 1.20:
+	elif ninja_visual_controls and naruto_finger == -1 and point.distance_to(layout["naruto"]) <= layout["naruto_radius"] * 1.20:
 		naruto_finger = finger
 		naruto_requested.emit()
 		queue_redraw()
@@ -233,16 +234,17 @@ func _draw() -> void:
 	_draw_button(weapon_center, weapon_r, Color(0.33, 0.27, 0.44, 0.94 if weapon_finger != -1 else 0.83), Color(0.90, 0.82, 1.0, 0.96))
 	_draw_label(weapon_center + Vector2(0, -weapon_r * 0.18), "WPN", weapon_r * 0.32)
 	_draw_label(weapon_center + Vector2(0, weapon_r * 0.28), "%d/5" % weapon_index, weapon_r * 0.34)
-	var material_center: Vector2 = layout["materials"]
-	var material_radius: float = layout["materials_radius"]
-	_draw_button(material_center, material_radius, Color(0.23, 0.37, 0.31, 0.93 if materials_finger != -1 else 0.77), Color(0.77, 0.96, 0.86, 0.96))
-	_draw_label(material_center + Vector2(0, -material_radius * 0.18), "MAT", material_radius * 0.30)
-	_draw_label(material_center + Vector2(0, material_radius * 0.28), ["O", "A", "B"][material_variant], material_radius * 0.36)
-	var naruto_center: Vector2 = layout["naruto"]
-	var naruto_r: float = layout["naruto_radius"]
-	_draw_button(naruto_center, naruto_r, Color(0.27, 0.45, 0.24, 0.95 if naruto_run_enabled else 0.65), Color(0.82, 0.98, 0.77, 0.94))
-	_draw_label(naruto_center + Vector2(0, -naruto_r * 0.17), "RUN", naruto_r * 0.31)
-	_draw_label(naruto_center + Vector2(0, naruto_r * 0.27), "N4" if naruto_run_enabled else "OFF", naruto_r * 0.27)
+	if ninja_visual_controls:
+		var material_center: Vector2 = layout["materials"]
+		var material_radius: float = layout["materials_radius"]
+		_draw_button(material_center, material_radius, Color(0.23, 0.37, 0.31, 0.93 if materials_finger != -1 else 0.77), Color(0.77, 0.96, 0.86, 0.96))
+		_draw_label(material_center + Vector2(0, -material_radius * 0.18), "MAT", material_radius * 0.30)
+		_draw_label(material_center + Vector2(0, material_radius * 0.28), ["O", "A", "B"][material_variant], material_radius * 0.36)
+		var naruto_center: Vector2 = layout["naruto"]
+		var naruto_r: float = layout["naruto_radius"]
+		_draw_button(naruto_center, naruto_r, Color(0.27, 0.45, 0.24, 0.95 if naruto_run_enabled else 0.65), Color(0.82, 0.98, 0.77, 0.94))
+		_draw_label(naruto_center + Vector2(0, -naruto_r * 0.17), "RUN", naruto_r * 0.31)
+		_draw_label(naruto_center + Vector2(0, naruto_r * 0.27), "N4" if naruto_run_enabled else "OFF", naruto_r * 0.27)
 	var skeleton_center: Vector2 = layout["skeleton"]
 	var skeleton_r: float = layout["skeleton_radius"]
 	_draw_button(skeleton_center, skeleton_r, Color(0.16, 0.46, 0.47, 0.92 if skeleton_enabled else 0.70), Color(0.58, 1.0, 0.91, 0.98))
