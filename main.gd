@@ -11,6 +11,7 @@ const MOVE_ANIMATION_THRESHOLD := 0.45
 const TOUCH_HUD_SCRIPT := preload("res://touch_hud.gd")
 const HUD_BUILDER := preload("res://ui/hud_builder.gd")
 const SKELETON_DEBUG := preload("res://ui/skeleton_debug.gd")
+const CROWD_BENCHMARK := preload("res://tests/ninja_crowd_benchmark.gd")
 const ANIMATION_BUILDER := preload("res://characters/player/animation_builder.gd")
 const COMBAT_CONTROLLER := preload("res://characters/player/combat_controller.gd")
 const WEAPON_VISUALS := preload("res://characters/player/weapon_visuals.gd")
@@ -22,7 +23,9 @@ var hero: CharacterBody3D
 var visual: Node3D
 var ninja_mesh: MeshInstance3D
 var ninja_mesh_variants: Array[Mesh] = []
-var material_variant_index := 0
+var material_variant_index := 1 # Approved A: culling, original retained as control
+var crowd_benchmark = CROWD_BENCHMARK.new()
+var crowd_button: Button
 var animator: AnimationPlayer
 var camera: Camera3D
 var skeleton_debug: MeshInstance3D
@@ -47,6 +50,7 @@ func _ready() -> void:
 	_build_hero()
 	_build_camera()
 	_build_ui()
+	crowd_benchmark.initialize(self)
 
 func _process(delta: float) -> void:
 	# Sample twice per second to keep the counter readable and inexpensive.
@@ -95,6 +99,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_K:
 		_toggle_skeleton_debug()
 		return
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F7:
+		_cycle_crowd_benchmark()
+		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_M:
 		_cycle_ninja_materials()
 		return
@@ -134,12 +141,22 @@ func _toggle_skeleton_debug() -> void:
 func _cycle_ninja_materials() -> void:
 	if ninja_mesh == null or ninja_mesh_variants.size() != 3:
 		return
-	material_variant_index = (material_variant_index + 1) % ninja_mesh_variants.size()
+	material_variant_index = (material_variant_index + 1) % 2 # B rejected after visual QA
 	ninja_mesh.mesh = ninja_mesh_variants[material_variant_index]
+	crowd_benchmark.set_mesh(ninja_mesh.mesh)
 	if touch_hud != null:
 		touch_hud.material_variant = material_variant_index
 		touch_hud.queue_redraw()
 	_update_weapon_display()
+
+
+func _cycle_crowd_benchmark() -> void:
+	crowd_benchmark.count_index = (crowd_benchmark.count_index + 1) % CROWD_BENCHMARK.COUNTS.size()
+	var count: int = CROWD_BENCHMARK.COUNTS[crowd_benchmark.count_index]
+	crowd_benchmark.set_count(count, MODEL, ninja_mesh.mesh)
+	camera.size = 40.0 if count > 0 else camera_zoom
+	if crowd_button != null:
+		crowd_button.text = "LOAD %d" % count
 
 
 func _find_model_mesh(root: Node) -> MeshInstance3D:
@@ -170,6 +187,8 @@ func _setup_material_comparison(model: Node3D) -> void:
 	if ninja_mesh_variants.size() != 3:
 		push_warning("Ninja material comparison incomplete")
 		return
+	# Preserve original animated rig; render approved A geometry by default.
+	ninja_mesh.mesh = ninja_mesh_variants[material_variant_index]
 	# Godot 4.7 glTF import does not reliably activate vertex colors
 	# as albedo. Make the intended per-vertex RGB explicit for variant B.
 	var one_surface_mesh := ninja_mesh_variants[2].duplicate() as ArrayMesh
@@ -213,7 +232,8 @@ func _toggle_fullscreen() -> void:
 func _cycle_mobile_zoom() -> void:
 	mobile_zoom_index = (mobile_zoom_index + 1) % MOBILE_ZOOM_LEVELS.size()
 	camera_zoom = float(MOBILE_ZOOM_LEVELS[mobile_zoom_index])
-	camera.size = camera_zoom
+	if crowd_benchmark.count_index == 0:
+		camera.size = camera_zoom
 	if touch_hud != null:
 		touch_hud.zoom_level = mobile_zoom_index + 1
 		touch_hud.queue_redraw()
@@ -314,6 +334,17 @@ func _build_ui() -> void:
 	canvas.name = "HUD"
 	add_child(canvas)
 	fps_label = HUD_BUILDER.build_fps_counter(canvas)
+	crowd_button = Button.new()
+	crowd_button.name = "CrowdBenchmarkButton"
+	crowd_button.text = "LOAD 0"
+	crowd_button.anchor_left = 0.5
+	crowd_button.anchor_right = 0.5
+	crowd_button.offset_left = -76.0
+	crowd_button.offset_right = 76.0
+	crowd_button.offset_top = 54.0
+	crowd_button.offset_bottom = 97.0
+	crowd_button.pressed.connect(_cycle_crowd_benchmark)
+	canvas.add_child(crowd_button)
 	if DisplayServer.is_touchscreen_available():
 		# Multiple fingers are handled independently in touch_hud.gd.
 		touch_hud = TOUCH_HUD_SCRIPT.new()
@@ -326,6 +357,7 @@ func _build_ui() -> void:
 		touch_hud.fullscreen_requested.connect(_toggle_fullscreen)
 		touch_hud.weapon_requested.connect(_cycle_weapon)
 		touch_hud.materials_requested.connect(_cycle_ninja_materials)
+		touch_hud.material_variant = material_variant_index
 		touch_hud.naruto_requested.connect(_toggle_naruto_run)
 		touch_hud.skeleton_requested.connect(_toggle_skeleton_debug)
 		_update_weapon_display()
