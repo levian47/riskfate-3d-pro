@@ -22,7 +22,7 @@ var hero: CharacterBody3D
 var visual: Node3D
 var ninja_mesh: MeshInstance3D
 var ninja_mesh_variants: Array[Mesh] = []
-var material_variant_index := 0
+var material_variant_index := 1 # Approved A: culling, original retained as control
 var animator: AnimationPlayer
 var camera: Camera3D
 var skeleton_debug: MeshInstance3D
@@ -170,6 +170,8 @@ func _setup_material_comparison(model: Node3D) -> void:
 	if ninja_mesh_variants.size() != 3:
 		push_warning("Ninja material comparison incomplete")
 		return
+	# Preserve original animated rig; render approved A geometry by default.
+	ninja_mesh.mesh = ninja_mesh_variants[material_variant_index]
 	# Godot 4.7 glTF import does not reliably activate vertex colors
 	# as albedo. Make the intended per-vertex RGB explicit for variant B.
 	var one_surface_mesh := ninja_mesh_variants[2].duplicate() as ArrayMesh
@@ -326,6 +328,7 @@ func _build_ui() -> void:
 		touch_hud.fullscreen_requested.connect(_toggle_fullscreen)
 		touch_hud.weapon_requested.connect(_cycle_weapon)
 		touch_hud.materials_requested.connect(_cycle_ninja_materials)
+		touch_hud.material_variant = material_variant_index
 		touch_hud.naruto_requested.connect(_toggle_naruto_run)
 		touch_hud.skeleton_requested.connect(_toggle_skeleton_debug)
 		_update_weapon_display()
