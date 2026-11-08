@@ -756,7 +756,7 @@ func _run_checks() -> void:
 		return
 	if not _require(int(game.get("material_variant_index")) == 1 and candidate_mesh.mesh == candidates[1], "Ninja must load approved A at startup"):
 		return
-	for expected in [2, 0, 1]:
+	for expected in [0, 1]:
 		game.call("_cycle_ninja_materials")
 		if not _require(int(game.get("material_variant_index")) == expected and candidate_mesh.mesh == candidates[expected], "Ninja material switching must preserve the original animated mesh node"):
 			return
@@ -764,6 +764,23 @@ func _run_checks() -> void:
 		var material_touch := game.get("touch_hud") as Control
 		if not _require(int(material_touch.material_variant) == 1, "Mobile material indicator must show approved A"):
 			return
+	# Explicit opt-in benchmark: identical skinned Ninja models, rendered with
+	# the selected mesh, with no server or physical collision processing.
+	var bench = game.get("crowd_benchmark")
+	var bench_button := game.get_node_or_null("HUD/CrowdBenchmarkButton") as Button
+	if not _require(bench != null and bench_button != null and bench_button.text == "LOAD 0", "Crowd benchmark must initialize disabled"):
+		return
+	for amount in [10, 30, 60, 100, 0]:
+		game.call("_cycle_crowd_benchmark")
+		var actor_nodes: Array = bench.get("actors")
+		var crowd_meshes: Array = bench.get("mesh_nodes")
+		if not _require(actor_nodes.size() == amount and crowd_meshes.size() == amount and bench_button.text == "LOAD %d" % amount, "Crowd benchmark should create exactly %d actors" % amount):
+			return
+		if amount > 0:
+			if not _require(is_equal_approx(gameplay_camera.size, 40.0) and (crowd_meshes[0] as MeshInstance3D).mesh == candidates[1], "Crowd benchmark must use A and a wide camera"):
+				return
+	if not _require(is_equal_approx(gameplay_camera.size, 12.0), "Crowd benchmark must restore normal zoom"):
+		return
 	print("Gameplay smoke test passed: independent baked sword resources retain approved poses; active Sweeping, movement, dash, world, training hits, HP and respawn.")
 	quit(0)
 
