@@ -4,6 +4,12 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      build_android:
+        description: 'Зібрати Android APK вручну (тільки за прямою командою власника)'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -95,17 +101,20 @@ jobs:
           "$GODOT_BIN" --headless --main-pack "$GITHUB_WORKSPACE/dist/builds/${GITHUB_SHA:0:12}/index.pck" --script res://tests/gameplay_smoke.gd
 
       - name: Set up Java 17 for native Android export
+        if: github.event_name == 'workflow_dispatch' && inputs.build_android == true
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Set up Android SDK tools
+        if: github.event_name == 'workflow_dispatch' && inputs.build_android == true
         uses: android-actions/setup-android@v4
         with:
           packages: 'platform-tools build-tools;35.0.1 platforms;android-35'
 
       - name: Prepare Android SDK and temporary test signing key
+        if: github.event_name == 'workflow_dispatch' && inputs.build_android == true
         shell: bash
         run: |
           set -euo pipefail
@@ -120,6 +129,7 @@ jobs:
           echo 'GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=android' >> "$GITHUB_ENV"
 
       - name: Export and verify both signed Android benchmark APKs
+        if: github.event_name == 'workflow_dispatch' && inputs.build_android == true
         shell: bash
         run: |
           set -euo pipefail
@@ -138,6 +148,7 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.1/aapt" dump badging "$dir/riskfate-classic.apk" | grep -q "com.levian47.riskfate3dprobenchclassic"
 
       - name: Upload standalone Android comparison APKs
+        if: github.event_name == 'workflow_dispatch' && inputs.build_android == true
         uses: actions/upload-artifact@v4
         with:
           name: Riskfate-Android-Compare-Optimized-Classic
