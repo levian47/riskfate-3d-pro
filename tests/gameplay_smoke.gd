@@ -773,7 +773,7 @@ func _run_checks() -> void:
 	var atlas_mat := crowd_atlas.surface_get_material(0) as StandardMaterial3D
 	if not _require(atlas_mat != null and atlas_mat.albedo_texture != null, "Crowd atlas must preserve six colors through a real color texture"):
 		return
-	var atlas_uv := crowd_atlas.surface_get_arrays(0)[Mesh.ARRAY_TEX_UV]
+	var atlas_uv: PackedVector2Array = crowd_atlas.surface_get_arrays(0)[Mesh.ARRAY_TEX_UV]
 	if not _require(atlas_uv.size() == 9948, "Crowd atlas UVs must cover every original skinned vertex"):
 		return
 	var bench = game.get("crowd_benchmark")
