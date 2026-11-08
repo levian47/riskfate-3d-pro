@@ -64,8 +64,10 @@ func _layout() -> Dictionary:
 	var scale := clampf(minf(width / 1280.0, height / 720.0), 0.55, 1.5)
 	var margin := 36.0 * scale
 	var stick_radius := 107.5 * scale # 86 * 1.25
-	var zoom_radius := 43.0 * scale
-	var fullscreen_radius := 43.0 * scale
+	# Secondary controls remain finger-accessible (at least 48px diameter)
+	# while avoiding the oversized debug buttons of the first prototype.
+	var zoom_radius := maxf(24.0, 30.0 * scale)
+	var fullscreen_radius := maxf(24.0, 30.0 * scale)
 	var attack_radius := 70.0 * scale
 	var jump_radius := 46.0 * scale
 	var dash_radius := 46.0 * scale
