@@ -764,52 +764,64 @@ func _run_checks() -> void:
 		var material_touch := game.get("touch_hud") as Control
 		if not _require(int(material_touch.material_variant) == 1, "Mobile material indicator must show approved A"):
 			return
-	# Explicit opt-in benchmark: identical skinned Ninja models, rendered with
-	# the selected mesh, with no server or physical collision processing.
+	# Full automated benchmark state matrix: every supported crowd size,
+	# every profiling mode and both approved material choices. This checks
+	# animation/shadow/geometry state and UI wiring, not actual device FPS.
 	var bench = game.get("crowd_benchmark")
 	var bench_button := game.get_node_or_null("HUD/CrowdBenchmarkButton") as Button
-	if not _require(bench != null and bench_button != null and bench_button.text == "LOAD 0", "Crowd benchmark must initialize disabled"):
+	var mode_button := game.get_node_or_null("HUD/CrowdModeButton") as Button
+	var draw_stats := game.get_node_or_null("HUD/CrowdDrawStats") as Label
+	if not _require(bench != null and bench_button != null and mode_button != null and draw_stats != null, "Benchmark and diagnostic HUD controls must exist"):
 		return
-	for amount in [10, 30, 60, 100, 0]:
-		game.call("_cycle_crowd_benchmark")
+	if not _require(bench_button.text == "LOAD 0" and mode_button.text == "MODE RUN" and not draw_stats.visible, "Crowd diagnostics must start disabled"):
+		return
+	if not _require(bench_button.pressed.is_connected(Callable(game, "_cycle_crowd_benchmark")) and mode_button.pressed.is_connected(Callable(game, "_cycle_crowd_mode")), "Crowd diagnostic buttons must be wired to real callbacks"):
+		return
+	var matrix_cases := 0
+	for count in [10, 30, 60, 100, 0]:
+		bench_button.pressed.emit()
 		var actor_nodes: Array = bench.get("actors")
 		var crowd_meshes: Array = bench.get("mesh_nodes")
-		if not _require(actor_nodes.size() == amount and crowd_meshes.size() == amount and bench_button.text == "LOAD %d" % amount, "Crowd benchmark should create exactly %d actors" % amount):
+		var animation_players: Array = bench.get("players")
+		var original_shadows: Array = bench.get("original_shadows")
+		if not _require(actor_nodes.size() == count and crowd_meshes.size() == count and animation_players.size() == count and original_shadows.size() == count and bench_button.text == "LOAD %d" % count, "All crowd arrays and LOAD text must match %d" % count):
 			return
-		if amount > 0:
-			if not _require(is_equal_approx(gameplay_camera.size, 40.0) and (crowd_meshes[0] as MeshInstance3D).mesh == candidates[1], "Crowd benchmark must use A and a wide camera"):
+		if count == 0:
+			if not _require(not draw_stats.visible and is_equal_approx(gameplay_camera.size, 12.0), "LOAD 0 must hide draw stats and restore camera size"):
 				return
-	# Isolate animation cost from rendering without altering the hero.
-	var mode_button := game.get_node_or_null("HUD/CrowdModeButton") as Button
-	if not _require(mode_button != null and mode_button.text == "MODE RUN", "Benchmark profiling mode must start in RUN"):
+			continue
+		if not _require(draw_stats.visible and is_equal_approx(gameplay_camera.size, 40.0), "Active crowd must show draw stats and use wide camera"):
+			return
+		# Renderer stats are updated by the normal HUD tick. Values may be zero
+		# under headless Godot and are intentionally not used as a GPU benchmark.
+		game.call("_process", 0.51)
+		if not _require(draw_stats.text.begins_with("Draws: ") and draw_stats.text.contains("shadow"), "Visible and shadow draw counters must update"):
+			return
+		for mode_name in ["RUN", "PAUSE", "HIDE", "NO SHADOW"]:
+			if mode_name != "RUN":
+				mode_button.pressed.emit()
+			if not _require(mode_button.text == "MODE %s" % mode_name, "MODE control must enter %s" % mode_name):
+				return
+			for material_index in [0, 1]:
+				game.call("_cycle_ninja_materials")
+				if not _require(int(game.get("material_variant_index")) == material_index and candidate_mesh.mesh == candidates[material_index], "Hero material must match A/O control during %s" % mode_name):
+					return
+				for i in range(count):
+					var crowd_mesh := crowd_meshes[i] as MeshInstance3D
+					var crowd_player := animation_players[i] as AnimationPlayer
+					var expected_shadow := int(GeometryInstance3D.SHADOW_CASTING_SETTING_OFF) if mode_name == "NO SHADOW" else int(original_shadows[i])
+					if not _require(crowd_mesh != null and crowd_player != null and crowd_mesh.mesh == candidates[material_index], "All %d crowd meshes must follow MAT %d" % [count, material_index]):
+						return
+					if not _require(crowd_mesh.visible == (mode_name != "HIDE") and crowd_player.is_playing() == (mode_name != "PAUSE") and int(crowd_mesh.cast_shadow) == expected_shadow, "Crowd actor %d failed %s/MAT %d at LOAD %d" % [i, mode_name, material_index, count]):
+						return
+				matrix_cases += 1
+		# Cycling after NO SHADOW must restore original shadow settings.
+		mode_button.pressed.emit()
+		if not _require(mode_button.text == "MODE RUN" and int((crowd_meshes[0] as MeshInstance3D).cast_shadow) == int(original_shadows[0]), "RUN must restore shadows after NO SHADOW"):
+			return
+	if not _require(matrix_cases == 32 and int(game.get("material_variant_index")) == 1, "Benchmark must cover all 32 nonzero crowd/mode/material combinations and return to A"):
 		return
-	var draw_stats := game.get_node_or_null("HUD/CrowdDrawStats") as Label
-	if not _require(draw_stats != null and not draw_stats.visible, "Draw call stats must be hidden without a crowd"):
-		return
-	game.call("_cycle_crowd_benchmark") # 10 actors
-	var diagnostics: Array = bench.get("mesh_nodes")
-	var players: Array = bench.get("players")
-	if not _require(players.size() == 10 and draw_stats.visible and (players[0] as AnimationPlayer).is_playing(), "RUN mode must show draw call counters and animate benchmark actors"):
-		return
-	game.call("_cycle_crowd_mode") # PAUSE: visible static pose
-	if not _require(mode_button.text == "MODE PAUSE" and (diagnostics[0] as MeshInstance3D).visible and not (players[0] as AnimationPlayer).is_playing(), "PAUSE must preserve rendering and stop animations"):
-		return
-	game.call("_cycle_crowd_mode") # HIDE: invisible but animated
-	if not _require(mode_button.text == "MODE HIDE" and not (diagnostics[0] as MeshInstance3D).visible and (players[0] as AnimationPlayer).is_playing(), "HIDE must isolate animation without crowd geometry"):
-		return
-	var original_shadows: Array = bench.get("original_shadows")
-	game.call("_cycle_crowd_mode") # NO SHADOW: visible and animated, no crowd shadow passes
-	if not _require(mode_button.text == "MODE NO SHADOW" and (diagnostics[0] as MeshInstance3D).visible and (players[0] as AnimationPlayer).is_playing() and (diagnostics[0] as MeshInstance3D).cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "NO SHADOW must keep animations and geometry while disabling crowd shadow casting"):
-		return
-	game.call("_cycle_crowd_mode") # RUN: restore visibility, motion and original shadow settings
-	if not _require(mode_button.text == "MODE RUN" and (diagnostics[0] as MeshInstance3D).visible and (players[0] as AnimationPlayer).is_playing() and int((diagnostics[0] as MeshInstance3D).cast_shadow) == int(original_shadows[0]), "RUN must restore geometry, motion and original shadow casting"):
-		return
-	for unused in range(4):
-		game.call("_cycle_crowd_benchmark") # 30/60/100/0
-	if not _require(not draw_stats.visible, "Draw counters must hide when LOAD returns to zero"):
-		return
-	if not _require(is_equal_approx(gameplay_camera.size, 12.0), "Crowd benchmark must restore normal zoom"):
-		return
+	print("Crowd diagnostics matrix passed: 4 nonzero loads x 4 modes x 2 material variants, plus LOAD 0 cleanup.")
 	print("Gameplay smoke test passed: independent baked sword resources retain approved poses; active Sweeping, movement, dash, world, training hits, HP and respawn.")
 	quit(0)
 
