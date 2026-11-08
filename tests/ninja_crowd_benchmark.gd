@@ -28,7 +28,7 @@ func set_count(target: int, scene: PackedScene, mesh: Mesh) -> void:
 		return
 	target = clampi(target, 0, 100)
 	while actors.size() > target:
-		var actor := actors.pop_back()
+		var actor: Node3D = actors.pop_back()
 		mesh_nodes.pop_back()
 		root.remove_child(actor)
 		actor.queue_free()
