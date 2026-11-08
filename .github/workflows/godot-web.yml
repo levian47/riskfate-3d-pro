@@ -18,7 +18,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 15
     steps:
       - name: Check out game
         uses: actions/checkout@v4
@@ -88,6 +88,47 @@ jobs:
           cd "$RUNNER_TEMP"
           "$GODOT_BIN" --headless --main-pack "$GITHUB_WORKSPACE/dist/builds/${GITHUB_SHA:0:12}/index.pck" --script res://tests/gameplay_smoke.gd
 
+      - name: Set up Java 17 for native Android export
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Prepare Android SDK and temporary test signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          command -v sdkmanager
+          sdkmanager --install 'platform-tools' 'build-tools;35.0.1' 'platforms;android-35'
+          # This is a temporary debug key only; never use it to sign release APKs.
+          keytool -genkeypair -noprompt -keystore "$RUNNER_TEMP/riskfate-debug.keystore" \
+            -storepass android -keypass android -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 -validity 3650 -dname 'CN=Riskfate Test,O=Riskfate,C=UA'
+          echo "GODOT_ANDROID_KEYSTORE_DEBUG_PATH=$RUNNER_TEMP/riskfate-debug.keystore" >> "$GITHUB_ENV"
+          echo 'GODOT_ANDROID_KEYSTORE_DEBUG_USER=androiddebugkey' >> "$GITHUB_ENV"
+          echo 'GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=android' >> "$GITHUB_ENV"
+
+      - name: Export signed Android test APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          revision="${GITHUB_SHA:0:12}"
+          apk="$PWD/dist/builds/$revision/riskfate-3d-pro-test.apk"
+          "$GODOT_BIN" --headless --path . --export-debug 'Android Test' "$apk"
+          test -s "$apk"
+          unzip -tq "$apk"
+          "$ANDROID_HOME/build-tools/35.0.1/apksigner" verify --verbose "$apk"
+          "$ANDROID_HOME/build-tools/35.0.1/aapt" dump badging "$apk" | head -n 6
+          echo "Android test APK: $(stat -c %s "$apk") bytes"
+
+      - name: Upload standalone Android APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Riskfate-3D-Pro-Android-test
+          path: dist/builds/*/riskfate-3d-pro-test.apk
+          if-no-files-found: error
+          retention-days: 30
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
