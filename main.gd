@@ -12,7 +12,6 @@ const MOVE_ANIMATION_THRESHOLD := 0.45
 const TOUCH_HUD_SCRIPT := preload("res://touch_hud.gd")
 const HUD_BUILDER := preload("res://ui/hud_builder.gd")
 const SKELETON_DEBUG := preload("res://ui/skeleton_debug.gd")
-const ASSASSIN_BUILDER := preload("res://characters/player/original_assassin.gd")
 const CROWD_BENCHMARK := preload("res://tests/ninja_crowd_benchmark.gd")
 const ANIMATION_BUILDER := preload("res://characters/player/animation_builder.gd")
 const COMBAT_CONTROLLER := preload("res://characters/player/combat_controller.gd")
@@ -26,9 +25,6 @@ var visual: Node3D
 var ninja_mesh: MeshInstance3D
 var ninja_mesh_variants: Array[Mesh] = []
 var crowd_atlas_mesh: Mesh
-var original_assassin_mesh: Mesh
-var original_assassin_active := false
-var assassin_toggle_button: Button
 var material_variant_index := 1 # Approved A: culling, original retained as control
 var crowd_benchmark = CROWD_BENCHMARK.new()
 var crowd_button: Button
@@ -59,7 +55,6 @@ func _ready() -> void:
 	_build_environment()
 	_build_hero()
 	_init_crowd_atlas()
-	original_assassin_mesh = ASSASSIN_BUILDER.new().build_mesh()
 	_build_camera()
 	_build_ui()
 	crowd_benchmark.initialize(self)
@@ -125,9 +120,6 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F9:
 		_toggle_fps_limit()
 		return
-	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_H:
-		_toggle_original_assassin()
-		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_M:
 		_cycle_ninja_materials()
 		return
@@ -168,22 +160,11 @@ func _cycle_ninja_materials() -> void:
 	if ninja_mesh == null or ninja_mesh_variants.size() != 3:
 		return
 	material_variant_index = (material_variant_index + 1) % 2 # B rejected after visual QA
-	if not original_assassin_active:
-		ninja_mesh.mesh = ninja_mesh_variants[material_variant_index]
+	ninja_mesh.mesh = ninja_mesh_variants[material_variant_index]
 	# Keep the crowd on its independently optimized one-surface palette mesh.
 	if touch_hud != null:
 		touch_hud.material_variant = material_variant_index
 		touch_hud.queue_redraw()
-	_update_weapon_display()
-
-
-func _toggle_original_assassin() -> void:
-	if ninja_mesh == null or original_assassin_mesh == null:
-		return
-	original_assassin_active = not original_assassin_active
-	ninja_mesh.mesh = original_assassin_mesh if original_assassin_active else ninja_mesh_variants[material_variant_index]
-	if assassin_toggle_button != null:
-		assassin_toggle_button.text = "HERO ASSASSIN" if original_assassin_active else "HERO NINJA"
 	_update_weapon_display()
 
 
@@ -284,7 +265,7 @@ func _update_weapon_display() -> void:
 		touch_hud.queue_redraw()
 	var help_label := get_node_or_null("HUD/HelpPanel/HelpText") as Label
 	if help_label != null:
-		help_label.text = HUD_BUILDER.desktop_help_text(weapon_visuals.selected_name(), naruto_run_enabled) + " | M: MAT %s | H: HERO %s" % [["O", "A", "B"][material_variant_index], "ASSASSIN" if original_assassin_active else "NINJA"]
+		help_label.text = HUD_BUILDER.desktop_help_text(weapon_visuals.selected_name(), naruto_run_enabled) + " | M: MAT %s" % ["O", "A", "B"][material_variant_index]
 
 
 func _start_dash() -> void:
@@ -470,17 +451,6 @@ func _build_ui() -> void:
 	crowd_build_label.add_theme_constant_override("shadow_offset_x", 1)
 	crowd_build_label.add_theme_constant_override("shadow_offset_y", 1)
 	canvas.add_child(crowd_build_label)
-	assassin_toggle_button = Button.new()
-	assassin_toggle_button.name = "AssassinToggleButton"
-	assassin_toggle_button.text = "HERO NINJA"
-	assassin_toggle_button.anchor_left = 0.5
-	assassin_toggle_button.anchor_right = 0.5
-	assassin_toggle_button.offset_left = -100.0
-	assassin_toggle_button.offset_right = 100.0
-	assassin_toggle_button.offset_top = 251.0
-	assassin_toggle_button.offset_bottom = 296.0
-	assassin_toggle_button.pressed.connect(_toggle_original_assassin)
-	canvas.add_child(assassin_toggle_button)
 	if DisplayServer.is_touchscreen_available():
 		# Multiple fingers are handled independently in touch_hud.gd.
 		touch_hud = TOUCH_HUD_SCRIPT.new()

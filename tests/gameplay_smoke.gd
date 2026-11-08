@@ -51,39 +51,6 @@ func _run_checks() -> void:
 		var fullscreen_control := game.get_node_or_null("HUD/FullscreenButton") as Button
 		if not _require(fullscreen_control != null and fullscreen_control.pressed.is_connected(Callable(game, "_toggle_fullscreen")), "Desktop fullscreen callback must survive HUD extraction"):
 			return
-	var assassin := game.get("original_assassin_mesh") as Mesh
-	var assassin_button := game.get_node_or_null("HUD/AssassinToggleButton") as Button
-	if not _require(assassin != null and assassin.get_surface_count() == 1 and assassin_button != null, "Original Assassin must build one skinned mesh and have a real toggle"):
-		return
-	var source_skinned := game.get("ninja_mesh") as MeshInstance3D
-	if not _require(source_skinned != null and source_skinned.skin != null and source_skinned.skin.get_bind_count() == 23, "Assassin must reuse existing 23-bind Ninja Skin"):
-		return
-	var generated_arrays := assassin.surface_get_arrays(0)
-	var generated_positions: PackedVector3Array = generated_arrays[Mesh.ARRAY_VERTEX]
-	var generated_bones: PackedInt32Array = generated_arrays[Mesh.ARRAY_BONES]
-	var generated_weights: PackedFloat32Array = generated_arrays[Mesh.ARRAY_WEIGHTS]
-	if not _require(generated_positions.size() > 0 and generated_positions.size() % 3 == 0 and generated_bones.size() == generated_positions.size() * 4 and generated_weights.size() == generated_bones.size(), "Procedural assassin geometry must be skinned with 4 influences per vertex"):
-		return
-	var triangle_count := generated_positions.size() / 3
-	if not _require(triangle_count >= 2000 and triangle_count <= 8000, "Original Assassin must respect approved hero triangle budget"):
-		return
-	for i in range(generated_positions.size()):
-		var weight_sum := 0.0
-		for b in range(4):
-			var weight: float = generated_weights[i * 4 + b]
-			if not _require(generated_bones[i * 4 + b] >= 0 and generated_bones[i * 4 + b] < 23, "Assassin uses a valid Ninja skin bind index"):
-				return
-			weight_sum += weight
-		if not _require(absf(weight_sum - 1.0) < 0.001, "Assassin vertex weights must sum to 1"):
-			return
-	if not _require(assassin_button.pressed.is_connected(Callable(game, "_toggle_original_assassin")) and assassin_button.text == "HERO NINJA", "Assassin toggle must start on original Ninja control"):
-		return
-	assassin_button.pressed.emit()
-	if not _require(bool(game.get("original_assassin_active")) and source_skinned.mesh == assassin and assassin_button.text == "HERO ASSASSIN", "Original Assassin must render on existing animated skinned mesh node"):
-		return
-	assassin_button.pressed.emit()
-	if not _require(not bool(game.get("original_assassin_active")) and assassin_button.text == "HERO NINJA", "Assassin toggle must restore existing Ninja mesh"):
-		return
 	# Verify every playable model, including the imported FBX, can be equipped.
 	var weapon_component = game.get("weapon_visuals")
 	if not _require(weapon_component != null and WEAPON_VISUALS.WEAPONS.size() == 5, "Five test weapons must be available"):
