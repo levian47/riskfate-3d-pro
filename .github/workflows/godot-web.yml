@@ -2,7 +2,7 @@ name: Godot Web / GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/web-pr-preview-pages]
   pull_request:
     branches: [main]
     types: [opened, reopened, synchronize, edited]
