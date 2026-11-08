@@ -3,6 +3,7 @@ extends Node3D
 const MODEL := preload("res://assets/Ninja_Female.gltf")
 const MODEL_MATERIAL_A := preload("res://assets/Ninja_Female_material_A.gltf")
 const MODEL_MATERIAL_B := preload("res://assets/Ninja_Female_material_B.gltf")
+const CROWD_PALETTE_ATLAS := preload("res://assets/Ninja_Female_palette_atlas.gltf")
 # Approved movement values and physics are owned by the player component.
 const MOVEMENT_CONTROLLER := preload("res://characters/player/movement_controller.gd")
 const WALK_SPEED := MOVEMENT_CONTROLLER.WALK_SPEED
@@ -23,6 +24,7 @@ var hero: CharacterBody3D
 var visual: Node3D
 var ninja_mesh: MeshInstance3D
 var ninja_mesh_variants: Array[Mesh] = []
+var crowd_atlas_mesh: Mesh
 var material_variant_index := 1 # Approved A: culling, original retained as control
 var crowd_benchmark = CROWD_BENCHMARK.new()
 var crowd_button: Button
@@ -50,6 +52,7 @@ var fps_update_elapsed := 0.0
 func _ready() -> void:
 	_build_environment()
 	_build_hero()
+	_init_crowd_atlas()
 	_build_camera()
 	_build_ui()
 	crowd_benchmark.initialize(self)
@@ -153,7 +156,7 @@ func _cycle_ninja_materials() -> void:
 		return
 	material_variant_index = (material_variant_index + 1) % 2 # B rejected after visual QA
 	ninja_mesh.mesh = ninja_mesh_variants[material_variant_index]
-	crowd_benchmark.set_mesh(ninja_mesh.mesh)
+	# Keep the crowd on its independently optimized one-surface palette mesh.
 	if touch_hud != null:
 		touch_hud.material_variant = material_variant_index
 		touch_hud.queue_redraw()
@@ -163,7 +166,7 @@ func _cycle_ninja_materials() -> void:
 func _cycle_crowd_benchmark() -> void:
 	crowd_benchmark.count_index = (crowd_benchmark.count_index + 1) % CROWD_BENCHMARK.COUNTS.size()
 	var count: int = CROWD_BENCHMARK.COUNTS[crowd_benchmark.count_index]
-	crowd_benchmark.set_count(count, MODEL, ninja_mesh.mesh)
+	crowd_benchmark.set_count(count, MODEL, crowd_atlas_mesh)
 	camera.size = 40.0 if count > 0 else camera_zoom
 	if crowd_button != null:
 		crowd_button.text = "LOAD %d" % count
@@ -175,6 +178,16 @@ func _cycle_crowd_mode() -> void:
 	var mode: String = crowd_benchmark.cycle_mode()
 	if crowd_mode_button != null:
 		crowd_mode_button.text = "MODE %s" % mode
+
+
+func _init_crowd_atlas() -> void:
+	var preview := CROWD_PALETTE_ATLAS.instantiate()
+	var found := _find_model_mesh(preview)
+	if found != null:
+		crowd_atlas_mesh = found.mesh
+	preview.free()
+	if crowd_atlas_mesh == null or crowd_atlas_mesh.get_surface_count() != 1:
+		push_error("Single-surface Ninja crowd atlas unavailable")
 
 
 func _find_model_mesh(root: Node) -> MeshInstance3D:

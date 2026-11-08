@@ -767,6 +767,15 @@ func _run_checks() -> void:
 	# Full automated benchmark state matrix: every supported crowd size,
 	# every profiling mode and both approved material choices. This checks
 	# animation/shadow/geometry state and UI wiring, not actual device FPS.
+	var crowd_atlas := game.get("crowd_atlas_mesh") as Mesh
+	if not _require(crowd_atlas != null and crowd_atlas.get_surface_count() == 1, "Crowd atlas must have one surface instead of six"):
+		return
+	var atlas_mat := crowd_atlas.surface_get_material(0) as StandardMaterial3D
+	if not _require(atlas_mat != null and atlas_mat.albedo_texture != null, "Crowd atlas must preserve six colors through a real color texture"):
+		return
+	var atlas_uv := crowd_atlas.surface_get_arrays(0)[Mesh.ARRAY_TEX_UV]
+	if not _require(atlas_uv.size() == 9948, "Crowd atlas UVs must cover every original skinned vertex"):
+		return
 	var bench = game.get("crowd_benchmark")
 	var bench_button := game.get_node_or_null("HUD/CrowdBenchmarkButton") as Button
 	var mode_button := game.get_node_or_null("HUD/CrowdModeButton") as Button
@@ -810,7 +819,7 @@ func _run_checks() -> void:
 					var crowd_mesh := crowd_meshes[i] as MeshInstance3D
 					var crowd_player := animation_players[i] as AnimationPlayer
 					var expected_shadow := int(GeometryInstance3D.SHADOW_CASTING_SETTING_OFF) if mode_name == "NO SHADOW" else int(original_shadows[i])
-					if not _require(crowd_mesh != null and crowd_player != null and crowd_mesh.mesh == candidates[material_index], "All %d crowd meshes must follow MAT %d" % [count, material_index]):
+					if not _require(crowd_mesh != null and crowd_player != null and crowd_mesh.mesh == crowd_atlas, "All %d crowd meshes must use one-surface atlas while hero is MAT %d" % [count, material_index]):
 						return
 					if not _require(crowd_mesh.visible == (mode_name != "HIDE") and crowd_player.is_playing() == (mode_name != "PAUSE") and int(crowd_mesh.cast_shadow) == expected_shadow, "Crowd actor %d failed %s/MAT %d at LOAD %d" % [i, mode_name, material_index, count]):
 						return
@@ -821,7 +830,7 @@ func _run_checks() -> void:
 			return
 	if not _require(matrix_cases == 32 and int(game.get("material_variant_index")) == 1, "Benchmark must cover all 32 nonzero crowd/mode/material combinations and return to A"):
 		return
-	print("Crowd diagnostics matrix passed: 4 nonzero loads x 4 modes x 2 material variants, plus LOAD 0 cleanup.")
+	print("Crowd atlas matrix passed: 4 loads x 4 modes x 2 hero materials; 1 surface and 6 palette colors preserved; LOAD 0 cleanup.")
 	print("Gameplay smoke test passed: independent baked sword resources retain approved poses; active Sweeping, movement, dash, world, training hits, HP and respawn.")
 	quit(0)
 
