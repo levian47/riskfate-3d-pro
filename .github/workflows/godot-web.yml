@@ -94,13 +94,17 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Set up Android SDK tools
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools build-tools;35.0.1 platforms;android-35'
+
       - name: Prepare Android SDK and temporary test signing key
         shell: bash
         run: |
           set -euo pipefail
           echo "ANDROID_HOME=$ANDROID_HOME"
-          command -v sdkmanager
-          sdkmanager --install 'platform-tools' 'build-tools;35.0.1' 'platforms;android-35'
+          test -x "$ANDROID_HOME/build-tools/35.0.1/apksigner"
           # This is a temporary debug key only; never use it to sign release APKs.
           keytool -genkeypair -noprompt -keystore "$RUNNER_TEMP/riskfate-debug.keystore" \
             -storepass android -keypass android -alias androiddebugkey \
