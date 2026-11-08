@@ -25,6 +25,15 @@ func _run() -> void:
 	game.set_physics_process(false)
 	if not _check(not bool(game.get("use_legacy_hero")), "VRoid heroine must be default"):
 		return
+	var movement = game.get("movement_controller")
+	if not _check(movement != null and bool(movement.get("run_by_default")), "VRoid must default to Run on desktop"):
+		return
+	game.call("_toggle_run_mode")
+	if not _check(not bool(movement.get("run_by_default")), "Run/Walk toggle must activate Walk"):
+		return
+	game.call("_toggle_run_mode")
+	if not _check(bool(movement.get("run_by_default")), "Run/Walk toggle must restore Run"):
+		return
 	var visual := game.get("visual") as Node3D
 	var rig := WEAPONS.find_skeleton(visual)
 	if not _check(rig != null and rig.get_bone_count() == 103, "original 103-bone VRoid rig missing"):
