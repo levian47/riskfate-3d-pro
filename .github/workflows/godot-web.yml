@@ -2,7 +2,7 @@ name: Godot Web / GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/vroid-heroine-walk-jog]
   workflow_dispatch:
 
 permissions:
@@ -150,6 +150,7 @@ jobs:
           path: dist
 
   deploy:
+    if: github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     environment:
