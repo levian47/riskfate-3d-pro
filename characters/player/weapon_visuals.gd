@@ -26,12 +26,18 @@ static func find_skeleton(node: Node) -> Skeleton3D:
 
 func initialize(model: Node) -> bool:
 	var skeleton := find_skeleton(model)
-	if skeleton == null or skeleton.find_bone("Fist.R") < 0:
-		push_error("Weapon test: missing Fist.R bone")
+	if skeleton == null:
+		push_error("Weapon test: character skeleton missing")
+		return false
+	var right_hand := "Fist.R"
+	if skeleton.find_bone(right_hand) < 0:
+		right_hand = "J_Bip_R_Hand"
+	if skeleton.find_bone(right_hand) < 0:
+		push_error("Weapon test: no supported right-hand bone")
 		return false
 	var attachment := BoneAttachment3D.new()
 	attachment.name = "SwordGrip"
-	attachment.bone_name = "Fist.R"
+	attachment.bone_name = right_hand
 	skeleton.add_child(attachment)
 	mount = Node3D.new()
 	mount.name = "WeaponMount"
