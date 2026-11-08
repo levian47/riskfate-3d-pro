@@ -141,6 +141,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			camera.size = camera_zoom
 
 func _toggle_naruto_run() -> void:
+	if not use_legacy_hero:
+		return # No VRoid-compatible Naruto animation has been supplied.
 	naruto_run_enabled = not naruto_run_enabled
 	if locomotion_state == "Run" or locomotion_state == "Naruto":
 		_set_locomotion("Naruto" if naruto_run_enabled else "Run")
@@ -276,7 +278,7 @@ func _update_weapon_display() -> void:
 		touch_hud.queue_redraw()
 	var help_label := get_node_or_null("HUD/HelpPanel/HelpText") as Label
 	if help_label != null:
-		help_label.text = HUD_BUILDER.desktop_help_text(weapon_visuals.selected_name(), naruto_run_enabled)
+		help_label.text = HUD_BUILDER.desktop_help_text(weapon_visuals.selected_name(), naruto_run_enabled, use_legacy_hero)
 		help_label.text += (" | M: MAT %s" % ["O", "A", "B"][material_variant_index]) if use_legacy_hero else " | VRoid"
 
 
@@ -486,6 +488,7 @@ func _build_ui() -> void:
 	if DisplayServer.is_touchscreen_available():
 		# Multiple fingers are handled independently in touch_hud.gd.
 		touch_hud = TOUCH_HUD_SCRIPT.new()
+		touch_hud.ninja_visual_controls = use_legacy_hero
 		touch_hud.name = "MobileControls"
 		canvas.add_child(touch_hud)
 		touch_hud.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
