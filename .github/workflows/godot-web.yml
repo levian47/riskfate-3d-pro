@@ -2,7 +2,7 @@ name: Godot Web / GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/web-pr-preview-pages]
   workflow_dispatch:
     inputs:
       build_android:
@@ -24,7 +24,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - name: Check out game
         uses: actions/checkout@v4
@@ -100,6 +100,60 @@ jobs:
           cd "$RUNNER_TEMP"
           "$GODOT_BIN" --headless --main-pack "$GITHUB_WORKSPACE/dist/builds/${GITHUB_SHA:0:12}/index.pck" --script res://tests/gameplay_smoke.gd
 
+      # Opt-in only: a same-repository PR includes the marker below in its body.
+      # The main game and previews are deployed together, preserving the home page.
+      - name: Build opted-in Web PR previews (no Android)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/pulls?state=open&per_page=50" \
+            | jq -r --arg repo "${GITHUB_REPOSITORY}" '
+              .[] | select(.head.repo.full_name == $repo)
+                  | select((.body // "") | contains("riskfate:web-preview"))
+                  | [.number, .head.sha] | join(" ")
+            ' | sed -n '1,2p' > "$RUNNER_TEMP/riskfate-web-previews.txt"
+
+          while read -r pr sha; do
+            [[ "$pr" =~ ^[0-9]+$ && "$sha" =~ ^[0-9a-f]{40}$ ]] || exit 1
+            git fetch --no-tags --depth=1 origin "refs/pull/${pr}/head"
+            [[ "$(git rev-parse FETCH_HEAD)" == "$sha" ]] || {
+              echo "PR $pr changed during checkout; retry workflow" >&2
+              exit 1
+            }
+            source="$RUNNER_TEMP/riskfate-preview-$pr"
+            git worktree add --detach "$source" FETCH_HEAD
+            "$GODOT_BIN" --headless --path "$source" --editor --quit
+            "$GODOT_BIN" --headless --path "$source" --script res://tests/gameplay_smoke.gd
+            "$GODOT_BIN" --headless --path "$source" --script res://tests/vroid_hero_smoke.gd
+
+            base="$GITHUB_WORKSPACE/dist/previews/pr-$pr"
+            revision="${sha:0:12}"
+            mkdir -p "$base/builds/$revision"
+            "$GODOT_BIN" --headless --path "$source" --export-release Web "$base/builds/$revision/index.html"
+            for ext in html js wasm pck; do
+              test -s "$base/builds/$revision/index.$ext"
+            done
+            (
+              cd "$RUNNER_TEMP"
+              "$GODOT_BIN" --headless --main-pack "$base/builds/$revision/index.pck" --script res://tests/gameplay_smoke.gd
+            )
+            cat > "$base/index.html" <<EOF
+          <!doctype html>
+          <html lang="uk">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <meta http-equiv="refresh" content="0;url=builds/$revision/">
+            <title>Riskfate 3D Pro — PR #$pr preview</title>
+          </head>
+          <body><a href="builds/$revision/">Відкрити Web-preview PR #$pr</a></body>
+          </html>
+          EOF
+            echo "Preview PR #$pr: https://levian47.github.io/riskfate-3d-pro/previews/pr-$pr/"
+          done < "$RUNNER_TEMP/riskfate-web-previews.txt"
+
       - name: Set up Java 17 for native Android export
         if: github.event_name == 'workflow_dispatch' && inputs.build_android == true
         uses: actions/setup-java@v4
@@ -161,6 +215,7 @@ jobs:
           path: dist
 
   deploy:
+    if: github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     environment:
