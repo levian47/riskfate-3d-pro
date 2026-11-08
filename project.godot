@@ -7,6 +7,7 @@ run/max_fps=60
 config/features=PackedStringArray("4.3", "GL Compatibility")
 
 [rendering]
+textures/vram_compression/import_etc2_astc=true
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 textures/default_filters/use_nearest_mipmap_filter=false
