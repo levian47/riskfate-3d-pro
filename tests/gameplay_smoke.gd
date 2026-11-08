@@ -779,6 +779,26 @@ func _run_checks() -> void:
 		if amount > 0:
 			if not _require(is_equal_approx(gameplay_camera.size, 40.0) and (crowd_meshes[0] as MeshInstance3D).mesh == candidates[1], "Crowd benchmark must use A and a wide camera"):
 				return
+	# Isolate animation cost from rendering without altering the hero.
+	var mode_button := game.get_node_or_null("HUD/CrowdModeButton") as Button
+	if not _require(mode_button != null and mode_button.text == "MODE RUN", "Benchmark profiling mode must start in RUN"):
+		return
+	game.call("_cycle_crowd_benchmark") # 10 actors
+	var diagnostics: Array = bench.get("mesh_nodes")
+	var players: Array = bench.get("players")
+	if not _require(players.size() == 10 and (players[0] as AnimationPlayer).is_playing(), "RUN mode must animate benchmark actors"):
+		return
+	game.call("_cycle_crowd_mode") # PAUSE: visible static pose
+	if not _require(mode_button.text == "MODE PAUSE" and (diagnostics[0] as MeshInstance3D).visible and not (players[0] as AnimationPlayer).is_playing(), "PAUSE must preserve rendering and stop animations"):
+		return
+	game.call("_cycle_crowd_mode") # HIDE: invisible but animated
+	if not _require(mode_button.text == "MODE HIDE" and not (diagnostics[0] as MeshInstance3D).visible and (players[0] as AnimationPlayer).is_playing(), "HIDE must isolate animation without crowd geometry"):
+		return
+	game.call("_cycle_crowd_mode") # RUN: visible + animated
+	if not _require(mode_button.text == "MODE RUN" and (diagnostics[0] as MeshInstance3D).visible and (players[0] as AnimationPlayer).is_playing(), "RUN must restore benchmark geometry and motion"):
+		return
+	for unused in range(4):
+		game.call("_cycle_crowd_benchmark") # 30/60/100/0
 	if not _require(is_equal_approx(gameplay_camera.size, 12.0), "Crowd benchmark must restore normal zoom"):
 		return
 	print("Gameplay smoke test passed: independent baked sword resources retain approved poses; active Sweeping, movement, dash, world, training hits, HP and respawn.")
