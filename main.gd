@@ -1,6 +1,8 @@
 extends Node3D
 
 const MODEL := preload("res://assets/Ninja_Female.gltf")
+const MODEL_MATERIAL_A := preload("res://assets/Ninja_Female_material_A.gltf")
+const MODEL_MATERIAL_B := preload("res://assets/Ninja_Female_material_B.gltf")
 # Approved movement values and physics are owned by the player component.
 const MOVEMENT_CONTROLLER := preload("res://characters/player/movement_controller.gd")
 const WALK_SPEED := MOVEMENT_CONTROLLER.WALK_SPEED
@@ -18,6 +20,9 @@ const ATTACK_SPEED := COMBAT_CONTROLLER.ATTACK_SPEED
 
 var hero: CharacterBody3D
 var visual: Node3D
+var ninja_mesh: MeshInstance3D
+var ninja_mesh_variants: Array[Mesh] = []
+var material_variant_index := 0
 var animator: AnimationPlayer
 var camera: Camera3D
 var skeleton_debug: MeshInstance3D
@@ -90,6 +95,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_K:
 		_toggle_skeleton_debug()
 		return
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_M:
+		_cycle_ninja_materials()
+		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_E:
 		_cycle_weapon()
 		return
@@ -123,6 +131,58 @@ func _toggle_skeleton_debug() -> void:
 		touch_hud.queue_redraw()
 
 
+func _cycle_ninja_materials() -> void:
+	if ninja_mesh == null or ninja_mesh_variants.size() != 3:
+		return
+	material_variant_index = (material_variant_index + 1) % ninja_mesh_variants.size()
+	ninja_mesh.mesh = ninja_mesh_variants[material_variant_index]
+	if touch_hud != null:
+		touch_hud.material_variant = material_variant_index
+		touch_hud.queue_redraw()
+	_update_weapon_display()
+
+
+func _find_model_mesh(root: Node) -> MeshInstance3D:
+	if root is MeshInstance3D:
+		return root
+	for child in root.get_children():
+		var match_mesh := _find_model_mesh(child)
+		if match_mesh != null:
+			return match_mesh
+	return null
+
+
+func _setup_material_comparison(model: Node3D) -> void:
+	ninja_mesh = _find_model_mesh(model)
+	if ninja_mesh == null:
+		push_warning("Ninja source mesh not found for material comparison")
+		return
+	ninja_mesh_variants.clear()
+	ninja_mesh_variants.append(ninja_mesh.mesh)
+	for variant_scene in [MODEL_MATERIAL_A, MODEL_MATERIAL_B]:
+		var temporary: Node3D = variant_scene.instantiate()
+		var variant_mesh := _find_model_mesh(temporary)
+		if variant_mesh == null or variant_mesh.mesh == null:
+			push_warning("Ninja material variant mesh missing")
+		else:
+			ninja_mesh_variants.append(variant_mesh.mesh)
+		temporary.free()
+	if ninja_mesh_variants.size() != 3:
+		push_warning("Ninja material comparison incomplete")
+		return
+	# Godot 4.7 glTF import does not reliably activate vertex colors
+	# as albedo. Make the intended per-vertex RGB explicit for variant B.
+	var one_surface_mesh := ninja_mesh_variants[2].duplicate() as ArrayMesh
+	if one_surface_mesh != null:
+		var color_material := one_surface_mesh.surface_get_material(0) as StandardMaterial3D
+		if color_material != null:
+			color_material = color_material.duplicate() as StandardMaterial3D
+			color_material.vertex_color_use_as_albedo = true
+			color_material.vertex_color_is_srgb = false
+			one_surface_mesh.surface_set_material(0, color_material)
+			ninja_mesh_variants[2] = one_surface_mesh
+
+
 func _cycle_weapon() -> void:
 	# This is a visual playtest only. Current attack state stays untouched.
 	if weapon_visuals.cycle():
@@ -135,7 +195,7 @@ func _update_weapon_display() -> void:
 		touch_hud.queue_redraw()
 	var help_label := get_node_or_null("HUD/HelpPanel/HelpText") as Label
 	if help_label != null:
-		help_label.text = HUD_BUILDER.desktop_help_text(weapon_visuals.selected_name(), naruto_run_enabled)
+		help_label.text = HUD_BUILDER.desktop_help_text(weapon_visuals.selected_name(), naruto_run_enabled) + " | M: MAT %s" % ["O", "A", "B"][material_variant_index]
 
 
 func _start_dash() -> void:
@@ -175,6 +235,7 @@ func _build_hero() -> void:
 	hero.add_child(visual)
 	var model := MODEL.instantiate()
 	visual.add_child(model)
+	_setup_material_comparison(model)
 	var rig := WEAPON_VISUALS.find_skeleton(model) as Skeleton3D
 	if rig != null:
 		skeleton_debug = SKELETON_DEBUG.new() as MeshInstance3D
@@ -264,6 +325,7 @@ func _build_ui() -> void:
 		touch_hud.zoom_requested.connect(_cycle_mobile_zoom)
 		touch_hud.fullscreen_requested.connect(_toggle_fullscreen)
 		touch_hud.weapon_requested.connect(_cycle_weapon)
+		touch_hud.materials_requested.connect(_cycle_ninja_materials)
 		touch_hud.naruto_requested.connect(_toggle_naruto_run)
 		touch_hud.skeleton_requested.connect(_toggle_skeleton_debug)
 		_update_weapon_display()

@@ -9,6 +9,7 @@ signal fullscreen_requested
 signal weapon_requested
 signal naruto_requested
 signal skeleton_requested
+signal materials_requested
 
 var move_vector := Vector2.ZERO
 var jump_held := false
@@ -21,8 +22,10 @@ var fullscreen_finger := -1
 var weapon_finger := -1
 var naruto_finger := -1
 var skeleton_finger := -1
+var materials_finger := -1
 var naruto_run_enabled := false
 var skeleton_enabled := false
+var material_variant := 0
 var weapon_index := 1
 var zoom_level := 2
 var stick_thumb := Vector2.ZERO
@@ -48,6 +51,7 @@ func _on_resized() -> void:
 		weapon_finger = -1
 		naruto_finger = -1
 		skeleton_finger = -1
+		materials_finger = -1
 		move_vector = Vector2.ZERO
 		stick_thumb = Vector2.ZERO
 		jump_held = false
@@ -77,6 +81,8 @@ func _layout() -> Dictionary:
 		"zoom_radius": zoom_radius,
 		"weapon": Vector2(width - margin - zoom_radius, margin + zoom_radius * 3.6),
 		"weapon_radius": zoom_radius,
+		"materials": Vector2(width - margin - zoom_radius, margin + zoom_radius * 6.2),
+		"materials_radius": zoom_radius,
 		"fullscreen": Vector2(margin + fullscreen_radius, margin + fullscreen_radius),
 		"fullscreen_radius": fullscreen_radius,
 		"naruto": Vector2(margin + fullscreen_radius, margin + fullscreen_radius * 3.6),
@@ -125,6 +131,10 @@ func _press(finger: int, point: Vector2) -> void:
 		weapon_finger = finger
 		weapon_requested.emit()
 		queue_redraw()
+	elif materials_finger == -1 and point.distance_to(layout["materials"]) <= layout["materials_radius"] * 1.20:
+		materials_finger = finger
+		materials_requested.emit()
+		queue_redraw()
 	elif naruto_finger == -1 and point.distance_to(layout["naruto"]) <= layout["naruto_radius"] * 1.20:
 		naruto_finger = finger
 		naruto_requested.emit()
@@ -170,6 +180,8 @@ func _release(finger: int) -> void:
 		naruto_finger = -1
 	if finger == skeleton_finger:
 		skeleton_finger = -1
+	if finger == materials_finger:
+		materials_finger = -1
 	queue_redraw()
 
 func _update_stick(point: Vector2) -> void:
@@ -221,6 +233,11 @@ func _draw() -> void:
 	_draw_button(weapon_center, weapon_r, Color(0.33, 0.27, 0.44, 0.94 if weapon_finger != -1 else 0.83), Color(0.90, 0.82, 1.0, 0.96))
 	_draw_label(weapon_center + Vector2(0, -weapon_r * 0.18), "WPN", weapon_r * 0.32)
 	_draw_label(weapon_center + Vector2(0, weapon_r * 0.28), "%d/5" % weapon_index, weapon_r * 0.34)
+	var material_center: Vector2 = layout["materials"]
+	var material_radius: float = layout["materials_radius"]
+	_draw_button(material_center, material_radius, Color(0.23, 0.37, 0.31, 0.93 if materials_finger != -1 else 0.77), Color(0.77, 0.96, 0.86, 0.96))
+	_draw_label(material_center + Vector2(0, -material_radius * 0.18), "MAT", material_radius * 0.30)
+	_draw_label(material_center + Vector2(0, material_radius * 0.28), ["O", "A", "B"][material_variant], material_radius * 0.36)
 	var naruto_center: Vector2 = layout["naruto"]
 	var naruto_r: float = layout["naruto_radius"]
 	_draw_button(naruto_center, naruto_r, Color(0.27, 0.45, 0.24, 0.95 if naruto_run_enabled else 0.65), Color(0.82, 0.98, 0.77, 0.94))
