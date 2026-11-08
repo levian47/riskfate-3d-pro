@@ -482,11 +482,22 @@ func _run_checks() -> void:
 	MOVEMENT_MATH.apply_facing(test_visual, Vector3.FORWARD)
 	if not _require(absf(test_visual.rotation.y - PI) < 0.001, "Imported rig facing correction must remain unchanged"):
 		return
+	MOVEMENT_MATH.apply_facing(test_visual, Vector3.RIGHT, 1.0 / 60.0)
+	if not _require(test_visual.rotation.y > PI * 0.5 and test_visual.rotation.y < PI, "Visual facing should rotate smoothly rather than snap"):
+		return
 	test_visual.free()
 
 	# Movement state must be owned by its component after extraction.
 	var movement_state := game.get("movement_controller") as RefCounted
 	if not _require(movement_state != null, "Player movement controller must initialize"):
+		return
+	if not _require(bool(movement_state.get("run_by_default")), "Desktop Run must be default"):
+		return
+	game.call("_toggle_run_mode")
+	if not _require(not bool(movement_state.get("run_by_default")), "P toggle must switch to Walk"):
+		return
+	game.call("_toggle_run_mode")
+	if not _require(bool(movement_state.get("run_by_default")), "P toggle must restore Run"):
 		return
 	if not _require(is_equal_approx(float(MOVEMENT_CONTROLLER.WALK_SPEED), 7.0) and is_equal_approx(float(MOVEMENT_CONTROLLER.RUN_SPEED), 12.0), "Approved movement speeds must remain unchanged"):
 		return
@@ -511,6 +522,8 @@ func _run_checks() -> void:
 		return
 
 	var layout: Dictionary = touch_controls.call("_layout")
+	if not _require(float(layout["zoom_radius"]) >= 24.0 and float(layout["zoom_radius"]) < float(layout["jump_radius"]), "Secondary HUD buttons must be compact but touch accessible"):
+		return
 	var jump_center: Vector2 = layout["jump"]
 	var dash_center: Vector2 = layout["dash"]
 	var attack_center: Vector2 = layout["attack"]
