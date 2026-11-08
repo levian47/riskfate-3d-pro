@@ -111,6 +111,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_R:
 		_toggle_naruto_run()
 		return
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_P:
+		_toggle_run_mode()
+		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_K:
 		_toggle_skeleton_debug()
 		return
@@ -139,6 +142,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			camera_zoom = minf(28.0, camera_zoom + 1.0)
 			camera.size = camera_zoom
+
+func _toggle_run_mode() -> void:
+	movement_controller.run_by_default = not movement_controller.run_by_default
+	_update_weapon_display()
+
 
 func _toggle_naruto_run() -> void:
 	if not use_legacy_hero:
@@ -278,7 +286,7 @@ func _update_weapon_display() -> void:
 		touch_hud.queue_redraw()
 	var help_label := get_node_or_null("HUD/HelpPanel/HelpText") as Label
 	if help_label != null:
-		help_label.text = HUD_BUILDER.desktop_help_text(weapon_visuals.selected_name(), naruto_run_enabled, use_legacy_hero)
+		help_label.text = HUD_BUILDER.desktop_help_text(weapon_visuals.selected_name(), naruto_run_enabled, use_legacy_hero, movement_controller.run_by_default)
 		help_label.text += (" | M: MAT %s" % ["O", "A", "B"][material_variant_index]) if use_legacy_hero else " | VRoid"
 
 
@@ -424,10 +432,10 @@ func _build_ui() -> void:
 	crowd_button.text = "LOAD 0"
 	crowd_button.anchor_left = 0.5
 	crowd_button.anchor_right = 0.5
-	crowd_button.offset_left = -76.0
-	crowd_button.offset_right = 76.0
-	crowd_button.offset_top = 54.0
-	crowd_button.offset_bottom = 97.0
+	crowd_button.offset_left = -53.0
+	crowd_button.offset_right = 53.0
+	crowd_button.offset_top = 52.0
+	crowd_button.offset_bottom = 82.0
 	crowd_button.pressed.connect(_cycle_crowd_benchmark)
 	canvas.add_child(crowd_button)
 	crowd_mode_button = Button.new()
@@ -435,10 +443,10 @@ func _build_ui() -> void:
 	crowd_mode_button.text = "MODE RUN"
 	crowd_mode_button.anchor_left = 0.5
 	crowd_mode_button.anchor_right = 0.5
-	crowd_mode_button.offset_left = -100.0
-	crowd_mode_button.offset_right = 100.0
-	crowd_mode_button.offset_top = 102.0
-	crowd_mode_button.offset_bottom = 145.0
+	crowd_mode_button.offset_left = -67.0
+	crowd_mode_button.offset_right = 67.0
+	crowd_mode_button.offset_top = 87.0
+	crowd_mode_button.offset_bottom = 117.0
 	crowd_mode_button.pressed.connect(_cycle_crowd_mode)
 	canvas.add_child(crowd_mode_button)
 	crowd_stats_label = Label.new()
@@ -449,8 +457,8 @@ func _build_ui() -> void:
 	crowd_stats_label.anchor_right = 0.5
 	crowd_stats_label.offset_left = -150.0
 	crowd_stats_label.offset_right = 150.0
-	crowd_stats_label.offset_top = 149.0
-	crowd_stats_label.offset_bottom = 171.0
+	crowd_stats_label.offset_top = 123.0
+	crowd_stats_label.offset_bottom = 143.0
 	crowd_stats_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	crowd_stats_label.add_theme_font_size_override("font_size", 14)
 	crowd_stats_label.add_theme_color_override("font_shadow_color", Color.BLACK)
@@ -463,10 +471,10 @@ func _build_ui() -> void:
 	fps_limit_button.text = "FPS CAP 60"
 	fps_limit_button.anchor_left = 0.5
 	fps_limit_button.anchor_right = 0.5
-	fps_limit_button.offset_left = -104.0
-	fps_limit_button.offset_right = 104.0
-	fps_limit_button.offset_top = 177.0
-	fps_limit_button.offset_bottom = 220.0
+	fps_limit_button.offset_left = -73.0
+	fps_limit_button.offset_right = 73.0
+	fps_limit_button.offset_top = 149.0
+	fps_limit_button.offset_bottom = 181.0
 	fps_limit_button.pressed.connect(_toggle_fps_limit)
 	canvas.add_child(fps_limit_button)
 	crowd_build_label = Label.new()
@@ -477,8 +485,8 @@ func _build_ui() -> void:
 	crowd_build_label.anchor_right = 0.5
 	crowd_build_label.offset_left = -190.0
 	crowd_build_label.offset_right = 190.0
-	crowd_build_label.offset_top = 224.0
-	crowd_build_label.offset_bottom = 246.0
+	crowd_build_label.offset_top = 185.0
+	crowd_build_label.offset_bottom = 207.0
 	crowd_build_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	crowd_build_label.add_theme_font_size_override("font_size", 15)
 	crowd_build_label.add_theme_color_override("font_shadow_color", Color.BLACK)
