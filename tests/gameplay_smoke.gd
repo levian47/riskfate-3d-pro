@@ -754,13 +754,15 @@ func _run_checks() -> void:
 	var b_arrays: Array = (candidates[2] as Mesh).surface_get_arrays(0)
 	if not _require(b_arrays[Mesh.ARRAY_VERTEX].size() == 9948 and b_arrays[Mesh.ARRAY_INDEX].size() == 21312 and b_arrays[Mesh.ARRAY_COLOR].size() == 9948, "B must preserve all 7104 triangles and provide a color for every vertex"):
 		return
-	for expected in [1, 2, 0]:
+	if not _require(int(game.get("material_variant_index")) == 1 and candidate_mesh.mesh == candidates[1], "Ninja must load approved A at startup"):
+		return
+	for expected in [2, 0, 1]:
 		game.call("_cycle_ninja_materials")
 		if not _require(int(game.get("material_variant_index")) == expected and candidate_mesh.mesh == candidates[expected], "Ninja material switching must preserve the original animated mesh node"):
 			return
 	if DisplayServer.is_touchscreen_available():
 		var material_touch := game.get("touch_hud") as Control
-		if not _require(int(material_touch.material_variant) == 0, "Mobile material comparison indicator must wrap to O"):
+		if not _require(int(material_touch.material_variant) == 1, "Mobile material indicator must show approved A"):
 			return
 	print("Gameplay smoke test passed: independent baked sword resources retain approved poses; active Sweeping, movement, dash, world, training hits, HP and respawn.")
 	quit(0)
