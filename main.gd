@@ -27,6 +27,7 @@ var material_variant_index := 1 # Approved A: culling, original retained as cont
 var crowd_benchmark = CROWD_BENCHMARK.new()
 var crowd_button: Button
 var crowd_mode_button: Button
+var crowd_stats_label: Label
 var animator: AnimationPlayer
 var camera: Camera3D
 var skeleton_debug: MeshInstance3D
@@ -60,6 +61,11 @@ func _process(delta: float) -> void:
 	fps_update_elapsed += delta
 	if fps_update_elapsed >= 0.5:
 		fps_label.text = "FPS: %d" % Engine.get_frames_per_second()
+		if crowd_stats_label != null and crowd_stats_label.visible:
+			var viewport_rid := get_viewport().get_viewport_rid()
+			var visible_draws := RenderingServer.viewport_get_render_info(viewport_rid, RenderingServer.VIEWPORT_RENDER_INFO_TYPE_VISIBLE, RenderingServer.VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME)
+			var shadow_draws := RenderingServer.viewport_get_render_info(viewport_rid, RenderingServer.VIEWPORT_RENDER_INFO_TYPE_SHADOW, RenderingServer.VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME)
+			crowd_stats_label.text = "Draws: %d visible / %d shadow" % [visible_draws, shadow_draws]
 		fps_update_elapsed = 0.0
 
 
@@ -161,6 +167,8 @@ func _cycle_crowd_benchmark() -> void:
 	camera.size = 40.0 if count > 0 else camera_zoom
 	if crowd_button != null:
 		crowd_button.text = "LOAD %d" % count
+	if crowd_stats_label != null:
+		crowd_stats_label.visible = count > 0
 
 
 func _cycle_crowd_mode() -> void:
@@ -360,12 +368,29 @@ func _build_ui() -> void:
 	crowd_mode_button.text = "MODE RUN"
 	crowd_mode_button.anchor_left = 0.5
 	crowd_mode_button.anchor_right = 0.5
-	crowd_mode_button.offset_left = -76.0
-	crowd_mode_button.offset_right = 76.0
+	crowd_mode_button.offset_left = -100.0
+	crowd_mode_button.offset_right = 100.0
 	crowd_mode_button.offset_top = 102.0
 	crowd_mode_button.offset_bottom = 145.0
 	crowd_mode_button.pressed.connect(_cycle_crowd_mode)
 	canvas.add_child(crowd_mode_button)
+	crowd_stats_label = Label.new()
+	crowd_stats_label.name = "CrowdDrawStats"
+	crowd_stats_label.text = "Draws: -- visible / -- shadow"
+	crowd_stats_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	crowd_stats_label.anchor_left = 0.5
+	crowd_stats_label.anchor_right = 0.5
+	crowd_stats_label.offset_left = -150.0
+	crowd_stats_label.offset_right = 150.0
+	crowd_stats_label.offset_top = 149.0
+	crowd_stats_label.offset_bottom = 171.0
+	crowd_stats_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	crowd_stats_label.add_theme_font_size_override("font_size", 14)
+	crowd_stats_label.add_theme_color_override("font_shadow_color", Color.BLACK)
+	crowd_stats_label.add_theme_constant_override("shadow_offset_x", 1)
+	crowd_stats_label.add_theme_constant_override("shadow_offset_y", 1)
+	crowd_stats_label.visible = false
+	canvas.add_child(crowd_stats_label)
 	if DisplayServer.is_touchscreen_available():
 		# Multiple fingers are handled independently in touch_hud.gd.
 		touch_hud = TOUCH_HUD_SCRIPT.new()

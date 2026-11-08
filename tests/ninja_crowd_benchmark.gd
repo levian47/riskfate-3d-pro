@@ -5,12 +5,14 @@ const ANIM := preload("res://characters/player/animation_builder.gd")
 const COUNTS := [0, 10, 30, 60, 100]
 # RUN: animated + rendered; PAUSE: static pose + rendered;
 # HIDE: animations run but crowd geometry is not rendered.
-const MODES := ["RUN", "PAUSE", "HIDE"]
+# NO SHADOW: same animated/visible crowd, without its shadow passes.
+const MODES := ["RUN", "PAUSE", "HIDE", "NO SHADOW"]
 
 var root: Node3D
 var actors: Array[Node3D] = []
 var mesh_nodes: Array[MeshInstance3D] = []
 var players: Array[AnimationPlayer] = []
+var original_shadows: Array[int] = []
 var count_index := 0
 var mode_index := 0
 
@@ -36,6 +38,7 @@ func set_count(target: int, scene: PackedScene, mesh: Mesh) -> void:
 		var actor: Node3D = actors.pop_back()
 		mesh_nodes.pop_back()
 		players.pop_back()
+		original_shadows.pop_back()
 		root.remove_child(actor)
 		actor.queue_free()
 	while actors.size() < target:
@@ -65,6 +68,7 @@ func set_count(target: int, scene: PackedScene, mesh: Mesh) -> void:
 		actors.append(actor)
 		mesh_nodes.append(skinned)
 		players.append(player)
+		original_shadows.append(int(skinned.cast_shadow))
 	_apply_mode()
 
 func cycle_mode() -> String:
@@ -75,6 +79,10 @@ func cycle_mode() -> String:
 func _apply_mode() -> void:
 	for i in range(mesh_nodes.size()):
 		mesh_nodes[i].visible = mode_index != 2
+		if mode_index == 3:
+			mesh_nodes[i].cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		else:
+			mesh_nodes[i].cast_shadow = original_shadows[i]
 		var player := players[i]
 		if player == null:
 			continue
@@ -100,4 +108,5 @@ func clear() -> void:
 	actors.clear()
 	mesh_nodes.clear()
 	players.clear()
+	original_shadows.clear()
 	mode_index = 0

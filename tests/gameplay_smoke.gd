@@ -783,10 +783,13 @@ func _run_checks() -> void:
 	var mode_button := game.get_node_or_null("HUD/CrowdModeButton") as Button
 	if not _require(mode_button != null and mode_button.text == "MODE RUN", "Benchmark profiling mode must start in RUN"):
 		return
+	var draw_stats := game.get_node_or_null("HUD/CrowdDrawStats") as Label
+	if not _require(draw_stats != null and not draw_stats.visible, "Draw call stats must be hidden without a crowd"):
+		return
 	game.call("_cycle_crowd_benchmark") # 10 actors
 	var diagnostics: Array = bench.get("mesh_nodes")
 	var players: Array = bench.get("players")
-	if not _require(players.size() == 10 and (players[0] as AnimationPlayer).is_playing(), "RUN mode must animate benchmark actors"):
+	if not _require(players.size() == 10 and draw_stats.visible and (players[0] as AnimationPlayer).is_playing(), "RUN mode must show draw call counters and animate benchmark actors"):
 		return
 	game.call("_cycle_crowd_mode") # PAUSE: visible static pose
 	if not _require(mode_button.text == "MODE PAUSE" and (diagnostics[0] as MeshInstance3D).visible and not (players[0] as AnimationPlayer).is_playing(), "PAUSE must preserve rendering and stop animations"):
@@ -794,11 +797,17 @@ func _run_checks() -> void:
 	game.call("_cycle_crowd_mode") # HIDE: invisible but animated
 	if not _require(mode_button.text == "MODE HIDE" and not (diagnostics[0] as MeshInstance3D).visible and (players[0] as AnimationPlayer).is_playing(), "HIDE must isolate animation without crowd geometry"):
 		return
-	game.call("_cycle_crowd_mode") # RUN: visible + animated
-	if not _require(mode_button.text == "MODE RUN" and (diagnostics[0] as MeshInstance3D).visible and (players[0] as AnimationPlayer).is_playing(), "RUN must restore benchmark geometry and motion"):
+	var original_shadows: Array = bench.get("original_shadows")
+	game.call("_cycle_crowd_mode") # NO SHADOW: visible and animated, no crowd shadow passes
+	if not _require(mode_button.text == "MODE NO SHADOW" and (diagnostics[0] as MeshInstance3D).visible and (players[0] as AnimationPlayer).is_playing() and (diagnostics[0] as MeshInstance3D).cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "NO SHADOW must keep animations and geometry while disabling crowd shadow casting"):
+		return
+	game.call("_cycle_crowd_mode") # RUN: restore visibility, motion and original shadow settings
+	if not _require(mode_button.text == "MODE RUN" and (diagnostics[0] as MeshInstance3D).visible and (players[0] as AnimationPlayer).is_playing() and int((diagnostics[0] as MeshInstance3D).cast_shadow) == int(original_shadows[0]), "RUN must restore geometry, motion and original shadow casting"):
 		return
 	for unused in range(4):
 		game.call("_cycle_crowd_benchmark") # 30/60/100/0
+	if not _require(not draw_stats.visible, "Draw counters must hide when LOAD returns to zero"):
+		return
 	if not _require(is_equal_approx(gameplay_camera.size, 12.0), "Crowd benchmark must restore normal zoom"):
 		return
 	print("Gameplay smoke test passed: independent baked sword resources retain approved poses; active Sweeping, movement, dash, world, training hits, HP and respawn.")
