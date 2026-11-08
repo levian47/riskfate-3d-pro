@@ -67,38 +67,6 @@ func _run_checks() -> void:
 	var tree := game.get("animation_tree") as AnimationTree
 	if not _require(hero != null and tree != null and tree.active, "Character and AnimationTree must initialize"):
 		return
-	# Three Ninja material candidates must preserve the same skeleton and
-	# animations while changing only render surfaces. Switching in-place
-	# avoids destroying AnimationTree and the approved sword attachment.
-	var candidate_mesh := game.get("ninja_mesh") as MeshInstance3D
-	var candidates: Array = game.get("ninja_mesh_variants")
-	if not _require(candidate_mesh != null and candidates.size() == 3, "Original/A/B mesh candidates must be available"):
-		return
-	for case_index in range(3):
-		var candidate := candidates[case_index] as Mesh
-		var expected_surfaces := 1 if case_index == 2 else 6
-		if not _require(candidate != null and candidate.get_surface_count() == expected_surfaces, "Ninja material candidate surface count should be 6/6/1"):
-			return
-		if not _require(candidate.surface_get_array_len(0) > 0, "Every material candidate must have vertices"):
-			return
-	var orig_mat := (candidates[0] as Mesh).surface_get_material(0) as BaseMaterial3D
-	var a_mat := (candidates[1] as Mesh).surface_get_material(0) as BaseMaterial3D
-	var b_mat := (candidates[2] as Mesh).surface_get_material(0) as StandardMaterial3D
-	if not _require(orig_mat != null and a_mat != null and orig_mat.cull_mode == BaseMaterial3D.CULL_DISABLED and a_mat.cull_mode == BaseMaterial3D.CULL_BACK, "A must enable backface culling while Original remains double-sided"):
-		return
-	if not _require(b_mat != null and b_mat.cull_mode == BaseMaterial3D.CULL_BACK and b_mat.vertex_color_use_as_albedo and not b_mat.vertex_color_is_srgb, "B must use linear-space vertex colors with backface culling"):
-		return
-	var b_arrays: Array = (candidates[2] as Mesh).surface_get_arrays(0)
-	if not _require(b_arrays[Mesh.ARRAY_VERTEX].size() == 9948 and b_arrays[Mesh.ARRAY_INDEX].size() == 21312 and b_arrays[Mesh.ARRAY_COLOR].size() == 9948, "B must preserve all 7104 triangles and provide a color for every vertex"):
-		return
-	for expected in [1, 2, 0]:
-		game.call("_cycle_ninja_materials")
-		if not _require(int(game.get("material_variant_index")) == expected and candidate_mesh.mesh == candidates[expected], "Ninja material switching must preserve the original animated mesh node"):
-			return
-	if DisplayServer.is_touchscreen_available():
-		var material_touch := game.get("touch_hud") as Control
-		if not _require(int(material_touch.material_variant) == 0, "Mobile material comparison indicator must wrap to O"):
-			return
 	# Skeleton inspection must not alter the model or animation; it is a
 	# disabled-by-default runtime drawing overlay.
 	var debug_rig := WEAPON_VISUALS.find_skeleton(game.get("visual") as Node3D) as Skeleton3D
@@ -159,7 +127,6 @@ func _run_checks() -> void:
 	var source_run := ANIMATION_BUILDER.find_clip(game.get("animator") as AnimationPlayer, "Run")
 	var run_asset := (game.get("animator") as AnimationPlayer).get_animation(source_run)
 	var full_speed := blend.get_node("NarutoFullSpeed") as AnimationNodeTimeScale
-	print("MAT QA Naruto: speed=", tree.get("parameters/NarutoFullSpeed/scale"), " expected=", NARUTO_FULL.length / run_asset.length, " clip=", run_asset.length, " base_ratio=", game.get("naruto_clip_speed_ratio"))
 	if not _require(full_speed != null and run_asset != null and is_equal_approx(float(tree.get("parameters/NarutoFullSpeed/scale")), NARUTO_FULL.length / run_asset.length), "Naruto full-body loop must match the Ninja Run root/foot stride"):
 		return
 	var attack := blend.get_node("Attack") as AnimationNodeOneShot
@@ -763,6 +730,38 @@ func _run_checks() -> void:
 	if not _require(float(combat_state.get("attack_time_left")) > 0.0 and bool(tree.get("parameters/Attack/active")), "Same sword slash must start when hero turns around"):
 		return
 
+	# Three Ninja material candidates must preserve the same skeleton and
+	# animations while changing only render surfaces. Switching in-place
+	# avoids destroying AnimationTree and the approved sword attachment.
+	var candidate_mesh := game.get("ninja_mesh") as MeshInstance3D
+	var candidates: Array = game.get("ninja_mesh_variants")
+	if not _require(candidate_mesh != null and candidates.size() == 3, "Original/A/B mesh candidates must be available"):
+		return
+	for case_index in range(3):
+		var candidate := candidates[case_index] as Mesh
+		var expected_surfaces := 1 if case_index == 2 else 6
+		if not _require(candidate != null and candidate.get_surface_count() == expected_surfaces, "Ninja material candidate surface count should be 6/6/1"):
+			return
+		if not _require(candidate.surface_get_array_len(0) > 0, "Every material candidate must have vertices"):
+			return
+	var orig_mat := (candidates[0] as Mesh).surface_get_material(0) as BaseMaterial3D
+	var a_mat := (candidates[1] as Mesh).surface_get_material(0) as BaseMaterial3D
+	var b_mat := (candidates[2] as Mesh).surface_get_material(0) as StandardMaterial3D
+	if not _require(orig_mat != null and a_mat != null and orig_mat.cull_mode == BaseMaterial3D.CULL_DISABLED and a_mat.cull_mode == BaseMaterial3D.CULL_BACK, "A must enable backface culling while Original remains double-sided"):
+		return
+	if not _require(b_mat != null and b_mat.cull_mode == BaseMaterial3D.CULL_BACK and b_mat.vertex_color_use_as_albedo and not b_mat.vertex_color_is_srgb, "B must use linear-space vertex colors with backface culling"):
+		return
+	var b_arrays: Array = (candidates[2] as Mesh).surface_get_arrays(0)
+	if not _require(b_arrays[Mesh.ARRAY_VERTEX].size() == 9948 and b_arrays[Mesh.ARRAY_INDEX].size() == 21312 and b_arrays[Mesh.ARRAY_COLOR].size() == 9948, "B must preserve all 7104 triangles and provide a color for every vertex"):
+		return
+	for expected in [1, 2, 0]:
+		game.call("_cycle_ninja_materials")
+		if not _require(int(game.get("material_variant_index")) == expected and candidate_mesh.mesh == candidates[expected], "Ninja material switching must preserve the original animated mesh node"):
+			return
+	if DisplayServer.is_touchscreen_available():
+		var material_touch := game.get("touch_hud") as Control
+		if not _require(int(material_touch.material_variant) == 0, "Mobile material comparison indicator must wrap to O"):
+			return
 	print("Gameplay smoke test passed: independent baked sword resources retain approved poses; active Sweeping, movement, dash, world, training hits, HP and respawn.")
 	quit(0)
 
