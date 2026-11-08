@@ -64,17 +64,18 @@ static func build_desktop_controls(canvas: CanvasLayer) -> Button:
 	fullscreen_button.text = "FULLSCREEN"
 	fullscreen_button.anchor_left = 1.0
 	fullscreen_button.anchor_right = 1.0
-	fullscreen_button.offset_left = -164.0
+	fullscreen_button.offset_left = -132.0
 	fullscreen_button.offset_right = -18.0
 	fullscreen_button.offset_top = 18.0
-	fullscreen_button.offset_bottom = 62.0
+	fullscreen_button.offset_bottom = 52.0
 	canvas.add_child(fullscreen_button)
 	return fullscreen_button
 
 
-static func desktop_help_text(weapon_name: String, naruto_enabled: bool = false, ninja_visual_controls: bool = true) -> String:
+static func desktop_help_text(weapon_name: String, naruto_enabled: bool = false, ninja_visual_controls: bool = true, run_by_default: bool = true) -> String:
 	var title := "NINJA 3D TEST" if ninja_visual_controls else "VROID 3D TEST"
-	var description := title + "\nWASD — рух   |   SHIFT — біг   |   Q — ривок\nSPACE — стрибок   |   ЛКМ — удар\nКолесо миші — масштаб   |   E — змінити зброю\n"
+	var mode := "біг" if run_by_default else "ходьба"
+	var description := title + "\nWASD — " + mode + " | P — біг/ходьба | SHIFT — біг | Q — ривок\nSPACE — стрибок | ЛКМ — удар\nКолесо миші — масштаб | E — зброя\n"
 	if ninja_visual_controls:
 		description += "R — Naruto Run (" + ("ON" if naruto_enabled else "OFF") + ")   |   "
 	return description + "Зброя: " + weapon_name
