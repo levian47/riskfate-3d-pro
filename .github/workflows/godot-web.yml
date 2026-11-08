@@ -113,24 +113,29 @@ jobs:
           echo 'GODOT_ANDROID_KEYSTORE_DEBUG_USER=androiddebugkey' >> "$GITHUB_ENV"
           echo 'GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=android' >> "$GITHUB_ENV"
 
-      - name: Export signed Android test APK
+      - name: Export and verify both signed Android benchmark APKs
         shell: bash
         run: |
           set -euo pipefail
           revision="${GITHUB_SHA:0:12}"
-          apk="$PWD/dist/builds/$revision/riskfate-3d-pro-test.apk"
-          "$GODOT_BIN" --headless --path . --export-debug 'Android Test' "$apk"
-          test -s "$apk"
-          unzip -tq "$apk"
-          "$ANDROID_HOME/build-tools/35.0.1/apksigner" verify --verbose "$apk"
-          "$ANDROID_HOME/build-tools/35.0.1/aapt" dump badging "$apk" | head -n 6
-          echo "Android test APK: $(stat -c %s "$apk") bytes"
+          dir="$PWD/dist/builds/$revision"
+          "$GODOT_BIN" --headless --path . --export-debug "Android Test" "$dir/riskfate-optimized.apk"
+          "$GODOT_BIN" --headless --path . --export-debug "Android Classic" "$dir/riskfate-classic.apk"
+          for apk in "$dir/riskfate-optimized.apk" "$dir/riskfate-classic.apk"; do
+            test -s "$apk"
+            unzip -tq "$apk"
+            "$ANDROID_HOME/build-tools/35.0.1/apksigner" verify --verbose "$apk"
+            "$ANDROID_HOME/build-tools/35.0.1/aapt" dump badging "$apk" | head -n 2
+            echo "Verified Android APK: $(basename "$apk") ($(stat -c %s "$apk") bytes)"
+          done
+          "$ANDROID_HOME/build-tools/35.0.1/aapt" dump badging "$dir/riskfate-optimized.apk" | grep -q "com.levian47.riskfate3dprobenchopt"
+          "$ANDROID_HOME/build-tools/35.0.1/aapt" dump badging "$dir/riskfate-classic.apk" | grep -q "com.levian47.riskfate3dprobenchclassic"
 
-      - name: Upload standalone Android APK artifact
+      - name: Upload standalone Android comparison APKs
         uses: actions/upload-artifact@v4
         with:
-          name: Riskfate-3D-Pro-Android-test
-          path: dist/builds/*/riskfate-3d-pro-test.apk
+          name: Riskfate-Android-Compare-Optimized-Classic
+          path: dist/builds/*/riskfate-*.apk
           if-no-files-found: error
           retention-days: 30
       - name: Upload Pages artifact

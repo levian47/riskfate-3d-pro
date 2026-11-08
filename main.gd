@@ -29,6 +29,8 @@ var material_variant_index := 1 # Approved A: culling, original retained as cont
 var crowd_benchmark = CROWD_BENCHMARK.new()
 var crowd_button: Button
 var crowd_mode_button: Button
+var fps_limit_button: Button
+var crowd_build_label: Label
 var crowd_stats_label: Label
 var animator: AnimationPlayer
 var camera: Camera3D
@@ -115,6 +117,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F8:
 		_cycle_crowd_mode()
 		return
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F9:
+		_toggle_fps_limit()
+		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_M:
 		_cycle_ninja_materials()
 		return
@@ -166,7 +171,7 @@ func _cycle_ninja_materials() -> void:
 func _cycle_crowd_benchmark() -> void:
 	crowd_benchmark.count_index = (crowd_benchmark.count_index + 1) % CROWD_BENCHMARK.COUNTS.size()
 	var count: int = CROWD_BENCHMARK.COUNTS[crowd_benchmark.count_index]
-	crowd_benchmark.set_count(count, MODEL, crowd_atlas_mesh)
+	crowd_benchmark.set_count(count, MODEL, _benchmark_crowd_mesh())
 	camera.size = 40.0 if count > 0 else camera_zoom
 	if crowd_button != null:
 		crowd_button.text = "LOAD %d" % count
@@ -178,6 +183,21 @@ func _cycle_crowd_mode() -> void:
 	var mode: String = crowd_benchmark.cycle_mode()
 	if crowd_mode_button != null:
 		crowd_mode_button.text = "MODE %s" % mode
+
+
+func _benchmark_crowd_mesh(force_legacy: bool = false) -> Mesh:
+	# The classic APK uses the approved six-surface A mesh; other exports
+	# use the optimized one-surface palette atlas. Gameplay is identical.
+	if force_legacy or OS.has_feature("legacy_crowd"):
+		return ninja_mesh_variants[1] if ninja_mesh_variants.size() > 1 else null
+	return crowd_atlas_mesh
+
+
+func _toggle_fps_limit() -> void:
+	# 0 removes the Godot Engine limit; display VSync/hardware may still cap FPS.
+	Engine.max_fps = 0 if Engine.max_fps == 60 else 60
+	if fps_limit_button != null:
+		fps_limit_button.text = "FPS CAP 60" if Engine.max_fps == 60 else "FPS CAP OFF"
 
 
 func _init_crowd_atlas() -> void:
@@ -404,6 +424,33 @@ func _build_ui() -> void:
 	crowd_stats_label.add_theme_constant_override("shadow_offset_y", 1)
 	crowd_stats_label.visible = false
 	canvas.add_child(crowd_stats_label)
+	fps_limit_button = Button.new()
+	fps_limit_button.name = "FPSLimitButton"
+	fps_limit_button.text = "FPS CAP 60"
+	fps_limit_button.anchor_left = 0.5
+	fps_limit_button.anchor_right = 0.5
+	fps_limit_button.offset_left = -104.0
+	fps_limit_button.offset_right = 104.0
+	fps_limit_button.offset_top = 177.0
+	fps_limit_button.offset_bottom = 220.0
+	fps_limit_button.pressed.connect(_toggle_fps_limit)
+	canvas.add_child(fps_limit_button)
+	crowd_build_label = Label.new()
+	crowd_build_label.name = "CrowdBuildLabel"
+	crowd_build_label.text = "BUILD CLASSIC (6 MATERIALS)" if OS.has_feature("legacy_crowd") else "BUILD OPTIMIZED (1 MATERIAL)"
+	crowd_build_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	crowd_build_label.anchor_left = 0.5
+	crowd_build_label.anchor_right = 0.5
+	crowd_build_label.offset_left = -190.0
+	crowd_build_label.offset_right = 190.0
+	crowd_build_label.offset_top = 224.0
+	crowd_build_label.offset_bottom = 246.0
+	crowd_build_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	crowd_build_label.add_theme_font_size_override("font_size", 15)
+	crowd_build_label.add_theme_color_override("font_shadow_color", Color.BLACK)
+	crowd_build_label.add_theme_constant_override("shadow_offset_x", 1)
+	crowd_build_label.add_theme_constant_override("shadow_offset_y", 1)
+	canvas.add_child(crowd_build_label)
 	if DisplayServer.is_touchscreen_available():
 		# Multiple fingers are handled independently in touch_hud.gd.
 		touch_hud = TOUCH_HUD_SCRIPT.new()

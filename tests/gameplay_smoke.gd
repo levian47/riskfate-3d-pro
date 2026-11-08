@@ -20,6 +20,19 @@ func _run_checks() -> void:
 	await process_frame
 	if not _require(Engine.max_fps == 60, "Engine must read the 60 FPS project limit"):
 		return
+	var limit_button := game.get_node_or_null("HUD/FPSLimitButton") as Button
+	if not _require(limit_button != null and limit_button.text == "FPS CAP 60" and limit_button.pressed.is_connected(Callable(game, "_toggle_fps_limit")), "FPS cap button must start at 60 and be connected"):
+		return
+	limit_button.pressed.emit()
+	if not _require(Engine.max_fps == 0 and limit_button.text == "FPS CAP OFF", "FPS CAP OFF must remove the Godot frame rate limit"):
+		return
+	limit_button.pressed.emit()
+	if not _require(Engine.max_fps == 60 and limit_button.text == "FPS CAP 60", "FPS limit must restore 60 on the next tap"):
+		return
+	var build_label := game.get_node_or_null("HUD/CrowdBuildLabel") as Label
+	var expected_build := "BUILD CLASSIC (6 MATERIALS)" if OS.has_feature("legacy_crowd") else "BUILD OPTIMIZED (1 MATERIAL)"
+	if not _require(build_label != null and build_label.text == expected_build, "Build label must identify the selected rendering variant"):
+		return
 	var ping_label := game.get_node_or_null("HUD/FPSCounter/Stats/PingLabel") as Label
 	if not _require(ping_label != null and ping_label.text == "PING: — (offline)", "Ping must show offline while no game server exists"):
 		return
@@ -776,6 +789,14 @@ func _run_checks() -> void:
 	var atlas_uv: PackedVector2Array = crowd_atlas.surface_get_arrays(0)[Mesh.ARRAY_TEX_UV]
 	if not _require(atlas_uv.size() == 9948, "Crowd atlas UVs must cover every original skinned vertex"):
 		return
+	# Both meshes must exist; legacy keeps the same 6-surface A hero geometry.
+	var classic_mesh := game.call("_benchmark_crowd_mesh", true) as Mesh
+	if not _require(classic_mesh != null and classic_mesh.get_surface_count() == 6 and classic_mesh == candidates[1], "Legacy crowd must reuse approved A with six surfaces"):
+		return
+	var selected_crowd_mesh := game.call("_benchmark_crowd_mesh") as Mesh
+	var expected_surfaces := 6 if OS.has_feature("legacy_crowd") else 1
+	if not _require(selected_crowd_mesh != null and selected_crowd_mesh.get_surface_count() == expected_surfaces, "Benchmark mesh must respect the build feature tag"):
+		return
 	var bench = game.get("crowd_benchmark")
 	var bench_button := game.get_node_or_null("HUD/CrowdBenchmarkButton") as Button
 	var mode_button := game.get_node_or_null("HUD/CrowdModeButton") as Button
@@ -819,7 +840,7 @@ func _run_checks() -> void:
 					var crowd_mesh := crowd_meshes[i] as MeshInstance3D
 					var crowd_player := animation_players[i] as AnimationPlayer
 					var expected_shadow := int(GeometryInstance3D.SHADOW_CASTING_SETTING_OFF) if mode_name == "NO SHADOW" else int(original_shadows[i])
-					if not _require(crowd_mesh != null and crowd_player != null and crowd_mesh.mesh == crowd_atlas, "All %d crowd meshes must use one-surface atlas while hero is MAT %d" % [count, material_index]):
+					if not _require(crowd_mesh != null and crowd_player != null and crowd_mesh.mesh == selected_crowd_mesh, "All %d crowd meshes must use the selected benchmark mesh while hero is MAT %d" % [count, material_index]):
 						return
 					if not _require(crowd_mesh.visible == (mode_name != "HIDE") and crowd_player.is_playing() == (mode_name != "PAUSE") and int(crowd_mesh.cast_shadow) == expected_shadow, "Crowd actor %d failed %s/MAT %d at LOAD %d" % [i, mode_name, material_index, count]):
 						return
@@ -830,7 +851,7 @@ func _run_checks() -> void:
 			return
 	if not _require(matrix_cases == 32 and int(game.get("material_variant_index")) == 1, "Benchmark must cover all 32 nonzero crowd/mode/material combinations and return to A"):
 		return
-	print("Crowd atlas matrix passed: 4 loads x 4 modes x 2 hero materials; 1 surface and 6 palette colors preserved; LOAD 0 cleanup.")
+	print("Crowd benchmark matrix passed: 4 loads x 4 modes x 2 hero materials; atlas/legacy meshes verified; LOAD 0 cleanup.")
 	print("Gameplay smoke test passed: independent baked sword resources retain approved poses; active Sweeping, movement, dash, world, training hits, HP and respawn.")
 	quit(0)
 
