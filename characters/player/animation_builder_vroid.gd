@@ -111,7 +111,7 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 	var state_names := ["Idle", "Walk", "Run", "Jump"]
 	var clips := ["vroid/Idle", walk_name, jog_name, "vroid/Jump"]
 	for i in range(state_names.size()):
-		var state := state_names[i]
+		var state: String = state_names[i]
 		_add_clip(root, state, clips[i])
 		locomotion.set_input_name(i, state)
 		if state == "Walk" or state == "Run":
