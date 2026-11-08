@@ -16,6 +16,7 @@ func _run_checks() -> void:
 	if not _require(scene != null, "Main scene not loaded"):
 		return
 	var game := scene.instantiate()
+	game.set("use_legacy_hero", true) # Preserve the approved Ninja regression baseline.
 	root.add_child(game)
 	await process_frame
 	if not _require(Engine.max_fps == 60, "Engine must read the 60 FPS project limit"):
@@ -705,6 +706,7 @@ func _run_checks() -> void:
 	# Test a freshly spawned hero through the real AnimationTree and
 	# OneShot fade. Clip-only checks do not reveal a high idle-to-attack blend.
 	var fresh_game := scene.instantiate()
+	fresh_game.set("use_legacy_hero", true)
 	root.add_child(fresh_game)
 	await process_frame
 	fresh_game.set_physics_process(false)
