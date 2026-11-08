@@ -26,6 +26,7 @@ var ninja_mesh_variants: Array[Mesh] = []
 var material_variant_index := 1 # Approved A: culling, original retained as control
 var crowd_benchmark = CROWD_BENCHMARK.new()
 var crowd_button: Button
+var crowd_mode_button: Button
 var animator: AnimationPlayer
 var camera: Camera3D
 var skeleton_debug: MeshInstance3D
@@ -102,6 +103,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F7:
 		_cycle_crowd_benchmark()
 		return
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F8:
+		_cycle_crowd_mode()
+		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_M:
 		_cycle_ninja_materials()
 		return
@@ -157,6 +161,12 @@ func _cycle_crowd_benchmark() -> void:
 	camera.size = 40.0 if count > 0 else camera_zoom
 	if crowd_button != null:
 		crowd_button.text = "LOAD %d" % count
+
+
+func _cycle_crowd_mode() -> void:
+	var mode: String = crowd_benchmark.cycle_mode()
+	if crowd_mode_button != null:
+		crowd_mode_button.text = "MODE %s" % mode
 
 
 func _find_model_mesh(root: Node) -> MeshInstance3D:
@@ -345,6 +355,17 @@ func _build_ui() -> void:
 	crowd_button.offset_bottom = 97.0
 	crowd_button.pressed.connect(_cycle_crowd_benchmark)
 	canvas.add_child(crowd_button)
+	crowd_mode_button = Button.new()
+	crowd_mode_button.name = "CrowdModeButton"
+	crowd_mode_button.text = "MODE RUN"
+	crowd_mode_button.anchor_left = 0.5
+	crowd_mode_button.anchor_right = 0.5
+	crowd_mode_button.offset_left = -76.0
+	crowd_mode_button.offset_right = 76.0
+	crowd_mode_button.offset_top = 102.0
+	crowd_mode_button.offset_bottom = 145.0
+	crowd_mode_button.pressed.connect(_cycle_crowd_mode)
+	canvas.add_child(crowd_mode_button)
 	if DisplayServer.is_touchscreen_available():
 		# Multiple fingers are handled independently in touch_hud.gd.
 		touch_hud = TOUCH_HUD_SCRIPT.new()
