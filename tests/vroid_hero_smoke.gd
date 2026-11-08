@@ -48,6 +48,25 @@ func _run() -> void:
 		return
 	if not _check(animator.get_animation(walk).loop_mode == Animation.LOOP_LINEAR and animator.get_animation(jog).loop_mode == Animation.LOOP_LINEAR, "Walk/Jog must loop"):
 		return
+	# Quaternius CC0 locomotion is separate from the preserved original
+	# VRoid Walk/Jog and must be the active clip in the gameplay graph.
+	var new_walk_name := VROID_ANIM.find_clip(animator, "QuaterniusWalk")
+	var new_run_name := VROID_ANIM.find_clip(animator, "QuaterniusRun")
+	if not _check(not new_walk_name.is_empty() and not new_run_name.is_empty(), "new CC0 Walk/Run clips missing"):
+		return
+	var new_walk := animator.get_animation(new_walk_name)
+	var new_run := animator.get_animation(new_run_name)
+	if not _check(new_walk.loop_mode == Animation.LOOP_LINEAR and new_run.loop_mode == Animation.LOOP_LINEAR, "new locomotion must loop"):
+		return
+	if not _check(new_walk.get_track_count() == 23 and new_run.get_track_count() == 23, "22 retargeted bones plus hips movement expected"):
+		return
+	var graph := tree.tree_root as AnimationNodeBlendTree
+	if not _check(graph != null, "VRoid AnimationTree root missing"):
+		return
+	var walk_node := graph.get_node("Walk") as AnimationNodeAnimation
+	var run_node := graph.get_node("Run") as AnimationNodeAnimation
+	if not _check(walk_node != null and run_node != null and String(walk_node.animation) == new_walk_name and String(run_node.animation) == new_run_name, "gameplay graph not using new Walk/Run"):
+		return
 	if not _check(not VROID_ANIM.find_clip(animator, "SwordSlash").is_empty(), "combat timing clip missing"):
 		return
 	game.call("_set_locomotion", "Walk", true)
@@ -70,7 +89,7 @@ func _run() -> void:
 	game.call("_start_attack")
 	if not _check(float(game.get("combat_controller").get("attack_time_left")) > 0.0, "attack input/timing broken"):
 		return
-	print("VRoid smoke test OK: 103 bones, ", mesh_count, " mesh nodes, Walk/Jog, weapon mount and attack")
+	print("VRoid smoke test OK: 103 bones, ", mesh_count, " mesh nodes, original Walk/Jog and Quaternius Walk/Run, weapon mount and attack")
 	game.queue_free()
 	quit(0)
 
