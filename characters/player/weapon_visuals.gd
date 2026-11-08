@@ -78,7 +78,10 @@ func equip(index: int) -> bool:
 		holder.queue_free()
 		push_error("Weapon test: model has no usable mesh: " + String(specification["path"]))
 		return false
-	var factor := float(specification["length"]) / bounds.size.y
+	# VRoid source geometry is scaled to the existing player capsule.
+	# Compensate for that parent scale so equipped weapons keep their world size.
+	var inherited_scale := maxf(mount.global_transform.basis.get_scale().y, 0.0001)
+	var factor := float(specification["length"]) / (bounds.size.y * inherited_scale)
 	# The Quaternius origin is near the crossguard; grip is halfway down
 	# the portion of the handle below the origin.
 	var grip_y := minf(0.0, bounds.position.y) * 0.5
