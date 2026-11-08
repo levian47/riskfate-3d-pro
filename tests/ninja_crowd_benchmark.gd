@@ -3,11 +3,16 @@ extends RefCounted
 # Not a server load test; does not create physics bodies or network traffic.
 const ANIM := preload("res://characters/player/animation_builder.gd")
 const COUNTS := [0, 10, 30, 60, 100]
+# RUN: animated + rendered; PAUSE: static pose + rendered;
+# HIDE: animations run but crowd geometry is not rendered.
+const MODES := ["RUN", "PAUSE", "HIDE"]
 
 var root: Node3D
 var actors: Array[Node3D] = []
 var mesh_nodes: Array[MeshInstance3D] = []
+var players: Array[AnimationPlayer] = []
 var count_index := 0
+var mode_index := 0
 
 func initialize(parent: Node3D) -> void:
 	root = Node3D.new()
@@ -30,6 +35,7 @@ func set_count(target: int, scene: PackedScene, mesh: Mesh) -> void:
 	while actors.size() > target:
 		var actor: Node3D = actors.pop_back()
 		mesh_nodes.pop_back()
+		players.pop_back()
 		root.remove_child(actor)
 		actor.queue_free()
 	while actors.size() < target:
@@ -58,6 +64,25 @@ func set_count(target: int, scene: PackedScene, mesh: Mesh) -> void:
 				player.seek(fmod(float(index) * 0.067, player.current_animation_length), true)
 		actors.append(actor)
 		mesh_nodes.append(skinned)
+		players.append(player)
+	_apply_mode()
+
+func cycle_mode() -> String:
+	mode_index = (mode_index + 1) % MODES.size()
+	_apply_mode()
+	return MODES[mode_index]
+
+func _apply_mode() -> void:
+	for i in range(mesh_nodes.size()):
+		mesh_nodes[i].visible = mode_index != 2
+		var player := players[i]
+		if player == null:
+			continue
+		if mode_index == 1:
+			player.pause()
+		elif player.is_playing() == false:
+			# Godot resumes a paused AnimationPlayer on play().
+			player.play()
 
 func set_mesh(mesh: Mesh) -> void:
 	if mesh == null:
@@ -74,3 +99,5 @@ func clear() -> void:
 		actor.queue_free()
 	actors.clear()
 	mesh_nodes.clear()
+	players.clear()
+	mode_index = 0
