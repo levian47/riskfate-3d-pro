@@ -317,10 +317,17 @@ func _build_hero() -> void:
 	visual.name = "Visual"
 	hero.add_child(visual)
 	var model := MODEL.instantiate() if use_legacy_hero else VROID_MODEL.instantiate()
-	# Match the existing 2.8 m player collision capsule without changing physics.
-	if not use_legacy_hero:
-		model.scale = Vector3.ONE * (2.8 / 1.66)
 	visual.add_child(model)
+	# Match the 2.8 m player capsule using the actual VRoid mesh bounds, not
+	# a hard-coded source-file height. Keep feet aligned with the ground.
+	if not use_legacy_hero:
+		var bounds := weapon_visuals._bounds_in_root(model)
+		if bounds.size.y > 0.01:
+			var hero_scale := capsule.height / bounds.size.y
+			model.scale = Vector3.ONE * hero_scale
+			model.position.y = -bounds.position.y * hero_scale
+		else:
+			push_error("VRoid heroine has no usable mesh bounds")
 	if use_legacy_hero:
 		_setup_material_comparison(model)
 	else:
