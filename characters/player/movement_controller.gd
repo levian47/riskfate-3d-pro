@@ -19,6 +19,7 @@ var coyote_left := 0.0
 var jump_buffer_left := 0.0
 var jump_was_pressed := false
 var last_move_direction := Vector3.FORWARD
+var run_by_default := true # P toggles keyboard Run/Walk; Shift overrides Walk temporarily.
 var dash_direction := Vector3.FORWARD
 var dash_time_left := 0.0
 var dash_cooldown_left := 0.0
@@ -64,7 +65,11 @@ func physics_step(hero: CharacterBody3D, visual: Node3D, camera: Camera3D, touch
 	var direction := MOVEMENT_MATH.camera_relative_direction(camera, input_vector)
 	if direction.length_squared() > 0.01:
 		last_move_direction = direction.normalized()
-	var target_speed := RUN_SPEED if Input.is_key_pressed(KEY_SHIFT) or mobile_running else WALK_SPEED
+	# Desktop defaults to running; P switches to walking. Touch movement keeps
+	# its analog thumbstick threshold and never depends on a keyboard toggle.
+	var target_speed := RUN_SPEED if run_by_default or Input.is_key_pressed(KEY_SHIFT) else WALK_SPEED
+	if touch_hud != null and touch_hud.move_vector.length_squared() > 0.0001:
+		target_speed = RUN_SPEED if mobile_running else WALK_SPEED
 	var facing_direction := direction
 	if dash_time_left > 0.0:
 		facing_direction = dash_direction
@@ -87,5 +92,5 @@ func physics_step(hero: CharacterBody3D, visual: Node3D, camera: Camera3D, touch
 		coyote_left = 0.0
 
 	hero.move_and_slide()
-	MOVEMENT_MATH.apply_facing(visual, facing_direction)
+	MOVEMENT_MATH.apply_facing(visual, facing_direction, delta)
 	return launched
