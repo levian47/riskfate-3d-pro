@@ -26,12 +26,18 @@ static func find_skeleton(node: Node) -> Skeleton3D:
 
 func initialize(model: Node) -> bool:
 	var skeleton := find_skeleton(model)
-	if skeleton == null or skeleton.find_bone("Fist.R") < 0:
-		push_error("Weapon test: missing Fist.R bone")
+	if skeleton == null:
+		push_error("Weapon test: character skeleton missing")
+		return false
+	var right_hand := "Fist.R"
+	if skeleton.find_bone(right_hand) < 0:
+		right_hand = "J_Bip_R_Hand"
+	if skeleton.find_bone(right_hand) < 0:
+		push_error("Weapon test: no supported right-hand bone")
 		return false
 	var attachment := BoneAttachment3D.new()
 	attachment.name = "SwordGrip"
-	attachment.bone_name = "Fist.R"
+	attachment.bone_name = right_hand
 	skeleton.add_child(attachment)
 	mount = Node3D.new()
 	mount.name = "WeaponMount"
@@ -72,7 +78,10 @@ func equip(index: int) -> bool:
 		holder.queue_free()
 		push_error("Weapon test: model has no usable mesh: " + String(specification["path"]))
 		return false
-	var factor := float(specification["length"]) / bounds.size.y
+	# VRoid source geometry is scaled to the existing player capsule.
+	# Compensate for that parent scale so equipped weapons keep their world size.
+	var inherited_scale := maxf(mount.global_transform.basis.get_scale().y, 0.0001)
+	var factor := float(specification["length"]) / (bounds.size.y * inherited_scale)
 	# The Quaternius origin is near the crossguard; grip is halfway down
 	# the portion of the handle below the origin.
 	var grip_y := minf(0.0, bounds.position.y) * 0.5

@@ -1,6 +1,7 @@
 extends Node3D
 
 const MODEL := preload("res://assets/Ninja_Female.gltf")
+const VROID_MODEL := preload("res://characters/player/model/heroine_vroid.gltf")
 const MODEL_MATERIAL_A := preload("res://assets/Ninja_Female_material_A.gltf")
 const MODEL_MATERIAL_B := preload("res://assets/Ninja_Female_material_B.gltf")
 const CROWD_PALETTE_ATLAS := preload("res://assets/Ninja_Female_palette_atlas.gltf")
@@ -14,12 +15,14 @@ const HUD_BUILDER := preload("res://ui/hud_builder.gd")
 const SKELETON_DEBUG := preload("res://ui/skeleton_debug.gd")
 const CROWD_BENCHMARK := preload("res://tests/ninja_crowd_benchmark.gd")
 const ANIMATION_BUILDER := preload("res://characters/player/animation_builder.gd")
+const VROID_ANIMATION_BUILDER := preload("res://characters/player/animation_builder_vroid.gd")
 const COMBAT_CONTROLLER := preload("res://characters/player/combat_controller.gd")
 const WEAPON_VISUALS := preload("res://characters/player/weapon_visuals.gd")
 const WORLD_SCRIPT := preload("res://world/environment.gd")
 # Attack still overlays only the upper body; movement continues unchanged.
 const ATTACK_SPEED := COMBAT_CONTROLLER.ATTACK_SPEED
 
+var use_legacy_hero := false # Smoke tests may explicitly select the previous Ninja as a control.
 var hero: CharacterBody3D
 var visual: Node3D
 var ninja_mesh: MeshInstance3D
@@ -138,6 +141,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			camera.size = camera_zoom
 
 func _toggle_naruto_run() -> void:
+	if not use_legacy_hero:
+		return # No VRoid-compatible Naruto animation has been supplied.
 	naruto_run_enabled = not naruto_run_enabled
 	if locomotion_state == "Run" or locomotion_state == "Naruto":
 		_set_locomotion("Naruto" if naruto_run_enabled else "Run")
@@ -198,6 +203,14 @@ func _toggle_fps_limit() -> void:
 	Engine.max_fps = 0 if Engine.max_fps == 60 else 60
 	if fps_limit_button != null:
 		fps_limit_button.text = "FPS CAP 60" if Engine.max_fps == 60 else "FPS CAP OFF"
+
+
+func _prepare_legacy_crowd_meshes() -> void:
+	# Keep both benchmark mesh modes independent of the new playable hero.
+	var reference := MODEL.instantiate()
+	_setup_material_comparison(reference)
+	reference.free()
+	ninja_mesh = null
 
 
 func _init_crowd_atlas() -> void:
@@ -265,7 +278,8 @@ func _update_weapon_display() -> void:
 		touch_hud.queue_redraw()
 	var help_label := get_node_or_null("HUD/HelpPanel/HelpText") as Label
 	if help_label != null:
-		help_label.text = HUD_BUILDER.desktop_help_text(weapon_visuals.selected_name(), naruto_run_enabled) + " | M: MAT %s" % ["O", "A", "B"][material_variant_index]
+		help_label.text = HUD_BUILDER.desktop_help_text(weapon_visuals.selected_name(), naruto_run_enabled, use_legacy_hero)
+		help_label.text += (" | M: MAT %s" % ["O", "A", "B"][material_variant_index]) if use_legacy_hero else " | VRoid"
 
 
 func _start_dash() -> void:
@@ -304,9 +318,22 @@ func _build_hero() -> void:
 	visual = Node3D.new()
 	visual.name = "Visual"
 	hero.add_child(visual)
-	var model := MODEL.instantiate()
+	var model := MODEL.instantiate() if use_legacy_hero else VROID_MODEL.instantiate()
 	visual.add_child(model)
-	_setup_material_comparison(model)
+	# Match the 2.8 m player capsule using the actual VRoid mesh bounds, not
+	# a hard-coded source-file height. Keep feet aligned with the ground.
+	if not use_legacy_hero:
+		var bounds := weapon_visuals._bounds_in_root(model)
+		if bounds.size.y > 0.01:
+			var hero_scale := capsule.height / bounds.size.y
+			model.scale = Vector3.ONE * hero_scale
+			model.position.y = -bounds.position.y * hero_scale
+		else:
+			push_error("VRoid heroine has no usable mesh bounds")
+	if use_legacy_hero:
+		_setup_material_comparison(model)
+	else:
+		_prepare_legacy_crowd_meshes()
 	var rig := WEAPON_VISUALS.find_skeleton(model) as Skeleton3D
 	if rig != null:
 		skeleton_debug = SKELETON_DEBUG.new() as MeshInstance3D
@@ -316,10 +343,16 @@ func _build_hero() -> void:
 	animator = ANIMATION_BUILDER.find_animation_player(model)
 	if animator != null:
 		# Preserve imported locomotion loop behavior and accepted attack clips.
-		ANIMATION_BUILDER.configure_animation_loops(animator)
+		if use_legacy_hero:
+			ANIMATION_BUILDER.configure_animation_loops(animator)
+		else:
+			VROID_ANIMATION_BUILDER.configure_animation_loops(animator)
 		if not weapon_visuals.initialize(model):
 			push_warning("Visual weapon test could not initialize")
-		animation_tree = ANIMATION_BUILDER.setup_animation_tree(model, animator, ATTACK_SPEED)
+		if use_legacy_hero:
+			animation_tree = ANIMATION_BUILDER.setup_animation_tree(model, animator, ATTACK_SPEED)
+		else:
+			animation_tree = VROID_ANIMATION_BUILDER.setup_animation_tree(model, animator, ATTACK_SPEED)
 		if animation_tree != null:
 			naruto_clip_speed_ratio = float(animation_tree.get("parameters/NarutoFullSpeed/scale"))
 			_set_locomotion("Idle")
@@ -343,7 +376,8 @@ func _set_locomotion(state: String, restart: bool = false) -> void:
 		return
 	# With Naruto running, the attack overlay may move the weapon arm only.
 	# Normal locomotion keeps the original approved full upper-body strike.
-	ANIMATION_BUILDER.preserve_naruto_pose_during_attack(animation_tree, state == "Naruto")
+	if use_legacy_hero:
+		ANIMATION_BUILDER.preserve_naruto_pose_during_attack(animation_tree, state == "Naruto")
 	animation_tree.set("parameters/Locomotion/transition_request", state)
 	locomotion_state = state
 
@@ -454,6 +488,7 @@ func _build_ui() -> void:
 	if DisplayServer.is_touchscreen_available():
 		# Multiple fingers are handled independently in touch_hud.gd.
 		touch_hud = TOUCH_HUD_SCRIPT.new()
+		touch_hud.ninja_visual_controls = use_legacy_hero
 		touch_hud.name = "MobileControls"
 		canvas.add_child(touch_hud)
 		touch_hud.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
