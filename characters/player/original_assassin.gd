@@ -3,7 +3,7 @@ extends RefCounted
 # Ninja Skeleton3D/Skin. This is authored geometry, not a recolored Ninja mesh.
 # Prototype V1 — pending artistic approval and animation inspection on device.
 
-const COLORS := [
+const COLORS = [
 	"79503f", # 0 warm dark skin
 	"a26b54", # 1 skin highlight
 	"56362f", # 2 skin shadow
@@ -23,26 +23,26 @@ const COLORS := [
 ]
 
 # Index in existing Ninja_Female.gltf skin.joints. Never change the live rig.
-const BODY := 2
-const HIPS := 3
-const ABDOMEN := 4
-const TORSO := 5
-const NECK := 6
-const HEAD := 7
-const SHOULDER_L := 8
-const UPPER_ARM_L := 9
-const LOWER_ARM_L := 10
-const FIST_L := 11
-const SHOULDER_R := 12
-const UPPER_ARM_R := 13
-const LOWER_ARM_R := 14
-const FIST_R := 15
-const UPPER_LEG_L := 16
-const LOWER_LEG_L := 17
-const UPPER_LEG_R := 18
-const LOWER_LEG_R := 19
-const FOOT_L := 1
-const FOOT_R := 21
+const BODY = 2
+const HIPS = 3
+const ABDOMEN = 4
+const TORSO = 5
+const NECK = 6
+const HEAD = 7
+const SHOULDER_L = 8
+const UPPER_ARM_L = 9
+const LOWER_ARM_L = 10
+const FIST_L = 11
+const SHOULDER_R = 12
+const UPPER_ARM_R = 13
+const LOWER_ARM_R = 14
+const FIST_R = 15
+const UPPER_LEG_L = 16
+const LOWER_LEG_L = 17
+const UPPER_LEG_R = 18
+const LOWER_LEG_R = 19
+const FOOT_L = 1
+const FOOT_R = 21
 
 var vertices := PackedVector3Array()
 var normals := PackedVector3Array()
