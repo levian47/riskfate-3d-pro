@@ -157,8 +157,29 @@ func _run() -> void:
 	var run_node := graph.get_node("Run") as AnimationNodeAnimation
 	if not _check(walk_node != null and run_node != null and String(walk_node.animation) == new_walk_name and String(run_node.animation) == new_run_name, "gameplay graph not using new Walk/Run"):
 		return
-	if not _check(not VROID_ANIM.find_clip(animator, "SwordSlash").is_empty(), "combat timing clip missing"):
+	var regular_name := VROID_ANIM.find_clip(animator, "SwordSlash")
+	var heavy_name := VROID_ANIM.find_clip(animator, "SwordHeavyCandidate")
+	if not _check(not regular_name.is_empty() and not heavy_name.is_empty(), "UAL2 combat clips missing"):
 		return
+	var regular_clip := animator.get_animation(regular_name)
+	var heavy_clip := animator.get_animation(heavy_name)
+	if not _check(regular_clip.get_track_count() >= 11 and heavy_clip.get_track_count() >= 11, "UAL2 attack must retarget both arms and spine"):
+		return
+	if not _check(regular_clip.length > 0.40 and regular_clip.length < 0.50 and heavy_clip.length > 0.70 and heavy_clip.length < 0.80, "source attack durations do not match UAL2"):
+		return
+	var slash_blend := graph.get_node("SlashChoice") as AnimationNodeBlend2
+	if not _check(slash_blend != null, "UAL2 combat clip selector missing"):
+		return
+	if not _check(float(tree.get("parameters/SlashChoice/blend_amount")) < 0.01, "Sword I must select regular attack"):
+		return
+	if not _check(weapon_visuals.equip(1), "Sword II cannot be equipped for heavy preview"):
+		return
+	game.call("_update_weapon_display")
+	if not _check(float(tree.get("parameters/SlashChoice/blend_amount")) > 0.99, "Sword II must select heavy preview"):
+		return
+	if not _check(weapon_visuals.equip(0), "Sword I re-equip after heavy preview failed"):
+		return
+	game.call("_update_weapon_display")
 	game.call("_set_locomotion", "Walk", true)
 	tree.advance(0.10)
 	game.call("_set_locomotion", "Run", true)
