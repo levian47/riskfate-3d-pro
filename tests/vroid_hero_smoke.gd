@@ -256,18 +256,23 @@ func _run() -> void:
 		var source := holder.get_child(0) as Node3D
 		var local_bounds: AABB = weapon_visuals._bounds_in_root(holder)
 		var hilt_center: Vector3 = weapon_visuals._hilt_anchor_in_root(holder, local_bounds)
+		hilt_center.y += local_bounds.size.y * WEAPONS.VROID_GRIP_ADVANCE_FRACTION
 		var fitted_hilt: Vector3 = holder.transform * hilt_center
 		if not _check(fitted_hilt.length() < 0.025,
 			"weapon grip midpoint displaced from mount, including vertical position"):
 			return
-		# Twist the model about the blade's Y axis; do not twist the VRoid hand.
-		if not _check(absf(source.rotation_degrees.y - WEAPONS.VROID_WEAPON_MODEL_ROLL_DEGREES) < 0.1,
-			"weapon model missing requested 90 degree axial turn"):
+		# Verify the shared 90° roll and Cutlass-only extra clockwise 225°.
+		# The hand bone must remain unaffected by the weapon's model rotation.
+		var expected_roll := WEAPONS.VROID_WEAPON_MODEL_ROLL_DEGREES
+		if weapon_id == 4:
+			expected_roll += WEAPONS.VROID_CUTLASS_EXTRA_ROLL_DEGREES
+		if not _check(absf(source.rotation_degrees.y - expected_roll) < 0.1,
+			"wrong weapon axial roll, including Cutlass clockwise correction"):
 			return
 		# Check that the anchor is not on the pommel / very end of the grip.
 		var anchor_fraction := (hilt_center.y - local_bounds.position.y) / local_bounds.size.y
-		if not _check(anchor_fraction > 0.04 and anchor_fraction < 0.29,
-			"weapon grip anchor not within the lower-middle handle region"):
+		if not _check(anchor_fraction > 0.16 and anchor_fraction < 0.24,
+			"weapon grip did not advance slightly from the previous handle position"):
 			return
 		if not _check(grip.position.z > 0.02, "VRoid weapon must project forward of the palm"):
 			return
