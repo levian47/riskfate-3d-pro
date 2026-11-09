@@ -590,6 +590,23 @@ func _run() -> void:
 	var left_finger_path := unarmed_clip.track_get_path(unarmed_tracks["J_Bip_L_Index2"])
 	if not _check(one_shot.is_path_filtered(right_finger_path) and one_shot.is_path_filtered(left_finger_path), "unarmed fist curl must be included in the attack layer"):
 		return
+	# Measure actual fist displacement on the VRoid skeleton; angular change
+	# by itself cannot prove that a jab moves forward in front of the torso.
+	tree.active = false
+	var right_hand_index := rig.find_bone("J_Bip_R_Hand")
+	var left_hand_index := rig.find_bone("J_Bip_L_Hand")
+	var fist_positions := []
+	for sample_time in [0.10, 0.27, 0.48]:
+		animator.play(unarmed_name)
+		animator.seek(sample_time, true)
+		rig.force_update_all_bone_transforms()
+		fist_positions.append([
+			rig.get_bone_global_pose(right_hand_index).origin,
+			rig.get_bone_global_pose(left_hand_index).origin
+		])
+	print("UNARMED_FIST_TRAJECTORY guard=", fist_positions[0], " right=", fist_positions[1], " left=", fist_positions[2])
+	animator.stop()
+	tree.active = true
 	# A new weapon cancels an active fist combo, preventing punches with a sword.
 	weapon_visuals.equip(0)
 	game.call("_update_weapon_display")
