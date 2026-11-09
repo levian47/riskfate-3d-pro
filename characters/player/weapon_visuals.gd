@@ -24,7 +24,7 @@ const VROID_WEAPON_MODEL_ROLL_DEGREES := 90.0
 const VROID_CUTLASS_EXTRA_ROLL_DEGREES := -225.0
 # Trial cutlass-only outward lean from the palm, without changing axial roll or hilt fit.
 # On the VRoid right-hand rest bone, local +Y faces away from the torso.
-const VROID_CUTLASS_OUTWARD_TILT_DEGREES := 12.0
+const VROID_CUTLASS_OUTWARD_TILT_DEGREES := 30.0
 # Small additional advance from the current ~15% grip point toward the guard.
 # Measured relative to model length; does not change lateral centering.
 const VROID_GRIP_ADVANCE_FRACTION := 0.035
