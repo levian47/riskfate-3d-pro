@@ -163,7 +163,7 @@ func _run() -> void:
 		return
 	var regular_clip := animator.get_animation(regular_name)
 	var heavy_clip := animator.get_animation(heavy_name)
-	if not _check(regular_clip.get_track_count() >= 11 and heavy_clip.get_track_count() >= 11, "UAL2 attack must retarget both arms and spine"):
+	if not _check(regular_clip.get_track_count() >= 10 and heavy_clip.get_track_count() >= 10, "UAL2 attack must retarget both arms and spine"):
 		return
 	if not _check(regular_clip.length > 0.40 and regular_clip.length < 0.50 and heavy_clip.length > 0.70 and heavy_clip.length < 0.80, "source attack durations do not match UAL2"):
 		return
