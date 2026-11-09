@@ -40,9 +40,13 @@ jobs:
         run: gh workflow run "Godot Web / GitHub Pages" --repo "$GITHUB_REPOSITORY" --ref main
 
   build:
-    if: github.event_name != 'pull_request'
+    # Test PR changes without deploying them; main/manual runs keep Pages publishing.
+    if: github.event_name != 'pull_request' || github.event.action == 'opened' || github.event.action == 'reopened' || github.event.action == 'synchronize'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - name: Check out game
         uses: actions/checkout@v4
@@ -118,9 +122,35 @@ jobs:
           cd "$RUNNER_TEMP"
           "$GODOT_BIN" --headless --main-pack "$GITHUB_WORKSPACE/dist/builds/${GITHUB_SHA:0:12}/index.pck" --script res://tests/gameplay_smoke.gd
 
+      - name: Browser smoke-test exported Web (Chromium / WebGL 2)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Only a pinned test runner is installed; gameplay has no Node dependency.
+          npm install --no-save --no-package-lock --ignore-scripts playwright@1.65.0
+          npx playwright install --with-deps --only-shell chromium
+          web_dir="$PWD/dist/builds/${GITHUB_SHA:0:12}"
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory "$web_dir" \
+            > "$RUNNER_TEMP/browser-http.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          BASE_URL="http://127.0.0.1:8765/" SCREENSHOT_DIR="$RUNNER_TEMP/browser-smoke" \
+            node tests/browser_smoke.mjs
+
+      - name: Upload browser diagnostics if a test fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-smoke-${{ github.run_number }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/browser-smoke/
+            ${{ runner.temp }}/browser-http.log
+          if-no-files-found: ignore
+          retention-days: 7
       # Opt-in only: a same-repository PR includes the marker below in its body.
       # The main game and previews are deployed together, preserving the home page.
       - name: Build opted-in Web PR previews (no Android)
+        if: github.event_name != 'pull_request'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -228,6 +258,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
       - name: Upload Pages artifact
+        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v4
         with:
           path: dist
