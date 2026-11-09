@@ -54,28 +54,29 @@ func _run() -> void:
 	var new_run_name := VROID_ANIM.find_clip(animator, "QuaterniusRun")
 	if not _check(not new_walk_name.is_empty() and not new_run_name.is_empty(), "new CC0 Walk/Run clips missing"):
 		return
-	var new_walk := animator.get_animation(new_walk_name)
-	var new_run := animator.get_animation(new_run_name)
+	var new_walk: Animation = animator.get_animation(new_walk_name)
+	var new_run: Animation = animator.get_animation(new_run_name)
 	if not _check(new_walk.loop_mode == Animation.LOOP_LINEAR and new_run.loop_mode == Animation.LOOP_LINEAR, "new locomotion must loop"):
 		return
 	if not _check(new_walk.get_track_count() == 23 and new_run.get_track_count() == 23, "22 retargeted bones plus hips movement expected"):
 		return
 	if not _check(new_run.length > 0.90 and new_run.length < 1.00, "forward jog must replace overly aggressive sprint"):
 		return
-	for new_clip in [new_walk, new_run]:
+	for candidate in [new_walk, new_run]:
+		var new_clip: Animation = candidate as Animation
 		var lower_leg_track := -1
 		for index in range(new_clip.get_track_count()):
 			if new_clip.track_get_type(index) != Animation.TYPE_ROTATION_3D:
 				continue
-			var track_path := new_clip.track_get_path(index)
+			var track_path: NodePath = new_clip.track_get_path(index)
 			if track_path.get_subname_count() > 0 and String(track_path.get_subname(track_path.get_subname_count() - 1)) == "J_Bip_L_LowerLeg":
 				lower_leg_track = index
 				break
 		if not _check(lower_leg_track >= 0, "new locomotion clip must animate the left lower leg"):
 			return
-		var start_pose := new_clip.rotation_track_interpolate(lower_leg_track, 0.0)
-		var half_pose := new_clip.rotation_track_interpolate(lower_leg_track, new_clip.length * 0.5)
-		var end_pose := new_clip.rotation_track_interpolate(lower_leg_track, new_clip.length)
+		var start_pose: Quaternion = new_clip.rotation_track_interpolate(lower_leg_track, 0.0)
+		var half_pose: Quaternion = new_clip.rotation_track_interpolate(lower_leg_track, new_clip.length * 0.5)
+		var end_pose: Quaternion = new_clip.rotation_track_interpolate(lower_leg_track, new_clip.length)
 		if not _check(start_pose.angle_to(half_pose) > 0.03, "new locomotion lower leg must actually move"):
 			return
 		if not _check(start_pose.angle_to(end_pose) < 0.02, "new locomotion must have a seamless loop"):
