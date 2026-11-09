@@ -154,9 +154,13 @@ func _run() -> void:
 	if not _check(grip.transform.basis.y.normalized().dot(Vector3.BACK) > 0.95, "Sword II blade must also point across the palm"):
 		return
 	var weapon_visuals = game.get("weapon_visuals")
+	if not _check(grip.get_node_or_null("EquippedWeapon") == weapon_visuals.current_visual, "Sword II weapon node name was lost during switching"):
+		return
 	if not _check(weapon_visuals.equip(2), "Dagger cannot be equipped for grip exclusion test"):
 		return
 	game.call("_update_weapon_display")
+	if not _check(grip.get_node_or_null("EquippedWeapon") == weapon_visuals.current_visual, "Dagger weapon node name was lost during switching"):
+		return
 	if not _check(float(tree.get("parameters/GripOverlay/blend_amount")) < 0.01, "non-sword weapons must not reuse the sword finger grip"):
 		return
 	if not _check(grip.rotation_degrees.is_zero_approx(), "non-sword weapons must restore the original mount orientation"):
@@ -164,6 +168,8 @@ func _run() -> void:
 	if not _check(weapon_visuals.equip(0), "Sword I cannot be re-equipped"):
 		return
 	game.call("_update_weapon_display")
+	if not _check(grip.get_node_or_null("EquippedWeapon") == weapon_visuals.current_visual, "Sword I weapon node name was lost when re-equipping"):
+		return
 	if not _check(float(tree.get("parameters/GripOverlay/blend_amount")) > 0.99, "Sword I grip not restored after switching weapons"):
 		return
 	var walk_node := graph.get_node("Walk") as AnimationNodeAnimation
