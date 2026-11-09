@@ -56,6 +56,8 @@ var movement_controller = MOVEMENT_CONTROLLER.new()
 var combat_controller = COMBAT_CONTROLLER.new()
 var weapon_visuals = WEAPON_VISUALS.new()
 var touch_hud
+const WEAPON_POSE_BLEND_TIME := 0.18
+var weapon_pose_blend := 1.0 # 1 = armed (finger grip, weapon-safe Run), 0 = no weapon
 var fps_label: Label
 var fps_update_elapsed := 0.0
 
@@ -84,6 +86,8 @@ func _process(delta: float) -> void:
 
 func _physics_process(delta: float) -> void:
 	combat_controller.physics_step(delta, self, hero, visual)
+
+	_sync_weapon_pose(delta)
 
 	# Motion is isolated from combat and animation state transitions.
 	var launched: bool = movement_controller.physics_step(hero, visual, camera, touch_hud, delta)
@@ -304,11 +308,35 @@ func _cycle_weapon() -> void:
 func _update_weapon_display() -> void:
 	if touch_hud != null:
 		touch_hud.weapon_index = weapon_visuals.current_index + 1
+		touch_hud.weapon_slots = 5 if use_legacy_hero else WEAPON_VISUALS.WEAPONS.size() + 1
 		touch_hud.queue_redraw()
+	if not use_legacy_hero and animation_tree != null:
+		# Switching across armed/unarmed modes cancels the incompatible attack.
+		# Sword-to-sword switches retain the existing in-flight clip behaviour.
+		if not weapon_visuals.has_weapon() or (combat_controller.attack_time_left > 0.0 and float(animation_tree.get("parameters/UnarmedChoice/blend_amount")) > 0.5):
+			combat_controller.cancel_attack(animation_tree)
+		_sync_weapon_pose(0.0)
 	var help_label := get_node_or_null("HUD/HelpPanel/HelpText") as Label
 	if help_label != null:
 		help_label.text = HUD_BUILDER.desktop_help_text(weapon_visuals.selected_name(), naruto_run_enabled, use_legacy_hero, movement_controller.run_by_default)
 		help_label.text += (" | M: MAT %s" % ["O", "A", "B"][material_variant_index]) if use_legacy_hero else " | VRoid"
+
+
+func _sync_weapon_pose(delta: float) -> void:
+	# VRoid only. Armed: closed-hand grip + weapon-safe Run. Unarmed: open hand
+	# + full Run. Both are smoothed so that a switch never pops the pose.
+	if use_legacy_hero or animation_tree == null:
+		return
+	var armed: bool = weapon_visuals.has_weapon()
+	weapon_pose_blend = move_toward(weapon_pose_blend, 1.0 if armed else 0.0, delta / WEAPON_POSE_BLEND_TIME)
+	animation_tree.set("parameters/GripOverlay/blend_amount", weapon_pose_blend)
+	animation_tree.set("parameters/RunArms/blend_amount", 1.0 - weapon_pose_blend)
+	# Sword I previews the one-handed heavy strike; the others use the standard 1H.
+	# The clip choice is held until the current attack has finished.
+	if combat_controller.attack_time_left <= 0.0:
+		animation_tree.set("parameters/UnarmedChoice/blend_amount", 0.0 if armed else 1.0)
+		if armed:
+			animation_tree.set("parameters/SlashChoice/blend_amount", 1.0 if weapon_visuals.current_index == 0 else 0.0)
 
 
 func _start_dash() -> void:
@@ -381,7 +409,7 @@ func _build_hero() -> void:
 		if use_legacy_hero:
 			animation_tree = ANIMATION_BUILDER.setup_animation_tree(model, animator, ATTACK_SPEED)
 		else:
-			animation_tree = VROID_ANIMATION_BUILDER.setup_animation_tree(model, animator, ATTACK_SPEED)
+			animation_tree = VROID_ANIMATION_BUILDER.setup_animation_tree(model, animator, VROID_ANIMATION_BUILDER.VROID_ATTACK_SPEED)
 		if animation_tree != null:
 			naruto_clip_speed_ratio = float(animation_tree.get("parameters/NarutoFullSpeed/scale"))
 			_set_locomotion("Idle")
@@ -390,7 +418,21 @@ func _build_hero() -> void:
 
 func _start_attack() -> void:
 	# Maintain the existing desktop/mobile signal and test-facing entrypoint.
-	combat_controller.start_attack(animation_tree, animator)
+	if use_legacy_hero:
+		combat_controller.start_attack(animation_tree, animator)
+	else:
+		if combat_controller.attack_time_left > 0.0:
+			return
+		if not weapon_visuals.has_weapon():
+			# A single right-hand sweeping strike; visual-only without melee damage.
+			_sync_weapon_pose(0.0)
+			animation_tree.set("parameters/AttackSpeed/scale", VROID_ANIMATION_BUILDER.UNARMED_ATTACK_SPEED)
+			combat_controller.start_attack(animation_tree, animator, VROID_ANIMATION_BUILDER.UNARMED_ATTACK_SPEED, "UnarmedSwing", false)
+			return
+		# Keep the animation playback rate consistent with the armed cooldown.
+		animation_tree.set("parameters/AttackSpeed/scale", VROID_ANIMATION_BUILDER.VROID_ATTACK_SPEED)
+		var clip := "SwordHeavyCandidate" if weapon_visuals.current_index == 0 else "SwordSlash"
+		combat_controller.start_attack(animation_tree, animator, VROID_ANIMATION_BUILDER.VROID_ATTACK_SPEED, clip)
 
 
 func _resolve_training_hit() -> void:

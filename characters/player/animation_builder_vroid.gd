@@ -6,11 +6,52 @@ extends RefCounted
 # functional placeholders until purpose-made VRoid clips are available.
 
 const QUATERNIUS_LOCOMOTION := preload("res://characters/player/locomotion_quaternius.gd")
+const UAL2_COMBAT := preload("res://characters/player/combat_retarget_ual2.gd")
+
+# VRoid-only preview attack speed. Keeps legacy Ninja timing untouched.
+# Sword Regular ~0.45 s -> ~0.64 s, Sword Heavy ~0.75 s -> ~1.07 s.
+const VROID_ATTACK_SPEED := 0.70
+# Unarmed preview is visual only; damage and melee balance remain undecided.
+const UNARMED_ATTACK_SPEED := 1.0
+# Preview-only lift of Sword I's one-handed heavy swing; no timing or hitbox changes.
+const SWORD_I_ATTACK_LIFT_DEGREES := 34.0
+# Sword I finishing phase: rotation vectors (axis * radians, parent-local, applied
+# before the authored key) solved offline so that the hand ends just below shoulder
+# height and the blade tip near it. Hand finish is calibrated against actual
+# Godot skeleton/weapon-tip measurements, not only bone Euler angles.
+# Envelope in fractions of clip length: starts after the wind-up/initial swing,
+# fully applied at the finish, released again before the clip end.
+const SWORD_I_FINISH_CORRECTION := {
+	"J_Bip_R_Shoulder": Vector3(0.0487803, -0.0720999, 0.0061250),
+	"J_Bip_R_UpperArm": Vector3(0.3609113, 0.0284501, 0.1484187),
+	"J_Bip_R_LowerArm": Vector3(-0.2360918, 0.0000086, -0.3150864),
+	"J_Bip_R_Hand": Vector3(0.3283362, -0.2250152, -0.0397931),
+}
+const SWORD_I_FINISH_ENVELOPE := Vector4(0.409, 0.682, 0.818, 1.0)
+# Retain Quaternius Run leg/body timing, but keep the weapon arm close to the
+# neutral walking carry instead of letting its high run swing cross the head.
+const RUN_WEAPON_CARRY_BLEND := {
+	"J_Bip_R_Shoulder": 0.90,
+	"J_Bip_R_UpperArm": 0.92,
+	"J_Bip_R_LowerArm": 0.86,
+	"J_Bip_R_Hand": 0.82,
+}
 
 const ARM_BONES := [
 	"J_Bip_R_Shoulder", "J_Bip_R_UpperArm", "J_Bip_R_LowerArm",
 	"J_Bip_R_Hand"
 ]
+
+# Preview closed-hand pose for all five VRoid weapons. Curl the distal thumb
+# joints gently, keeping the unusually oriented thumb root in its source pose.
+# Final contact and mesh clipping still require visual approval.
+const SWORD_GRIP_FINGER_BENDS := {
+	"J_Bip_R_Index1": 0.62, "J_Bip_R_Index2": 0.80, "J_Bip_R_Index3": 0.38,
+	"J_Bip_R_Middle1": 0.66, "J_Bip_R_Middle2": 0.83, "J_Bip_R_Middle3": 0.40,
+	"J_Bip_R_Ring1": 0.68, "J_Bip_R_Ring2": 0.87, "J_Bip_R_Ring3": 0.42,
+	"J_Bip_R_Little1": 0.68, "J_Bip_R_Little2": 0.85, "J_Bip_R_Little3": 0.42,
+	"J_Bip_R_Thumb2": 0.42, "J_Bip_R_Thumb3": 0.36
+}
 
 static func find_clip(animator: AnimationPlayer, short_name: String) -> String:
 	if animator == null:
@@ -81,6 +122,159 @@ static func _sword_swing(walk: Animation) -> Animation:
 	return clip
 
 
+static func _safe_weapon_run(run: Animation, walk: Animation) -> Animation:
+	# A derived Run variant: do not modify imported Walk/Jog or the source
+	# Quaternius motion. Only the four right-arm bone rotations are blended
+	# toward the neutral position sampled from the approved Walk cycle.
+	# Left-arm counter-swing, legs, hips and torso continue using real Run.
+	var corrected := run.duplicate() as Animation
+	for track in range(corrected.get_track_count()):
+		if corrected.track_get_type(track) != Animation.TYPE_ROTATION_3D:
+			continue
+		var path := corrected.track_get_path(track)
+		if path.get_subname_count() == 0:
+			continue
+		var bone := String(path.get_subname(path.get_subname_count() - 1))
+		if not RUN_WEAPON_CARRY_BLEND.has(bone):
+			continue
+		var walk_track := walk.find_track(path, Animation.TYPE_ROTATION_3D)
+		if walk_track < 0:
+			push_error("VRoid weapon run missing Walk arm track: " + bone)
+			return null
+		var neutral := walk.rotation_track_interpolate(walk_track, 0.0)
+		# Four evenly spaced walking poses average out the arm swing while
+		# preserving the imported VRoid bone-rest orientation.
+		for i in range(1, 4):
+			var sample_time := walk.length * float(i) / 4.0
+			var sampled := walk.rotation_track_interpolate(walk_track, sample_time)
+			neutral = neutral.slerp(sampled, 1.0 / float(i + 1)).normalized()
+		for key in range(corrected.track_get_key_count(track)):
+			var original: Quaternion = run.track_get_key_value(track, key)
+			var blend := float(RUN_WEAPON_CARRY_BLEND[bone])
+			corrected.track_set_key_value(track, key, original.slerp(neutral, blend).normalized())
+	return corrected
+
+
+static func _smoothstep01(value: float) -> float:
+	var x := clampf(value, 0.0, 1.0)
+	return x * x * (3.0 - 2.0 * x)
+
+
+static func finish_envelope(progress: float) -> float:
+	var e := SWORD_I_FINISH_ENVELOPE
+	return _smoothstep01((progress - e.x) / (e.y - e.x)) * (1.0 - _smoothstep01((progress - e.z) / (e.w - e.z)))
+
+
+static func _apply_sword_i_sin_lift(source: Animation) -> Animation:
+	# Previous accepted behaviour: raise only the right upper arm during the blow.
+	var elevated := source.duplicate() as Animation
+	for track in range(elevated.get_track_count()):
+		if elevated.track_get_type(track) != Animation.TYPE_ROTATION_3D:
+			continue
+		var path := elevated.track_get_path(track)
+		if path.get_subname_count() == 0:
+			continue
+		if String(path.get_subname(path.get_subname_count() - 1)) != "J_Bip_R_UpperArm":
+			continue
+		for key in range(elevated.track_get_key_count(track)):
+			var progress := elevated.track_get_key_time(track, key) / maxf(elevated.length, 0.001)
+			var lift := deg_to_rad(SWORD_I_ATTACK_LIFT_DEGREES) * sin(PI * progress)
+			var pose: Quaternion = elevated.track_get_key_value(track, key)
+			elevated.track_set_key_value(track, key,
+				(Quaternion(Vector3.BACK, -lift) * pose).normalized())
+	return elevated
+
+
+static func _raise_heavy_sword_arc(source: Animation) -> Animation:
+	# Start, wind-up and initial swing stay identical to the previous build
+	# (envelope is exactly 0 there); the finishing phase is lifted by a
+	# coordinated shoulder/arm/forearm/hand correction.
+	var elevated := _apply_sword_i_sin_lift(source)
+	for track in range(elevated.get_track_count()):
+		if elevated.track_get_type(track) != Animation.TYPE_ROTATION_3D:
+			continue
+		var path := elevated.track_get_path(track)
+		if path.get_subname_count() == 0:
+			continue
+		var bone := String(path.get_subname(path.get_subname_count() - 1))
+		if not SWORD_I_FINISH_CORRECTION.has(bone):
+			continue
+		var vector: Vector3 = SWORD_I_FINISH_CORRECTION[bone]
+		var angle := vector.length()
+		for key in range(elevated.track_get_key_count(track)):
+			var progress := elevated.track_get_key_time(track, key) / maxf(elevated.length, 0.001)
+			var weight := finish_envelope(progress)
+			if weight <= 0.0:
+				continue
+			var pose: Quaternion = elevated.track_get_key_value(track, key)
+			var correction := Quaternion(vector / angle, angle * weight)
+			elevated.track_set_key_value(track, key, (correction * pose).normalized())
+	return elevated
+
+
+# The authored Quaternius UAL2 Melee_Hook + Melee_Hook_Rec is retargeted
+# through the same rest-space mapping as the approved UAL2 sword attacks.
+# The left arm uses the source's held defensive guard (not a second punch).
+# Keyframed finger curl closes both fists for the duration of the attack.
+static func _unarmed_swing(walk: Animation, skeleton: Skeleton3D) -> Animation:
+	var hook := UAL2_COMBAT.build_unarmed_hook(walk, skeleton)
+	if hook == null:
+		return null
+	var finger_tracks := 0
+	# Keep the authored fist curl aligned with its source poses as recovery
+	# accelerates; simply truncating the final key would slow finger release.
+	var source_times := [0.0, 0.08, 0.20, 0.47, 0.68, UAL2_COMBAT.HOOK_FRAMES.get_source_length()]
+	var curl_weights := [0.0, 0.85, 1.0, 1.0, 0.65, 0.0]
+	for index in range(walk.get_track_count()):
+		if walk.track_get_type(index) != Animation.TYPE_ROTATION_3D:
+			continue
+		var path := walk.track_get_path(index)
+		if path.get_subname_count() == 0:
+			continue
+		var bone := String(path.get_subname(path.get_subname_count() - 1))
+		var mirror_name := bone.replace("J_Bip_L_", "J_Bip_R_")
+		if not SWORD_GRIP_FINGER_BENDS.has(mirror_name):
+			continue
+		var baseline := walk.rotation_track_interpolate(index, 0.15)
+		var track := hook.add_track(Animation.TYPE_ROTATION_3D)
+		hook.track_set_path(track, path)
+		var bend := float(SWORD_GRIP_FINGER_BENDS[mirror_name])
+		var curl_axis := Vector3.FORWARD if bone.begins_with("J_Bip_L_") else Vector3.BACK
+		for key in range(source_times.size()):
+			var curl := Quaternion(curl_axis, bend * float(curl_weights[key]))
+			var key_time := UAL2_COMBAT.HOOK_FRAMES.remap_time(float(source_times[key]))
+			hook.rotation_track_insert_key(track, key_time, (baseline * curl).normalized())
+		finger_tracks += 1
+	if finger_tracks != SWORD_GRIP_FINGER_BENDS.size() * 2:
+		push_error("UAL2 Hook: VRoid left/right finger tracks missing")
+		return null
+	return hook
+
+
+static func _sword_grip(walk: Animation) -> Animation:
+	# VRoid finger joints extend along local +Y, with the knuckles distributed
+	# along local Z. Positive local-Z curl bends the fingers toward the palm.
+	# Reuse existing VRoid track paths and sampled rest-aware bone rotations.
+	var grip := Animation.new()
+	grip.length = 1.0
+	grip.loop_mode = Animation.LOOP_LINEAR
+	for index in range(walk.get_track_count()):
+		if walk.track_get_type(index) != Animation.TYPE_ROTATION_3D:
+			continue
+		var path := walk.track_get_path(index)
+		if path.get_subname_count() == 0:
+			continue
+		var bone := String(path.get_subname(path.get_subname_count() - 1))
+		if not SWORD_GRIP_FINGER_BENDS.has(bone):
+			continue
+		var baseline := walk.rotation_track_interpolate(index, 0.15)
+		var curl := Quaternion(Vector3.BACK, float(SWORD_GRIP_FINGER_BENDS[bone]))
+		var track := grip.add_track(Animation.TYPE_ROTATION_3D)
+		grip.track_set_path(track, path)
+		grip.rotation_track_insert_key(track, 0.0, baseline * curl)
+	return grip
+
+
 static func _add_clip(root: AnimationNodeBlendTree, node_name: String, animation_name: String) -> void:
 	var clip_node := AnimationNodeAnimation.new()
 	clip_node.animation = animation_name
@@ -108,25 +302,48 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 	var library := AnimationLibrary.new()
 	library.add_animation("Idle", _hold_pose(walk, 0.15, 0.8, true))
 	library.add_animation("Jump", _hold_pose(jog, 0.10, 0.65, false))
-	var swing := _sword_swing(walk)
-	if swing.get_track_count() < 2:
-		push_error("VRoid sword placeholder missing right arm rotation tracks")
-		return null
-	library.add_animation("SwordSlash", swing)
-	# Godot 4 bone animation values include the actual per-bone rest transform.
-	# The previous retarget missed this and collapsed the VRoid pose in gameplay.
 	var skeleton := _find_skeleton(model)
 	if skeleton == null:
 		push_error("Imported VRoid Skeleton3D not found")
 		return null
+	# Source library: CC0 UAL2 65-bone combat motions, retargeted in the
+	# current 103-bone VRoid rest pose. The old procedural slash stays
+	# available as an unused local function only for regression diagnosis.
+	var swing := UAL2_COMBAT.build("Sword_Regular_A", walk, skeleton, true)
+	var heavy := UAL2_COMBAT.build("Sword_Heavy_A", walk, skeleton, true)
+	if swing == null or heavy == null:
+		push_error("UAL2 Sword attack retargeting failed")
+		return null
+	heavy = _raise_heavy_sword_arc(heavy)
+	library.add_animation("SwordSlash", swing)
+	library.add_animation("SwordHeavyCandidate", heavy)
+	var unarmed_swing := _unarmed_swing(walk, skeleton)
+	if unarmed_swing == null:
+		return null
+	library.add_animation("UnarmedSwing", unarmed_swing)
+	var grip := _sword_grip(walk)
+	if grip.get_track_count() != SWORD_GRIP_FINGER_BENDS.size():
+		push_error("VRoid weapon grip requires all expected finger and distal thumb tracks")
+		return null
+	library.add_animation("SwordGrip", grip)
+	# Godot 4 bone animation values include the actual per-bone rest transform.
+	# The previous retarget missed this and collapsed the VRoid pose in gameplay.
 	# The original imported Walk/Jog clips are kept intact on the VRoid model.
 	var replacement_walk: Animation = QUATERNIUS_LOCOMOTION.build_from_reference(walk, false, skeleton)
 	var replacement_run: Animation = QUATERNIUS_LOCOMOTION.build_from_reference(walk, true, skeleton)
 	if replacement_walk == null or replacement_run == null:
 		push_error("Failed to retarget Quaternius locomotion to VRoid skeleton")
 		return null
+	var safe_run := _safe_weapon_run(replacement_run, replacement_walk)
+	if safe_run == null:
+		push_error("Failed to build VRoid weapon-safe running arm pose")
+		return null
 	library.add_animation("QuaterniusWalk", replacement_walk)
-	library.add_animation("QuaterniusRun", replacement_run)
+	library.add_animation("QuaterniusRun", safe_run)
+	# Unarmed run: the complete original Quaternius Run, including the natural
+	# right-arm swing. It has the same length/phase as the weapon-safe Run
+	# (that one is a duplicate with four right-arm tracks retuned).
+	library.add_animation("QuaterniusRunFree", replacement_run)
 	if animator.add_animation_library("vroid", library) != OK:
 		return null
 
@@ -141,7 +358,22 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 		var state: String = state_names[i]
 		_add_clip(root, state, clips[i])
 		locomotion.set_input_name(i, state)
-		if state == "Walk" or state == "Run":
+		if state == "Run":
+			# RunArms 0 = weapon-safe Run, 1 = full Run. Both clips advance with
+			# the same RunSpeed, so switching only crossfades the right arm.
+			_add_clip(root, "RunFree", "vroid/QuaterniusRunFree")
+			var run_arms := AnimationNodeBlend2.new()
+			# Both Run clips must advance at zero blend weight: an equip/unequip
+			# crossfade otherwise resumes the inactive clip at an older gait phase.
+			run_arms.sync = true
+			root.add_node("RunArms", run_arms)
+			root.connect_node("RunArms", 0, state)
+			root.connect_node("RunArms", 1, "RunFree")
+			var run_speed := AnimationNodeTimeScale.new()
+			root.add_node("RunSpeed", run_speed)
+			root.connect_node("RunSpeed", 0, "RunArms")
+			root.connect_node("Locomotion", i, "RunSpeed")
+		elif state == "Walk":
 			var speed := AnimationNodeTimeScale.new()
 			root.add_node(state + "Speed", speed)
 			root.connect_node(state + "Speed", 0, state)
@@ -167,19 +399,41 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 	root.connect_node("Locomotion", 4, "NarutoFullBodyBlend")
 
 	_add_clip(root, "SwordSlash", "vroid/SwordSlash")
+	_add_clip(root, "SwordHeavyCandidate", "vroid/SwordHeavyCandidate")
+	var slash_choice := AnimationNodeBlend2.new()
+	root.add_node("SlashChoice", slash_choice)
+	root.connect_node("SlashChoice", 0, "SwordSlash")
+	root.connect_node("SlashChoice", 1, "SwordHeavyCandidate")
+	_add_clip(root, "UnarmedSwing", "vroid/UnarmedSwing")
+	var unarmed_choice := AnimationNodeBlend2.new()
+	root.add_node("UnarmedChoice", unarmed_choice)
+	root.connect_node("UnarmedChoice", 0, "SlashChoice")
+	root.connect_node("UnarmedChoice", 1, "UnarmedSwing")
 	var attack_speed_node := AnimationNodeTimeScale.new()
 	var attack_layer := AnimationNodeOneShot.new()
 	attack_layer.fadein_time = 0.09
 	attack_layer.fadeout_time = 0.10
 	attack_layer.filter_enabled = true
-	for index in range(swing.get_track_count()):
-		attack_layer.set_filter_path(swing.track_get_path(index), true)
+	for clip in [swing, unarmed_swing]:
+		for index in range(clip.get_track_count()):
+			attack_layer.set_filter_path(clip.track_get_path(index), true)
 	root.add_node("AttackSpeed", attack_speed_node)
 	root.add_node("Attack", attack_layer)
-	root.connect_node("AttackSpeed", 0, "SwordSlash")
+	root.connect_node("AttackSpeed", 0, "UnarmedChoice")
 	root.connect_node("Attack", 0, "Locomotion")
 	root.connect_node("Attack", 1, "AttackSpeed")
-	root.connect_node("output", 0, "Attack")
+
+	# Only right-hand finger/thumb tracks are overridden. The accepted Walk/Run,
+	# upper-arm attack layer, and root locomotion remain unmodified.
+	_add_clip(root, "SwordGrip", "vroid/SwordGrip")
+	var grip_overlay := AnimationNodeBlend2.new()
+	grip_overlay.filter_enabled = true
+	for index in range(grip.get_track_count()):
+		grip_overlay.set_filter_path(grip.track_get_path(index), true)
+	root.add_node("GripOverlay", grip_overlay)
+	root.connect_node("GripOverlay", 0, "Attack")
+	root.connect_node("GripOverlay", 1, "SwordGrip")
+	root.connect_node("output", 0, "GripOverlay")
 
 	var animation_tree := AnimationTree.new()
 	animation_tree.name = "CharacterAnimationTree"
@@ -191,4 +445,8 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 	animation_tree.set("parameters/AttackSpeed/scale", attack_speed)
 	animation_tree.set("parameters/NarutoFullBodyBlend/blend_amount", 1.0)
 	animation_tree.set("parameters/NarutoFullSpeed/scale", 1.0)
+	animation_tree.set("parameters/GripOverlay/blend_amount", 1.0)
+	animation_tree.set("parameters/RunArms/blend_amount", 0.0)
+	animation_tree.set("parameters/SlashChoice/blend_amount", 0.0)
+	animation_tree.set("parameters/UnarmedChoice/blend_amount", 0.0)
 	return animation_tree
