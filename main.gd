@@ -279,6 +279,8 @@ func _update_weapon_display() -> void:
 	# Grip finger animation is for VRoid Sword I, not the other test weapons.
 	if not use_legacy_hero and animation_tree != null:
 		animation_tree.set("parameters/GripOverlay/blend_amount", 1.0 if weapon_visuals.current_index == 0 else 0.0)
+		# Sword II is a heavy-attack candidate, not an approved two-hand grip.
+		animation_tree.set("parameters/SlashChoice/blend_amount", 1.0 if weapon_visuals.current_index == 1 else 0.0)
 	var help_label := get_node_or_null("HUD/HelpPanel/HelpText") as Label
 	if help_label != null:
 		help_label.text = HUD_BUILDER.desktop_help_text(weapon_visuals.selected_name(), naruto_run_enabled, use_legacy_hero)
