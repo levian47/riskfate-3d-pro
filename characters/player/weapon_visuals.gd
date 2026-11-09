@@ -5,7 +5,7 @@ const WEAPONS := [
 	{"name": "Sword I (Heavy)", "path": "res://assets/equipment/weapons/quaternius_sword_01.glb", "length": 1.35, "vroid_scale": 1.75},
 	{"name": "Sword II (1H)", "path": "res://assets/equipment/weapons/quaternius_sword_02.glb", "length": 1.25},
 	{"name": "Dagger", "path": "res://assets/equipment/weapons/quaternius_dagger_01.glb", "length": 0.85},
-	{"name": "Knife", "path": "res://assets/equipment/weapons/quaternius_knife_01.glb", "length": 0.72},
+	{"name": "Knife", "path": "res://assets/equipment/weapons/quaternius_knife_01.glb", "length": 0.72, "vroid_scale": 1.30},
 	{"name": "Cutlass", "path": "res://assets/equipment/weapons/quaternius_cutlass_01.fbx", "length": 1.20, "vroid_scale": 0.75}
 ]
 
@@ -15,7 +15,7 @@ const WEAPONS := [
 # centering the full AABB badly displaces the curved Cutlass. These remain
 # provisional visual corrections to review on a real device.
 # The legacy Ninja mount remains unchanged.
-const VROID_WEAPON_GRIP_OFFSET := Vector3(0.0, 0.058, 0.035)
+const VROID_WEAPON_GRIP_OFFSET := Vector3(-0.014, 0.058, 0.035)
 const VROID_WEAPON_GRIP_ROTATION := Vector3(90.0, 0.0, -8.0)
 # Rotate around each model's longitudinal Y axis, without twisting the hand.
 const VROID_WEAPON_MODEL_ROLL_DEGREES := 90.0
@@ -25,8 +25,11 @@ const VROID_CUTLASS_EXTRA_ROLL_DEGREES := -225.0
 # Small additional advance from the current ~15% grip point toward the guard.
 # Measured relative to model length; does not change lateral centering.
 const VROID_GRIP_ADVANCE_FRACTION := 0.035
-# Dagger and Knife: advance another 5% of their respective total model lengths.
-const VROID_DAGGER_EXTRA_GRIP_ADVANCE_FRACTION := 0.05
+# Dagger and Knife: previous +5% plus another requested +4% toward the guard.
+const VROID_DAGGER_EXTRA_GRIP_ADVANCE_FRACTION := 0.09
+# Cutlass FBX hilt is asymmetric; a separate experimental local grip correction
+# avoids shifting the shared hand attachment or the other weapons.
+const VROID_CUTLASS_HILT_LOCAL_OFFSET := Vector3(0.022, 0.035, -0.018)
 
 var is_vroid := false
 var mount: Node3D
@@ -122,6 +125,9 @@ func equip(index: int) -> bool:
 	# after reorientation. Keep the established Ninja fitting unchanged.
 	var grip_y := minf(0.0, bounds.position.y) * 0.5
 	var center := _hilt_anchor_in_root(holder, bounds) if is_vroid else bounds.get_center()
+	if is_vroid and index == 4:
+		# Cutlass correction is in imported, reoriented model coordinates.
+		center += VROID_CUTLASS_HILT_LOCAL_OFFSET
 	if is_vroid:
 		# Move the palm farther up the handle while preserving its X/Z fit.
 		var advance := VROID_GRIP_ADVANCE_FRACTION
