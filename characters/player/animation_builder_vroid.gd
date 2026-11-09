@@ -6,6 +6,7 @@ extends RefCounted
 # functional placeholders until purpose-made VRoid clips are available.
 
 const QUATERNIUS_LOCOMOTION := preload("res://characters/player/locomotion_quaternius.gd")
+const UAL2_COMBAT := preload("res://characters/player/combat_retarget_ual2.gd")
 
 const ARM_BONES := [
 	"J_Bip_R_Shoulder", "J_Bip_R_UpperArm", "J_Bip_R_LowerArm",
@@ -141,11 +142,20 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 	var library := AnimationLibrary.new()
 	library.add_animation("Idle", _hold_pose(walk, 0.15, 0.8, true))
 	library.add_animation("Jump", _hold_pose(jog, 0.10, 0.65, false))
-	var swing := _sword_swing(walk)
-	if swing.get_track_count() < 2:
-		push_error("VRoid sword placeholder missing right arm rotation tracks")
+	var skeleton := _find_skeleton(model)
+	if skeleton == null:
+		push_error("Imported VRoid Skeleton3D not found")
+		return null
+	# Source library: CC0 UAL2 65-bone combat motions, retargeted in the
+	# current 103-bone VRoid rest pose. The old procedural slash stays
+	# available as an unused local function only for regression diagnosis.
+	var swing := UAL2_COMBAT.build("Sword_Regular_A", walk, skeleton)
+	var heavy := UAL2_COMBAT.build("Sword_Heavy_A", walk, skeleton)
+	if swing == null or heavy == null:
+		push_error("UAL2 Sword attack retargeting failed")
 		return null
 	library.add_animation("SwordSlash", swing)
+	library.add_animation("SwordHeavyCandidate", heavy)
 	var grip := _sword_grip(walk)
 	if grip.get_track_count() != SWORD_GRIP_FINGER_BENDS.size():
 		push_error("VRoid Sword I grip requires twelve imported finger tracks")
@@ -153,10 +163,6 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 	library.add_animation("SwordGrip", grip)
 	# Godot 4 bone animation values include the actual per-bone rest transform.
 	# The previous retarget missed this and collapsed the VRoid pose in gameplay.
-	var skeleton := _find_skeleton(model)
-	if skeleton == null:
-		push_error("Imported VRoid Skeleton3D not found")
-		return null
 	# The original imported Walk/Jog clips are kept intact on the VRoid model.
 	var replacement_walk: Animation = QUATERNIUS_LOCOMOTION.build_from_reference(walk, false, skeleton)
 	var replacement_run: Animation = QUATERNIUS_LOCOMOTION.build_from_reference(walk, true, skeleton)
@@ -205,6 +211,11 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 	root.connect_node("Locomotion", 4, "NarutoFullBodyBlend")
 
 	_add_clip(root, "SwordSlash", "vroid/SwordSlash")
+	_add_clip(root, "SwordHeavyCandidate", "vroid/SwordHeavyCandidate")
+	var slash_choice := AnimationNodeBlend2.new()
+	root.add_node("SlashChoice", slash_choice)
+	root.connect_node("SlashChoice", 0, "SwordSlash")
+	root.connect_node("SlashChoice", 1, "SwordHeavyCandidate")
 	var attack_speed_node := AnimationNodeTimeScale.new()
 	var attack_layer := AnimationNodeOneShot.new()
 	attack_layer.fadein_time = 0.09
@@ -214,7 +225,7 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 		attack_layer.set_filter_path(swing.track_get_path(index), true)
 	root.add_node("AttackSpeed", attack_speed_node)
 	root.add_node("Attack", attack_layer)
-	root.connect_node("AttackSpeed", 0, "SwordSlash")
+	root.connect_node("AttackSpeed", 0, "SlashChoice")
 	root.connect_node("Attack", 0, "Locomotion")
 	root.connect_node("Attack", 1, "AttackSpeed")
 
@@ -241,4 +252,5 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 	animation_tree.set("parameters/NarutoFullBodyBlend/blend_amount", 1.0)
 	animation_tree.set("parameters/NarutoFullSpeed/scale", 1.0)
 	animation_tree.set("parameters/GripOverlay/blend_amount", 1.0)
+	animation_tree.set("parameters/SlashChoice/blend_amount", 0.0)
 	return animation_tree
