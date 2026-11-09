@@ -338,7 +338,7 @@ func _run() -> void:
 			var diff := old_value.angle_to(new_value)
 			if track_bone in corrected_bones:
 				if progress <= VROID_ANIM.SWORD_I_FINISH_ENVELOPE.x + 0.0001 or key == heavy_clip.track_get_key_count(track) - 1:
-					if not _check(diff < 0.0005, "Sword I start/wind-up/end must stay identical: %s key %d diff %f" % [track_bone, key, diff]):
+					if not _check((old_value - new_value).length() < 0.00002, "Sword I start/wind-up/end must stay identical: %s key %d diff %f" % [track_bone, key, diff]):
 						return
 				else:
 					finish_changed = maxf(finish_changed, diff)
@@ -347,9 +347,7 @@ func _run() -> void:
 					max_speed_previous = maxf(max_speed_previous, previous_pose.angle_to(old_value) / dt)
 					max_speed_new = maxf(max_speed_new, new_pose.angle_to(new_value) / dt)
 			else:
-				if diff >= 0.0005:
-					print("SWORD_I_DIFF unrelated_bone=", track_bone, " key=", key, " diff=", diff, " old=", old_value, " new=", new_value)
-				if not _check(diff < 0.0005, "Sword I correction leaked into another bone: " + track_bone):
+				if not _check((old_value - new_value).length() < 0.00002, "Sword I correction leaked into another bone: " + track_bone):
 					return
 			previous_pose = old_value
 			new_pose = new_value
@@ -547,7 +545,7 @@ func _run() -> void:
 	for track in range(regular_clip.get_track_count()):
 		for key in range(regular_clip.track_get_key_count(track)):
 			var regular_diff: float = (regular_clip.track_get_key_value(track, key) as Quaternion).angle_to(regular_reference.track_get_key_value(track, key))
-			if not _check(regular_diff < 0.0005, "standard attack clip changed"):
+			if not _check((regular_clip.track_get_key_value(track, key) as Quaternion).is_equal_approx(regular_reference.track_get_key_value(track, key)), "standard attack clip changed"):
 				return
 	weapon_visuals.unequip()
 	game.call("_update_weapon_display")
