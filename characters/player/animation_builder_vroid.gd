@@ -221,7 +221,9 @@ static func _unarmed_swing(walk: Animation, skeleton: Skeleton3D) -> Animation:
 	if hook == null:
 		return null
 	var finger_tracks := 0
-	var times := [0.0, 0.08, 0.20, 0.47, 0.68, hook.length]
+	# Keep the authored fist curl aligned with its source poses as recovery
+	# accelerates; simply truncating the final key would slow finger release.
+	var source_times := [0.0, 0.08, 0.20, 0.47, 0.68, UAL2_COMBAT.HOOK_FRAMES.get_source_length()]
 	var curl_weights := [0.0, 0.85, 1.0, 1.0, 0.65, 0.0]
 	for index in range(walk.get_track_count()):
 		if walk.track_get_type(index) != Animation.TYPE_ROTATION_3D:
@@ -238,9 +240,10 @@ static func _unarmed_swing(walk: Animation, skeleton: Skeleton3D) -> Animation:
 		hook.track_set_path(track, path)
 		var bend := float(SWORD_GRIP_FINGER_BENDS[mirror_name])
 		var curl_axis := Vector3.FORWARD if bone.begins_with("J_Bip_L_") else Vector3.BACK
-		for key in range(times.size()):
+		for key in range(source_times.size()):
 			var curl := Quaternion(curl_axis, bend * float(curl_weights[key]))
-			hook.rotation_track_insert_key(track, float(times[key]), (baseline * curl).normalized())
+			var key_time := UAL2_COMBAT.HOOK_FRAMES.remap_time(float(source_times[key]))
+			hook.rotation_track_insert_key(track, key_time, (baseline * curl).normalized())
 		finger_tracks += 1
 	if finger_tracks != SWORD_GRIP_FINGER_BENDS.size() * 2:
 		push_error("UAL2 Hook: VRoid left/right finger tracks missing")

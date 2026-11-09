@@ -562,8 +562,8 @@ func _run() -> void:
 	if not _check(not unarmed_name.is_empty(), "unarmed right swing missing"):
 		return
 	var unarmed_clip := animator.get_animation(unarmed_name)
-	if not _check(unarmed_clip.length > 1.04 and unarmed_clip.length < 1.08,
-		"unarmed hook and recovery must preserve source duration"):
+	if not _check(unarmed_clip.length > 0.76 and unarmed_clip.length < 0.78,
+		"UAL2 Hook must retain 0.47s strike and compress recovery to 0.30s"):
 		return
 	if not _check(absf(attack_combat.attack_time_left - unarmed_clip.length / VROID_ANIM.UNARMED_ATTACK_SPEED) < 0.01 and not attack_combat.attack_hit_pending,
 		"ATK without a weapon must run a correctly timed visual-only swing"):
@@ -573,6 +573,13 @@ func _run() -> void:
 		return
 	if not _check(float(tree.get("parameters/UnarmedChoice/blend_amount")) > 0.99,
 		"unarmed swing must be selected"):
+		return
+	# Check real key timestamps: the accepted hook/wind-up remains untouched
+	# while only the recorded Melee_Hook_Rec keys are played twice as fast.
+	var original_end := float(VROID_ANIM.UAL2_COMBAT.HOOK_FRAMES.HOOK_FRAME_COUNT - 1) / VROID_ANIM.UAL2_COMBAT.HOOK_FRAMES.FRAME_RATE
+	if not _check(absf(original_end - 14.0 / 30.0) < 0.0001
+		and absf(unarmed_clip.length - (original_end + 0.30)) < 0.002,
+		"unarmed recovery timing must be 2x with identical hook duration"):
 		return
 	var unarmed_tracks := {}
 	for track in range(unarmed_clip.get_track_count()):
@@ -598,6 +605,20 @@ func _run() -> void:
 			"left arm must maintain the same protective guard during the right hook: " + target):
 			return
 	var right_track: int = unarmed_tracks["J_Bip_R_UpperArm"]
+	# All 15 authored attack-phase keys retain their exact timestamps.
+	if not _check(unarmed_clip.track_get_key_count(right_track) == VROID_ANIM.UAL2_COMBAT.HOOK_FRAMES.FRAME_COUNT,
+		"recorded hook frame count must not change"):
+		return
+	for key in range(VROID_ANIM.UAL2_COMBAT.HOOK_FRAMES.HOOK_FRAME_COUNT):
+		var expected_t := float(key) / VROID_ANIM.UAL2_COMBAT.HOOK_FRAMES.FRAME_RATE
+		if not _check(absf(unarmed_clip.track_get_key_time(right_track, key) - expected_t) < 0.0001,
+			"authored hook phase must remain unchanged at frame " + str(key)):
+			return
+	var recovery_key := VROID_ANIM.UAL2_COMBAT.HOOK_FRAMES.HOOK_FRAME_COUNT
+	var expected_recovery_key_time := original_end + 1.0 / (VROID_ANIM.UAL2_COMBAT.HOOK_FRAMES.FRAME_RATE * 2.0)
+	if not _check(absf(unarmed_clip.track_get_key_time(right_track, recovery_key) - expected_recovery_key_time) < 0.0001,
+		"first recovery key must use 2x time compression"):
+		return
 	var windup_pose := unarmed_clip.rotation_track_interpolate(right_track, 0.08)
 	var swing_pose := unarmed_clip.rotation_track_interpolate(right_track, 0.30)
 	if not _check(windup_pose.angle_to(swing_pose) > 0.55,

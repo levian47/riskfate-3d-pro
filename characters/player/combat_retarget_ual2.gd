@@ -177,7 +177,7 @@ static func build_unarmed_hook(target_reference: Animation, target_skeleton: Ske
 			var source_pose: Quaternion = HOOK_FRAMES.GUARD_POSES[source_bone] if is_left_guard else frames[frame]
 			var delta := (source_local_rest.inverse() * source_pose).normalized()
 			var aligned_delta := (source_to_target * delta * source_to_target.inverse()).normalized()
-			var at_time := result.length * float(frame) if is_left_guard else float(frame) / HOOK_FRAMES.FRAME_RATE
+			var at_time := result.length * float(frame) if is_left_guard else HOOK_FRAMES.remap_time(float(frame) / HOOK_FRAMES.FRAME_RATE)
 			result.rotation_track_insert_key(track, at_time, (target_local_rest * aligned_delta).normalized())
 	instance.free()
 	return result
