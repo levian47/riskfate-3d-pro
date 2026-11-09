@@ -79,3 +79,88 @@ static func desktop_help_text(weapon_name: String, naruto_enabled: bool = false,
 	if ninja_visual_controls:
 		description += "R — Naruto Run (" + ("ON" if naruto_enabled else "OFF") + ")   |   "
 	return description + "Зброя: " + weapon_name
+
+# Diagnostics remain available to testers without covering the play field.
+# Button callbacks stay in main.gd; this builder owns visual structure only.
+static func build_debug_controls(canvas: CanvasLayer, ninja_visual_controls: bool) -> Dictionary:
+	var toggle := Button.new()
+	toggle.name = "DebugToggleButton"
+	toggle.text = "DEBUG"
+	toggle.anchor_left = 0.5
+	toggle.anchor_right = 0.5
+	toggle.offset_left = -45.0
+	toggle.offset_right = 45.0
+	toggle.offset_top = 51.0
+	toggle.offset_bottom = 86.0
+	canvas.add_child(toggle)
+
+	var panel := PanelContainer.new()
+	panel.name = "DebugPanel"
+	panel.anchor_left = 0.5
+	panel.anchor_right = 0.5
+	panel.offset_left = -166.0
+	panel.offset_right = 166.0
+	panel.offset_top = 90.0
+	panel.offset_bottom = 331.0
+	var background := StyleBoxFlat.new()
+	background.bg_color = Color(0.05, 0.08, 0.12, 0.94)
+	background.set_corner_radius_all(10)
+	background.set_content_margin_all(10)
+	panel.add_theme_stylebox_override("panel", background)
+	canvas.add_child(panel)
+
+	var content := VBoxContainer.new()
+	content.name = "Content"
+	content.add_theme_constant_override("separation", 7)
+	panel.add_child(content)
+	var title := Label.new()
+	title.name = "DebugTitle"
+	title.text = "DEBUG / TEST"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	content.add_child(title)
+
+	var grid := GridContainer.new()
+	grid.name = "Grid"
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 8)
+	grid.add_theme_constant_override("v_separation", 7)
+	content.add_child(grid)
+	var controls: Dictionary = {"toggle": toggle, "panel": panel}
+	var specs := [
+		["crowd", "CrowdBenchmarkButton", "LOAD 0"],
+		["mode", "CrowdModeButton", "MODE RUN"],
+		["limit", "FPSLimitButton", "FPS CAP 60"],
+		["skeleton", "SkeletonDebugButton", "SKEL OFF"],
+	]
+	if ninja_visual_controls:
+		specs.append(["materials", "NinjaMaterialsButton", "MAT A"])
+		specs.append(["naruto", "NarutoDebugButton", "RUN OFF"])
+	for spec in specs:
+		var control := Button.new()
+		control.name = spec[1]
+		control.text = spec[2]
+		control.custom_minimum_size = Vector2(138, 42)
+		grid.add_child(control)
+		controls[spec[0]] = control
+
+	var stats := Label.new()
+	stats.name = "CrowdDrawStats"
+	stats.text = "Draws: -- visible / -- shadow"
+	stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	stats.add_theme_font_size_override("font_size", 14)
+	stats.visible = false
+	content.add_child(stats)
+	controls["stats"] = stats
+
+	var build := Label.new()
+	build.name = "CrowdBuildLabel"
+	build.text = "BUILD CLASSIC (6 MATERIALS)" if OS.has_feature("legacy_crowd") else "BUILD OPTIMIZED (1 MATERIAL)"
+	build.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	build.add_theme_font_size_override("font_size", 14)
+	content.add_child(build)
+	controls["build"] = build
+
+	# A hidden parent keeps all benchmark controls accessible programmatically
+	# without making them visible or touchable during normal gameplay.
+	panel.visible = false
+	return controls
