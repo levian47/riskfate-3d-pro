@@ -739,6 +739,11 @@ func _run() -> void:
 	game.call("_start_attack")
 	if not _check(attack_combat.attack_time_left > 0.0 and attack_combat.attack_hit_pending, "Sword I attack did not start"):
 		return
+	if not _check(int(attack_combat.active_hit_damage) == 25
+		and absf(float(attack_combat.active_hit_reach) - 3.1) < 0.001
+		and absf(float(attack_combat.active_hit_moment) - 0.42) < 0.001,
+		"sword hit profile must reset to its approved training values after an unarmed punch"):
+		return
 	weapon_visuals.equip(1)
 	game.call("_update_weapon_display")
 	if not _check(float(tree.get("parameters/SlashChoice/blend_amount")) > 0.99, "attack clip must not be swapped in the middle of a swing"):
