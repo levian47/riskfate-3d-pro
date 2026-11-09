@@ -19,6 +19,12 @@ const VROID_WEAPON_GRIP_OFFSET := Vector3(0.0, 0.058, 0.035)
 const VROID_WEAPON_GRIP_ROTATION := Vector3(90.0, 0.0, -8.0)
 # Rotate around each model's longitudinal Y axis, without twisting the hand.
 const VROID_WEAPON_MODEL_ROLL_DEGREES := 90.0
+# Extra clockwise roll for the Cutlass, relative to its previous +90° pose.
+# Negative rotation follows Godot's local +Y right-hand convention.
+const VROID_CUTLASS_EXTRA_ROLL_DEGREES := -225.0
+# Small additional advance from the current ~15% grip point toward the guard.
+# Measured relative to model length; does not change lateral centering.
+const VROID_GRIP_ADVANCE_FRACTION := 0.035
 
 var is_vroid := false
 var mount: Node3D
@@ -89,10 +95,13 @@ func equip(index: int) -> bool:
 	elif bounds.size.z > bounds.size.y * 1.25 and bounds.size.z > bounds.size.x:
 		imported.rotation_degrees.x = -90.0
 		bounds = _bounds_in_root(holder)
-	# User-requested 90-degree twist of the weapon itself, not the hand bone.
-	# Recompute the AABB after both importer-axis correction and the twist.
+	# Rotate the imported weapon itself, never the VRoid hand.
+	# Cutlass additionally turns 225° clockwise from the previous 90° pose.
 	if is_vroid:
-		imported.rotation_degrees.y += VROID_WEAPON_MODEL_ROLL_DEGREES
+		var roll := VROID_WEAPON_MODEL_ROLL_DEGREES
+		if index == 4:
+			roll += VROID_CUTLASS_EXTRA_ROLL_DEGREES
+		imported.rotation_degrees.y += roll
 		bounds = _bounds_in_root(holder)
 	if bounds.size.y <= 0.001:
 		mount.remove_child(holder)
@@ -108,6 +117,9 @@ func equip(index: int) -> bool:
 	# after reorientation. Keep the established Ninja fitting unchanged.
 	var grip_y := minf(0.0, bounds.position.y) * 0.5
 	var center := _hilt_anchor_in_root(holder, bounds) if is_vroid else bounds.get_center()
+	if is_vroid:
+		# Move the palm farther up the handle while preserving its X/Z fit.
+		center.y += bounds.size.y * VROID_GRIP_ADVANCE_FRACTION
 	holder.scale = Vector3.ONE * factor
 	holder.position = Vector3(
 		-center.x * factor,
