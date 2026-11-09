@@ -149,9 +149,14 @@ func _run() -> void:
 	if not _check(float(tree.get("parameters/GripOverlay/blend_amount")) > 0.99, "Sword I grip must be active by default"):
 		return
 	game.call("_cycle_weapon")
-	if not _check(float(tree.get("parameters/GripOverlay/blend_amount")) < 0.01, "other weapons must not reuse Sword I grip pose"):
+	if not _check(float(tree.get("parameters/GripOverlay/blend_amount")) > 0.99, "Sword II must share the one-handed finger grip"):
 		return
 	var weapon_visuals = game.get("weapon_visuals")
+	if not _check(weapon_visuals.equip(2), "Dagger cannot be equipped for grip exclusion test"):
+		return
+	game.call("_update_weapon_display")
+	if not _check(float(tree.get("parameters/GripOverlay/blend_amount")) < 0.01, "non-sword weapons must not reuse the sword finger grip"):
+		return
 	if not _check(weapon_visuals.equip(0), "Sword I cannot be re-equipped"):
 		return
 	game.call("_update_weapon_display")
