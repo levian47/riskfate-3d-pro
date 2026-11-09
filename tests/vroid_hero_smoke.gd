@@ -161,6 +161,9 @@ func _run() -> void:
 	var graph := tree.tree_root as AnimationNodeBlendTree
 	if not _check(graph != null, "VRoid AnimationTree root missing"):
 		return
+	var run_arms_node := graph.get_node("RunArms") as AnimationNodeBlend2
+	if not _check(run_arms_node != null and run_arms_node.sync, "armed/unarmed Run must keep both clips synchronized"):
+		return
 	var grip_name := VROID_ANIM.find_clip(animator, "SwordGrip")
 	if not _check(not grip_name.is_empty(), "VRoid Sword I finger grip animation missing"):
 		return
