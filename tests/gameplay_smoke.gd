@@ -57,6 +57,12 @@ func _run_checks() -> void:
 	var debug_skel := game.get_node_or_null("HUD/DebugPanel/Content/Grid/SkeletonDebugButton") as Button
 	if not _require(debug_skel != null and debug_skel.text == "SKEL OFF" and debug_skel.pressed.is_connected(Callable(game, "_toggle_skeleton_debug")), "Skeleton toggle must be accessible only within DEBUG"):
 		return
+	var debug_mat := game.get_node_or_null("HUD/DebugPanel/Content/Grid/NinjaMaterialsButton") as Button
+	var debug_run := game.get_node_or_null("HUD/DebugPanel/Content/Grid/NarutoDebugButton") as Button
+	if not _require(debug_mat != null and debug_mat.text == "MAT A" and debug_mat.pressed.is_connected(Callable(game, "_cycle_ninja_materials")), "Legacy materials must be usable through DEBUG"):
+		return
+	if not _require(debug_run != null and debug_run.text == "RUN OFF" and debug_run.pressed.is_connected(Callable(game, "_toggle_naruto_run")), "Legacy Naruto test mode must be usable through DEBUG"):
+		return
 	# The standalone HUD builder retains accepted gameplay controls and fullscreen.
 	var hud_panel := game.get_node_or_null("HUD/FPSCounter") as PanelContainer
 	if not _require(hud_panel != null and hud_panel.get_node_or_null("Stats/FPSLabel") == fps_label and hud_panel.get_node_or_null("Stats/PingLabel") == ping_label, "HUD counter hierarchy must survive extraction"):
