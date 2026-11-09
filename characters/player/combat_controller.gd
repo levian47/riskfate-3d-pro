@@ -15,15 +15,16 @@ var attack_duration := 0.0
 var attack_hit_pending := false
 
 
-func start_attack(animation_tree: AnimationTree, animator: AnimationPlayer) -> void:
+func start_attack(animation_tree: AnimationTree, animator: AnimationPlayer, speed: float = ATTACK_SPEED, clip_short_name: String = "SwordSlash") -> void:
 	if animation_tree == null or attack_time_left > 0.0:
 		return
-	# Preserve the existing original SwordSlash duration, not the active
-	# Sweeping track duration, and keep the current OneShot request unchanged.
-	var clip_name := ANIMATION_BUILDER.find_clip(animator, "SwordSlash")
+	# Default arguments preserve the approved Ninja timing and clip.
+	# VRoid passes its own visual playback speed and selected preview clip
+	# so the hit/cooldown timer matches the visible animation duration.
+	var clip_name := ANIMATION_BUILDER.find_clip(animator, clip_short_name)
 	if clip_name.is_empty():
 		return
-	attack_duration = animator.get_animation(clip_name).length / ATTACK_SPEED
+	attack_duration = animator.get_animation(clip_name).length / maxf(speed, 0.001)
 	attack_time_left = attack_duration
 	attack_hit_pending = true
 	animation_tree.set("parameters/Attack/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
