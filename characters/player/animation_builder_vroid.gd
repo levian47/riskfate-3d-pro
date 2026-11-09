@@ -12,6 +12,15 @@ const ARM_BONES := [
 	"J_Bip_R_Hand"
 ]
 
+# First-pass curled fingers for the Sword I grip. The thumb remains in its
+# imported pose until device-level review confirms the needed adjustment.
+const SWORD_GRIP_FINGER_BENDS := {
+	"J_Bip_R_Index1": 0.62, "J_Bip_R_Index2": 0.80, "J_Bip_R_Index3": 0.38,
+	"J_Bip_R_Middle1": 0.66, "J_Bip_R_Middle2": 0.83, "J_Bip_R_Middle3": 0.40,
+	"J_Bip_R_Ring1": 0.68, "J_Bip_R_Ring2": 0.87, "J_Bip_R_Ring3": 0.42,
+	"J_Bip_R_Little1": 0.68, "J_Bip_R_Little2": 0.85, "J_Bip_R_Little3": 0.42
+}
+
 static func find_clip(animator: AnimationPlayer, short_name: String) -> String:
 	if animator == null:
 		return ""
@@ -81,6 +90,30 @@ static func _sword_swing(walk: Animation) -> Animation:
 	return clip
 
 
+static func _sword_grip(walk: Animation) -> Animation:
+	# VRoid finger joints extend along local +Y, with the knuckles distributed
+	# along local Z. Positive local-Z curl bends the fingers toward the palm.
+	# Reuse existing VRoid track paths and sampled rest-aware bone rotations.
+	var grip := Animation.new()
+	grip.length = 1.0
+	grip.loop_mode = Animation.LOOP_LINEAR
+	for index in range(walk.get_track_count()):
+		if walk.track_get_type(index) != Animation.TYPE_ROTATION_3D:
+			continue
+		var path := walk.track_get_path(index)
+		if path.get_subname_count() == 0:
+			continue
+		var bone := String(path.get_subname(path.get_subname_count() - 1))
+		if not SWORD_GRIP_FINGER_BENDS.has(bone):
+			continue
+		var baseline := walk.rotation_track_interpolate(index, 0.15)
+		var curl := Quaternion(Vector3.FORWARD, float(SWORD_GRIP_FINGER_BENDS[bone]))
+		var track := grip.add_track(Animation.TYPE_ROTATION_3D)
+		grip.track_set_path(track, path)
+		grip.rotation_track_insert_key(track, 0.0, baseline * curl)
+	return grip
+
+
 static func _add_clip(root: AnimationNodeBlendTree, node_name: String, animation_name: String) -> void:
 	var clip_node := AnimationNodeAnimation.new()
 	clip_node.animation = animation_name
@@ -113,6 +146,11 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 		push_error("VRoid sword placeholder missing right arm rotation tracks")
 		return null
 	library.add_animation("SwordSlash", swing)
+	var grip := _sword_grip(walk)
+	if grip.get_track_count() != SWORD_GRIP_FINGER_BENDS.size():
+		push_error("VRoid Sword I grip requires twelve imported finger tracks")
+		return null
+	library.add_animation("SwordGrip", grip)
 	# Godot 4 bone animation values include the actual per-bone rest transform.
 	# The previous retarget missed this and collapsed the VRoid pose in gameplay.
 	var skeleton := _find_skeleton(model)
@@ -179,7 +217,18 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 	root.connect_node("AttackSpeed", 0, "SwordSlash")
 	root.connect_node("Attack", 0, "Locomotion")
 	root.connect_node("Attack", 1, "AttackSpeed")
-	root.connect_node("output", 0, "Attack")
+
+	# Only right-hand finger tracks are overridden. The accepted Walk/Run,
+	# upper-arm attack layer, and root locomotion remain unmodified.
+	_add_clip(root, "SwordGrip", "vroid/SwordGrip")
+	var grip_overlay := AnimationNodeBlend2.new()
+	grip_overlay.filter_enabled = true
+	for index in range(grip.get_track_count()):
+		grip_overlay.set_filter_path(grip.track_get_path(index), true)
+	root.add_node("GripOverlay", grip_overlay)
+	root.connect_node("GripOverlay", 0, "Attack")
+	root.connect_node("GripOverlay", 1, "SwordGrip")
+	root.connect_node("output", 0, "GripOverlay")
 
 	var animation_tree := AnimationTree.new()
 	animation_tree.name = "CharacterAnimationTree"
@@ -191,4 +240,5 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 	animation_tree.set("parameters/AttackSpeed/scale", attack_speed)
 	animation_tree.set("parameters/NarutoFullBodyBlend/blend_amount", 1.0)
 	animation_tree.set("parameters/NarutoFullSpeed/scale", 1.0)
+	animation_tree.set("parameters/GripOverlay/blend_amount", 1.0)
 	return animation_tree
