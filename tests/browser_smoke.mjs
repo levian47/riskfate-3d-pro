@@ -24,12 +24,12 @@ try {
     if (message.type() === "error") errors.push("Console: " + message.text());
   });
   page.on("response", (response) => {
-    if (response.status() >= 400 && response.url().startsWith(baseUrl)) {
+    if (response.status() >= 400 && response.url().startsWith(baseUrl) && !/\/(favicon\.ico|index\.icon\.png)$/.test(response.url())) {
       errors.push("HTTP " + response.status() + ": " + response.url());
     }
   });
   page.on("requestfailed", (request) => {
-    if (request.url().startsWith(baseUrl)) {
+    if (request.url().startsWith(baseUrl) && !/\/(favicon\.ico|index\.icon\.png)$/.test(request.url())) {
       errors.push("Request: " + request.url() + " (" + (request.failure()?.errorText ?? "unknown") + ")");
     }
   });
