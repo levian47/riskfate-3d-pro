@@ -276,9 +276,9 @@ func _update_weapon_display() -> void:
 	if touch_hud != null:
 		touch_hud.weapon_index = weapon_visuals.current_index + 1
 		touch_hud.queue_redraw()
-	# Both VRoid sword previews use the same provisional one-handed finger grip.
+	# All five VRoid weapons use the same provisional closed-hand finger/thumb pose.
 	if not use_legacy_hero and animation_tree != null:
-		animation_tree.set("parameters/GripOverlay/blend_amount", 1.0 if weapon_visuals.current_index in [0, 1] else 0.0)
+		animation_tree.set("parameters/GripOverlay/blend_amount", 1.0)
 		# Sword II is a heavy-attack candidate, not an approved two-hand grip.
 		animation_tree.set("parameters/SlashChoice/blend_amount", 1.0 if weapon_visuals.current_index == 1 else 0.0)
 	var help_label := get_node_or_null("HUD/HelpPanel/HelpText") as Label
@@ -357,7 +357,7 @@ func _build_hero() -> void:
 		if use_legacy_hero:
 			animation_tree = ANIMATION_BUILDER.setup_animation_tree(model, animator, ATTACK_SPEED)
 		else:
-			animation_tree = VROID_ANIMATION_BUILDER.setup_animation_tree(model, animator, ATTACK_SPEED)
+			animation_tree = VROID_ANIMATION_BUILDER.setup_animation_tree(model, animator, VROID_ANIMATION_BUILDER.VROID_ATTACK_SPEED)
 		if animation_tree != null:
 			naruto_clip_speed_ratio = float(animation_tree.get("parameters/NarutoFullSpeed/scale"))
 			_set_locomotion("Idle")
@@ -366,7 +366,12 @@ func _build_hero() -> void:
 
 func _start_attack() -> void:
 	# Maintain the existing desktop/mobile signal and test-facing entrypoint.
-	combat_controller.start_attack(animation_tree, animator)
+	if use_legacy_hero:
+		combat_controller.start_attack(animation_tree, animator)
+	else:
+		# Match VRoid-only playback and the selected heavy/regular source clip.
+		var clip := "SwordHeavyCandidate" if weapon_visuals.current_index == 1 else "SwordSlash"
+		combat_controller.start_attack(animation_tree, animator, VROID_ANIMATION_BUILDER.VROID_ATTACK_SPEED, clip)
 
 
 func _resolve_training_hit() -> void:
