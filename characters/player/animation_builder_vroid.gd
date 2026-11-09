@@ -15,14 +15,15 @@ const VROID_ATTACK_SPEED := 0.70
 const SWORD_I_ATTACK_LIFT_DEGREES := 34.0
 # Sword I finishing phase: rotation vectors (axis * radians, parent-local, applied
 # before the authored key) solved offline so that the hand ends just below shoulder
-# height and the blade tip near it. Whole chain is corrected, not one angle.
+# height and the blade tip near it. Hand finish is calibrated against actual
+# Godot skeleton/weapon-tip measurements, not only bone Euler angles.
 # Envelope in fractions of clip length: starts after the wind-up/initial swing,
 # fully applied at the finish, released again before the clip end.
 const SWORD_I_FINISH_CORRECTION := {
 	"J_Bip_R_Shoulder": Vector3(0.0487803, -0.0720999, 0.0061250),
 	"J_Bip_R_UpperArm": Vector3(0.3609113, 0.0284501, 0.1484187),
 	"J_Bip_R_LowerArm": Vector3(-0.2360918, 0.0000086, -0.3150864),
-	"J_Bip_R_Hand": Vector3(0.1292042, -0.2269949, -0.0170649),
+	"J_Bip_R_Hand": Vector3(0.3283362, -0.2250152, -0.0397931),
 }
 const SWORD_I_FINISH_ENVELOPE := Vector4(0.409, 0.682, 0.818, 1.0)
 # Retain Quaternius Run leg/body timing, but keep the weapon arm close to the
