@@ -60,7 +60,10 @@ try {
   await page.waitForTimeout(800);
   const emitSwordFrame = async (label) => {
     const shot = await page.screenshot({ type: "jpeg", quality: 55, timeout: 15_000 });
-    console.log("RF_SWORD_I_FRAME_" + label + "|" + shot.toString("base64"));
+    const data = shot.toString("base64");
+    for (let offset = 0; offset < data.length; offset += 3000) {
+      console.log("RF_SWORD_I_FRAME_" + label + "|" + offset + "|" + data.slice(offset, offset + 3000));
+    }
   };
   await emitSwordFrame("idle");
   await canvas.click({ position: { x: 650, y: 390 } });
