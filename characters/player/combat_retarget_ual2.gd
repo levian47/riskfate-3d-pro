@@ -80,7 +80,7 @@ static func build(clip_name: String, target_reference: Animation, target_skeleto
 	for source_bone in BONE_MAP:
 		var target_bone: String = BONE_MAP[source_bone]
 		if not source_paths.has(source_bone) or not target_paths.has(target_bone):
-			push_error("UAL2 retarget: missing animation bone: %s -> %s" % [source_bone, target_bone])
+			push_error("UAL2 retarget: missing animation bone: %s -> %s; source keys=%s; target keys=%s" % [source_bone, target_bone, str(source_paths.keys()), str(target_paths.keys())])
 			instance.free()
 			return null
 		var src_index := source_skeleton.find_bone(source_bone)
