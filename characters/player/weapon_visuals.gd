@@ -9,6 +9,12 @@ const WEAPONS := [
 	{"name": "Cutlass", "path": "res://assets/equipment/weapons/quaternius_cutlass_01.fbx", "length": 1.20}
 ]
 
+# Sword I only: locate the grip between the VRoid finger roots and palm.
+# All values are local to J_Bip_R_Hand; visually verify on a real device.
+const VROID_SWORD_I_GRIP_OFFSET := Vector3(0.0, 0.058, -0.002)
+const VROID_SWORD_I_GRIP_ROTATION := Vector3(0.0, 0.0, -8.0)
+
+var is_vroid := false
 var mount: Node3D
 var current_visual: Node3D
 var current_index := -1
@@ -35,6 +41,7 @@ func initialize(model: Node) -> bool:
 	if skeleton.find_bone(right_hand) < 0:
 		push_error("Weapon test: no supported right-hand bone")
 		return false
+	is_vroid = right_hand == "J_Bip_R_Hand"
 	var attachment := BoneAttachment3D.new()
 	attachment.name = "SwordGrip"
 	attachment.bone_name = right_hand
@@ -50,6 +57,9 @@ func initialize(model: Node) -> bool:
 func equip(index: int) -> bool:
 	if mount == null or index < 0 or index >= WEAPONS.size():
 		return false
+	# Keep the original Ninja mount and all other weapons unchanged.
+	mount.position = VROID_SWORD_I_GRIP_OFFSET if is_vroid and index == 0 else Vector3.ZERO
+	mount.rotation_degrees = VROID_SWORD_I_GRIP_ROTATION if is_vroid and index == 0 else Vector3.ZERO
 	var specification: Dictionary = WEAPONS[index]
 	var packed := load(String(specification["path"])) as PackedScene
 	if packed == null:
