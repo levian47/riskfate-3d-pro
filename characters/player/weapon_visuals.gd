@@ -11,10 +11,11 @@ const WEAPONS := [
 
 # VRoid right-hand fingers extend local +Y and the thumb lies at +Z.
 # All five weapons need the grip at the palm, with the blade across the palm
-# rather than following the forearm. Sword I/II retain their existing tested
-# placement. Dagger/Knife/Cutlass are provisional visual corrections.
+# rather than following the forearm. Fit to the hilt, not the entire blade:
+# centering the full AABB badly displaces the curved Cutlass. These remain
+# provisional visual corrections to review on a real device.
 # The legacy Ninja mount remains unchanged.
-const VROID_WEAPON_GRIP_OFFSET := Vector3(0.0, 0.058, -0.002)
+const VROID_WEAPON_GRIP_OFFSET := Vector3(0.0, 0.058, 0.035)
 const VROID_WEAPON_GRIP_ROTATION := Vector3(90.0, 0.0, -8.0)
 
 var is_vroid := false
@@ -95,14 +96,16 @@ func equip(index: int) -> bool:
 	# Compensate for that parent scale so equipped weapons keep their world size.
 	var inherited_scale := maxf(mount.global_transform.basis.get_scale().y, 0.0001)
 	var factor := float(specification["length"]) / (bounds.size.y * inherited_scale)
-	# The Quaternius origin is near the crossguard; grip is halfway down
-	# the portion of the handle below the origin.
+	# The source origin is generally near the guard, with the grip below it.
+	# The blade curves or widens away from its handle, especially on Cutlass.
+	# For VRoid place the palm around the hilt profile instead of the entire AABB.
 	var grip_y := minf(0.0, bounds.position.y) * 0.5
+	var center := _hilt_center_in_root(holder, bounds) if is_vroid else bounds.get_center()
 	holder.scale = Vector3.ONE * factor
 	holder.position = Vector3(
-		-(bounds.position.x + bounds.size.x * 0.5) * factor,
+		-center.x * factor,
 		-grip_y * factor,
-		-(bounds.position.z + bounds.size.z * 0.5) * factor
+		-center.z * factor
 	)
 	if current_visual != null:
 		mount.remove_child(current_visual)
@@ -124,6 +127,39 @@ func selected_name() -> String:
 		return "None"
 	return String(WEAPONS[current_index]["name"])
 
+
+func _hilt_center_in_root(root: Node3D, bounds: AABB) -> Vector3:
+	# The lowest 18% of a vertical weapon is the handle/pommel region.
+	# Looking at actual vertex positions rather than the full mesh bounds
+	# avoids centering a curved blade instead of the grip. Used only on equip.
+	var meshes: Array[MeshInstance3D] = []
+	_collect_meshes(root, meshes)
+	var inverse := root.global_transform.affine_inverse()
+	var handle_top := bounds.position.y + bounds.size.y * 0.18
+	var min_x := INF
+	var max_x := -INF
+	var min_z := INF
+	var max_z := -INF
+	var samples := 0
+	for part in meshes:
+		if part.mesh == null:
+			continue
+		var to_root := inverse * part.global_transform
+		for surface in range(part.mesh.get_surface_count()):
+			var vertices: PackedVector3Array = part.mesh.surface_get_arrays(surface)[Mesh.ARRAY_VERTEX]
+			for vertex in vertices:
+				var point := to_root * vertex
+				if point.y > handle_top:
+					continue
+				min_x = minf(min_x, point.x)
+				max_x = maxf(max_x, point.x)
+				min_z = minf(min_z, point.z)
+				max_z = maxf(max_z, point.z)
+				samples += 1
+	if samples == 0:
+		# Fallback if an imported mesh does not expose CPU vertices.
+		return bounds.get_center()
+	return Vector3((min_x + max_x) * 0.5, 0.0, (min_z + max_z) * 0.5)
 
 func _bounds_in_root(root: Node3D) -> AABB:
 	var meshes: Array[MeshInstance3D] = []
