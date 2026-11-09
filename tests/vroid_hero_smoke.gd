@@ -60,6 +60,26 @@ func _run() -> void:
 		return
 	if not _check(new_walk.get_track_count() == 23 and new_run.get_track_count() == 23, "22 retargeted bones plus hips movement expected"):
 		return
+	if not _check(new_run.length > 0.90 and new_run.length < 1.00, "forward jog must replace overly aggressive sprint"):
+		return
+	for new_clip in [new_walk, new_run]:
+		var lower_leg_track := -1
+		for index in range(new_clip.get_track_count()):
+			if new_clip.track_get_type(index) != Animation.TYPE_ROTATION_3D:
+				continue
+			var track_path := new_clip.track_get_path(index)
+			if track_path.get_subname_count() > 0 and String(track_path.get_subname(track_path.get_subname_count() - 1)) == "J_Bip_L_LowerLeg":
+				lower_leg_track = index
+				break
+		if not _check(lower_leg_track >= 0, "new locomotion clip must animate the left lower leg"):
+			return
+		var start_pose := new_clip.rotation_track_interpolate(lower_leg_track, 0.0)
+		var half_pose := new_clip.rotation_track_interpolate(lower_leg_track, new_clip.length * 0.5)
+		var end_pose := new_clip.rotation_track_interpolate(lower_leg_track, new_clip.length)
+		if not _check(start_pose.angle_to(half_pose) > 0.03, "new locomotion lower leg must actually move"):
+			return
+		if not _check(start_pose.angle_to(end_pose) < 0.02, "new locomotion must have a seamless loop"):
+			return
 	var graph := tree.tree_root as AnimationNodeBlendTree
 	if not _check(graph != null, "VRoid AnimationTree root missing"):
 		return
