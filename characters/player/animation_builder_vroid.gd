@@ -8,18 +8,24 @@ extends RefCounted
 const QUATERNIUS_LOCOMOTION := preload("res://characters/player/locomotion_quaternius.gd")
 const UAL2_COMBAT := preload("res://characters/player/combat_retarget_ual2.gd")
 
+# VRoid-only preview attack speed. Keeps legacy Ninja timing untouched.
+# Sword Regular ~0.45 s -> ~0.64 s, Sword Heavy ~0.75 s -> ~1.07 s.
+const VROID_ATTACK_SPEED := 0.70
+
 const ARM_BONES := [
 	"J_Bip_R_Shoulder", "J_Bip_R_UpperArm", "J_Bip_R_LowerArm",
 	"J_Bip_R_Hand"
 ]
 
-# First-pass curled fingers for the Sword I grip. The thumb remains in its
-# imported pose until device-level review confirms the needed adjustment.
+# Preview closed-hand pose for all five VRoid weapons. Curl the distal thumb
+# joints gently, keeping the unusually oriented thumb root in its source pose.
+# Final contact and mesh clipping still require visual approval.
 const SWORD_GRIP_FINGER_BENDS := {
 	"J_Bip_R_Index1": 0.62, "J_Bip_R_Index2": 0.80, "J_Bip_R_Index3": 0.38,
 	"J_Bip_R_Middle1": 0.66, "J_Bip_R_Middle2": 0.83, "J_Bip_R_Middle3": 0.40,
 	"J_Bip_R_Ring1": 0.68, "J_Bip_R_Ring2": 0.87, "J_Bip_R_Ring3": 0.42,
-	"J_Bip_R_Little1": 0.68, "J_Bip_R_Little2": 0.85, "J_Bip_R_Little3": 0.42
+	"J_Bip_R_Little1": 0.68, "J_Bip_R_Little2": 0.85, "J_Bip_R_Little3": 0.42,
+	"J_Bip_R_Thumb2": 0.42, "J_Bip_R_Thumb3": 0.36
 }
 
 static func find_clip(animator: AnimationPlayer, short_name: String) -> String:
@@ -158,7 +164,7 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 	library.add_animation("SwordHeavyCandidate", heavy)
 	var grip := _sword_grip(walk)
 	if grip.get_track_count() != SWORD_GRIP_FINGER_BENDS.size():
-		push_error("VRoid Sword I grip requires twelve imported finger tracks")
+		push_error("VRoid weapon grip requires all expected finger and distal thumb tracks")
 		return null
 	library.add_animation("SwordGrip", grip)
 	# Godot 4 bone animation values include the actual per-bone rest transform.
@@ -229,7 +235,7 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 	root.connect_node("Attack", 0, "Locomotion")
 	root.connect_node("Attack", 1, "AttackSpeed")
 
-	# Only right-hand finger tracks are overridden. The accepted Walk/Run,
+	# Only right-hand finger/thumb tracks are overridden. The accepted Walk/Run,
 	# upper-arm attack layer, and root locomotion remain unmodified.
 	_add_clip(root, "SwordGrip", "vroid/SwordGrip")
 	var grip_overlay := AnimationNodeBlend2.new()
