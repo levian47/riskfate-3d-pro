@@ -565,8 +565,11 @@ func _run() -> void:
 	if not _check(unarmed_clip.length > 0.76 and unarmed_clip.length < 0.78,
 		"UAL2 Hook must retain 0.47s strike and compress recovery to 0.30s"):
 		return
-	if not _check(absf(attack_combat.attack_time_left - unarmed_clip.length / VROID_ANIM.UNARMED_ATTACK_SPEED) < 0.01 and not attack_combat.attack_hit_pending,
-		"ATK without a weapon must run a correctly timed visual-only swing"):
+	if not _check(absf(attack_combat.attack_time_left - unarmed_clip.length / VROID_ANIM.UNARMED_ATTACK_SPEED) < 0.01
+		and attack_combat.attack_hit_pending and int(attack_combat.active_hit_damage) == 8
+		and absf(float(attack_combat.active_hit_reach) - 1.5) < 0.001
+		and absf(float(attack_combat.active_hit_moment) - 0.35) < 0.001,
+		"ATK without a weapon must use isolated training damage, reach and timing"):
 		return
 	if not _check(absf(float(tree.get("parameters/AttackSpeed/scale")) - VROID_ANIM.UNARMED_ATTACK_SPEED) < 0.001,
 		"unarmed visual animation rate must match the hit-free cooldown"):
@@ -674,6 +677,59 @@ func _run() -> void:
 		return
 	animator.stop()
 	tree.active = true
+	# Verify a fist hits the training dummy exactly once, within short reach
+	# and facing cone. The approved animation remains untouched.
+	var fist_dummy := game.get_node_or_null("Environment/TrainingDummy")
+	var fist_hero := game.get("hero") as CharacterBody3D
+	var fist_visual := game.get("visual") as Node3D
+	if not _check(fist_dummy != null and fist_hero != null and fist_visual != null
+		and int(fist_dummy.get("hp")) == 100, "fist training target missing"):
+		return
+	var saved_fist_position := fist_hero.global_position
+	var saved_fist_yaw := fist_visual.rotation.y
+	var fist_duration: float = attack_combat.attack_duration
+	fist_hero.global_position = Vector3(0.0, 0.2, 6.0)
+	fist_visual.rotation.y = 0.0
+	attack_combat.physics_step(fist_duration * attack_combat.UNARMED_HIT_MOMENT - 0.001, game, fist_hero, fist_visual)
+	if not _check(int(fist_dummy.get("hp")) == 100 and attack_combat.attack_hit_pending, "unarmed impact must not happen early"):
+		return
+	attack_combat.physics_step(0.002, game, fist_hero, fist_visual)
+	if not _check(int(fist_dummy.get("hp")) == 92 and not attack_combat.attack_hit_pending
+		and fist_dummy.get_node("HealthLabel").text == "HP 92 / 100",
+		"one fist impact must apply exactly 8 training damage"):
+		return
+	attack_combat.physics_step(0.25, game, fist_hero, fist_visual)
+	if not _check(int(fist_dummy.get("hp")) == 92, "unarmed attack cannot hit twice"):
+		return
+	attack_combat.cancel_attack(tree)
+	# A dummy 2.1 units ahead lies inside sword reach, but outside fist reach.
+	fist_hero.global_position = Vector3(0.0, 0.2, 4.9)
+	game.call("_start_attack")
+	attack_combat.physics_step(fist_duration * 0.40, game, fist_hero, fist_visual)
+	if not _check(int(fist_dummy.get("hp")) == 92, "fist must not inherit sword reach"):
+		return
+	attack_combat.cancel_attack(tree)
+	fist_hero.global_position = Vector3(0.0, 0.2, 6.0)
+	fist_visual.rotation.y = PI
+	game.call("_start_attack")
+	attack_combat.physics_step(fist_duration * 0.40, game, fist_hero, fist_visual)
+	if not _check(int(fist_dummy.get("hp")) == 92, "fist must not hit behind the player"):
+		return
+	attack_combat.cancel_attack(tree)
+	fist_visual.rotation.y = 0.0
+	game.call("_start_attack")
+	if not _check(attack_combat.attack_hit_pending, "fresh unarmed hit must be pending"):
+		return
+	# Equipping during windup cancels damage as well as the animation.
+	weapon_visuals.equip(0)
+	game.call("_update_weapon_display")
+	attack_combat.physics_step(fist_duration, game, fist_hero, fist_visual)
+	if not _check(int(fist_dummy.get("hp")) == 92 and not attack_combat.attack_hit_pending,
+		"equipping a sword must cancel pending unarmed damage"):
+		return
+	fist_hero.global_position = saved_fist_position
+	fist_visual.rotation.y = saved_fist_yaw
+	fist_dummy.call("_reset_target")
 	# A new weapon cancels an active fist combo, preventing punches with a sword.
 	weapon_visuals.equip(0)
 	game.call("_update_weapon_display")
@@ -682,6 +738,11 @@ func _run() -> void:
 	# Switching to None in the middle of an attack must cancel it cleanly.
 	game.call("_start_attack")
 	if not _check(attack_combat.attack_time_left > 0.0 and attack_combat.attack_hit_pending, "Sword I attack did not start"):
+		return
+	if not _check(int(attack_combat.active_hit_damage) == 25
+		and absf(float(attack_combat.active_hit_reach) - 3.1) < 0.001
+		and absf(float(attack_combat.active_hit_moment) - 0.42) < 0.001,
+		"sword hit profile must reset to its approved training values after an unarmed punch"):
 		return
 	weapon_visuals.equip(1)
 	game.call("_update_weapon_display")
