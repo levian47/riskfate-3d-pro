@@ -22,6 +22,7 @@ var naruto_run_enabled := false
 var skeleton_enabled := false
 var material_variant := 0
 var weapon_index := 1
+var weapon_slots := 5 # VRoid adds a sixth "no weapon" state (index 0).
 var zoom_level := 2
 var stick_thumb := Vector2.ZERO
 var portrait_mode := false
@@ -215,7 +216,7 @@ func _draw() -> void:
 	var weapon_r: float = layout["weapon_radius"]
 	_draw_button(weapon_center, weapon_r, Color(0.33, 0.27, 0.44, 0.94 if weapon_finger != -1 else 0.83), Color(0.90, 0.82, 1.0, 0.96))
 	_draw_label(weapon_center + Vector2(0, -weapon_r * 0.18), "WPN", weapon_r * 0.32)
-	_draw_label(weapon_center + Vector2(0, weapon_r * 0.28), "%d/5" % weapon_index, weapon_r * 0.34)
+	_draw_label(weapon_center + Vector2(0, weapon_r * 0.28), "%d/%d" % [weapon_index, weapon_slots], weapon_r * 0.34)
 	_draw_fullscreen_control(layout)
 
 func _draw_fullscreen_control(layout: Dictionary) -> void:

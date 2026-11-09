@@ -157,7 +157,26 @@ func equip(index: int) -> bool:
 	return true
 
 
+func has_weapon() -> bool:
+	return current_visual != null and current_index >= 0
+
+
+func unequip() -> void:
+	# "No weapon" state (VRoid only): the visual is removed, the hand mount is
+	# kept so the next equip() restores scale, orientation and grip from scratch.
+	if current_visual != null:
+		mount.remove_child(current_visual)
+		current_visual.queue_free()
+	current_visual = null
+	current_index = -1
+
+
 func cycle() -> bool:
+	# VRoid: Sword I -> Sword II -> Dagger -> Knife -> Cutlass -> None -> Sword I.
+	# Ninja keeps the original five-weapon cycle.
+	if is_vroid and current_index == WEAPONS.size() - 1:
+		unequip()
+		return true
 	return equip((current_index + 1) % WEAPONS.size())
 
 

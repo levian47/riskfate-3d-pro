@@ -30,6 +30,16 @@ func start_attack(animation_tree: AnimationTree, animator: AnimationPlayer, spee
 	animation_tree.set("parameters/Attack/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
 
 
+func cancel_attack(animation_tree: AnimationTree) -> void:
+	# Used when the weapon is removed mid-attack: no later hit, no stuck layer.
+	if attack_time_left <= 0.0 and not attack_hit_pending:
+		return
+	attack_time_left = 0.0
+	attack_hit_pending = false
+	if animation_tree != null:
+		animation_tree.set("parameters/Attack/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_ABORT)
+
+
 func physics_step(delta: float, game: Node3D, hero: CharacterBody3D, visual: Node3D) -> void:
 	if attack_time_left > 0.0:
 		attack_time_left = maxf(0.0, attack_time_left - delta)

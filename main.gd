@@ -56,6 +56,8 @@ var movement_controller = MOVEMENT_CONTROLLER.new()
 var combat_controller = COMBAT_CONTROLLER.new()
 var weapon_visuals = WEAPON_VISUALS.new()
 var touch_hud
+const WEAPON_POSE_BLEND_TIME := 0.18
+var weapon_pose_blend := 1.0 # 1 = armed (finger grip, weapon-safe Run), 0 = no weapon
 var fps_label: Label
 var fps_update_elapsed := 0.0
 
@@ -84,6 +86,8 @@ func _process(delta: float) -> void:
 
 func _physics_process(delta: float) -> void:
 	combat_controller.physics_step(delta, self, hero, visual)
+
+	_sync_weapon_pose(delta)
 
 	# Motion is isolated from combat and animation state transitions.
 	var launched: bool = movement_controller.physics_step(hero, visual, camera, touch_hud, delta)
@@ -304,17 +308,32 @@ func _cycle_weapon() -> void:
 func _update_weapon_display() -> void:
 	if touch_hud != null:
 		touch_hud.weapon_index = weapon_visuals.current_index + 1
+		touch_hud.weapon_slots = 5 if use_legacy_hero else WEAPON_VISUALS.WEAPONS.size() + 1
 		touch_hud.queue_redraw()
-	# All five VRoid weapons use the same provisional closed-hand finger/thumb pose.
 	if not use_legacy_hero and animation_tree != null:
-		animation_tree.set("parameters/GripOverlay/blend_amount", 1.0)
-		# Sword I previews the one-handed heavy strike; Sword II is standard 1H.
-		# A true two-handed grip/strike requires a separate approved animation.
-		animation_tree.set("parameters/SlashChoice/blend_amount", 1.0 if weapon_visuals.current_index == 0 else 0.0)
+		# Removing the weapon mid-attack must not leave a sword animation or a late hit.
+		if not weapon_visuals.has_weapon():
+			combat_controller.cancel_attack(animation_tree)
+		_sync_weapon_pose(0.0)
 	var help_label := get_node_or_null("HUD/HelpPanel/HelpText") as Label
 	if help_label != null:
 		help_label.text = HUD_BUILDER.desktop_help_text(weapon_visuals.selected_name(), naruto_run_enabled, use_legacy_hero, movement_controller.run_by_default)
 		help_label.text += (" | M: MAT %s" % ["O", "A", "B"][material_variant_index]) if use_legacy_hero else " | VRoid"
+
+
+func _sync_weapon_pose(delta: float) -> void:
+	# VRoid only. Armed: closed-hand grip + weapon-safe Run. Unarmed: open hand
+	# + full Run. Both are smoothed so that a switch never pops the pose.
+	if use_legacy_hero or animation_tree == null:
+		return
+	var armed: bool = weapon_visuals.has_weapon()
+	weapon_pose_blend = move_toward(weapon_pose_blend, 1.0 if armed else 0.0, delta / WEAPON_POSE_BLEND_TIME)
+	animation_tree.set("parameters/GripOverlay/blend_amount", weapon_pose_blend)
+	animation_tree.set("parameters/RunArms/blend_amount", 1.0 - weapon_pose_blend)
+	# Sword I previews the one-handed heavy strike; the others use the standard 1H.
+	# The clip choice is held until the current attack has finished.
+	if armed and combat_controller.attack_time_left <= 0.0:
+		animation_tree.set("parameters/SlashChoice/blend_amount", 1.0 if weapon_visuals.current_index == 0 else 0.0)
 
 
 func _start_dash() -> void:
@@ -399,6 +418,8 @@ func _start_attack() -> void:
 	if use_legacy_hero:
 		combat_controller.start_attack(animation_tree, animator)
 	else:
+		if not weapon_visuals.has_weapon():
+			return # No unarmed attack: ATK without a weapon does nothing.
 		# Match VRoid-only playback and the selected heavy/regular source clip.
 		var clip := "SwordHeavyCandidate" if weapon_visuals.current_index == 0 else "SwordSlash"
 		combat_controller.start_attack(animation_tree, animator, VROID_ANIMATION_BUILDER.VROID_ATTACK_SPEED, clip)

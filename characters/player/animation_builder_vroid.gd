@@ -13,6 +13,18 @@ const UAL2_COMBAT := preload("res://characters/player/combat_retarget_ual2.gd")
 const VROID_ATTACK_SPEED := 0.70
 # Preview-only lift of Sword I's one-handed heavy swing; no timing or hitbox changes.
 const SWORD_I_ATTACK_LIFT_DEGREES := 34.0
+# Sword I finishing phase: rotation vectors (axis * radians, parent-local, applied
+# before the authored key) solved offline so that the hand ends just below shoulder
+# height and the blade tip near it. Whole chain is corrected, not one angle.
+# Envelope in fractions of clip length: starts after the wind-up/initial swing,
+# fully applied at the finish, released again before the clip end.
+const SWORD_I_FINISH_CORRECTION := {
+	"J_Bip_R_Shoulder": Vector3(0.0487803, -0.0720999, 0.0061250),
+	"J_Bip_R_UpperArm": Vector3(0.3609113, 0.0284501, 0.1484187),
+	"J_Bip_R_LowerArm": Vector3(-0.2360918, 0.0000086, -0.3150864),
+	"J_Bip_R_Hand": Vector3(0.1292042, -0.2269949, -0.0170649),
+}
+const SWORD_I_FINISH_ENVELOPE := Vector4(0.409, 0.682, 0.818, 1.0)
 # Retain Quaternius Run leg/body timing, but keep the weapon arm close to the
 # neutral walking carry instead of letting its high run swing cross the head.
 const RUN_WEAPON_CARRY_BLEND := {
@@ -140,9 +152,18 @@ static func _safe_weapon_run(run: Animation, walk: Animation) -> Animation:
 	return corrected
 
 
-static func _raise_heavy_sword_arc(source: Animation) -> Animation:
-	# Retain the authored heavy-strike keys, raising only the right upper arm
-	# during the middle of the blow. Rest pose and clip endpoints are unchanged.
+static func _smoothstep01(value: float) -> float:
+	var x := clampf(value, 0.0, 1.0)
+	return x * x * (3.0 - 2.0 * x)
+
+
+static func finish_envelope(progress: float) -> float:
+	var e := SWORD_I_FINISH_ENVELOPE
+	return _smoothstep01((progress - e.x) / (e.y - e.x)) * (1.0 - _smoothstep01((progress - e.z) / (e.w - e.z)))
+
+
+static func _apply_sword_i_sin_lift(source: Animation) -> Animation:
+	# Previous accepted behaviour: raise only the right upper arm during the blow.
 	var elevated := source.duplicate() as Animation
 	for track in range(elevated.get_track_count()):
 		if elevated.track_get_type(track) != Animation.TYPE_ROTATION_3D:
@@ -158,6 +179,33 @@ static func _raise_heavy_sword_arc(source: Animation) -> Animation:
 			var pose: Quaternion = elevated.track_get_key_value(track, key)
 			elevated.track_set_key_value(track, key,
 				(Quaternion(Vector3.BACK, -lift) * pose).normalized())
+	return elevated
+
+
+static func _raise_heavy_sword_arc(source: Animation) -> Animation:
+	# Start, wind-up and initial swing stay identical to the previous build
+	# (envelope is exactly 0 there); the finishing phase is lifted by a
+	# coordinated shoulder/arm/forearm/hand correction.
+	var elevated := _apply_sword_i_sin_lift(source)
+	for track in range(elevated.get_track_count()):
+		if elevated.track_get_type(track) != Animation.TYPE_ROTATION_3D:
+			continue
+		var path := elevated.track_get_path(track)
+		if path.get_subname_count() == 0:
+			continue
+		var bone := String(path.get_subname(path.get_subname_count() - 1))
+		if not SWORD_I_FINISH_CORRECTION.has(bone):
+			continue
+		var vector: Vector3 = SWORD_I_FINISH_CORRECTION[bone]
+		var angle := vector.length()
+		for key in range(elevated.track_get_key_count(track)):
+			var progress := elevated.track_get_key_time(track, key) / maxf(elevated.length, 0.001)
+			var weight := finish_envelope(progress)
+			if weight <= 0.0:
+				continue
+			var pose: Quaternion = elevated.track_get_key_value(track, key)
+			var correction := Quaternion(vector / angle, angle * weight)
+			elevated.track_set_key_value(track, key, (correction * pose).normalized())
 	return elevated
 
 
@@ -246,6 +294,10 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 		return null
 	library.add_animation("QuaterniusWalk", replacement_walk)
 	library.add_animation("QuaterniusRun", safe_run)
+	# Unarmed run: the complete original Quaternius Run, including the natural
+	# right-arm swing. It has the same length/phase as the weapon-safe Run
+	# (that one is a duplicate with four right-arm tracks retuned).
+	library.add_animation("QuaterniusRunFree", replacement_run)
 	if animator.add_animation_library("vroid", library) != OK:
 		return null
 
@@ -260,7 +312,19 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 		var state: String = state_names[i]
 		_add_clip(root, state, clips[i])
 		locomotion.set_input_name(i, state)
-		if state == "Walk" or state == "Run":
+		if state == "Run":
+			# RunArms 0 = weapon-safe Run, 1 = full Run. Both clips advance with
+			# the same RunSpeed, so switching only crossfades the right arm.
+			_add_clip(root, "RunFree", "vroid/QuaterniusRunFree")
+			var run_arms := AnimationNodeBlend2.new()
+			root.add_node("RunArms", run_arms)
+			root.connect_node("RunArms", 0, state)
+			root.connect_node("RunArms", 1, "RunFree")
+			var run_speed := AnimationNodeTimeScale.new()
+			root.add_node("RunSpeed", run_speed)
+			root.connect_node("RunSpeed", 0, "RunArms")
+			root.connect_node("Locomotion", i, "RunSpeed")
+		elif state == "Walk":
 			var speed := AnimationNodeTimeScale.new()
 			root.add_node(state + "Speed", speed)
 			root.connect_node(state + "Speed", 0, state)
@@ -327,5 +391,6 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 	animation_tree.set("parameters/NarutoFullBodyBlend/blend_amount", 1.0)
 	animation_tree.set("parameters/NarutoFullSpeed/scale", 1.0)
 	animation_tree.set("parameters/GripOverlay/blend_amount", 1.0)
+	animation_tree.set("parameters/RunArms/blend_amount", 0.0)
 	animation_tree.set("parameters/SlashChoice/blend_amount", 0.0)
 	return animation_tree

@@ -287,6 +287,8 @@ func _run() -> void:
 		return
 	var diagnostic_library := AnimationLibrary.new()
 	diagnostic_library.add_animation("HeavyBaseline", heavy_baseline)
+	var heavy_previous: Animation = VROID_ANIM._apply_sword_i_sin_lift(heavy_baseline)
+	diagnostic_library.add_animation("HeavyPrevious", heavy_previous)
 	if not _check(animator.add_animation_library("heavy_height_test", diagnostic_library) == OK,
 		"cannot register heavy-attack baseline"):
 		return
@@ -309,6 +311,90 @@ func _run() -> void:
 		print("Sword I attack height phase=", phase, " baseline_hand_y=", original_y,
 			" raised_hand_y=", raised_y, " extra_y=", delta_y)
 	if not _check(attack_height_gain > 0.035, "Sword I heavy attack failed to lift the sword hand"):
+		return
+	# --- RF-VROID-015D A: Sword I finishing phase -------------------------------
+	if not _check(heavy_previous.get_track_count() == heavy_clip.get_track_count(), "Sword I clip lost tracks"):
+		return
+	var corrected_bones := VROID_ANIM.SWORD_I_FINISH_CORRECTION.keys()
+	var max_speed_previous := 0.0
+	var max_speed_new := 0.0
+	var finish_changed := 0.0
+	for track in range(heavy_clip.get_track_count()):
+		if heavy_clip.track_get_type(track) != Animation.TYPE_ROTATION_3D:
+			continue
+		var track_path := heavy_clip.track_get_path(track)
+		var track_bone := String(track_path.get_subname(track_path.get_subname_count() - 1))
+		var previous_track := heavy_previous.find_track(track_path, Animation.TYPE_ROTATION_3D)
+		if not _check(previous_track >= 0 and heavy_previous.track_get_key_count(previous_track) == heavy_clip.track_get_key_count(track), "Sword I track layout changed: " + track_bone):
+			return
+		var previous_pose := Quaternion.IDENTITY
+		var new_pose := Quaternion.IDENTITY
+		var previous_time := 0.0
+		for key in range(heavy_clip.track_get_key_count(track)):
+			var key_time := heavy_clip.track_get_key_time(track, key)
+			var progress := key_time / heavy_clip.length
+			var old_value: Quaternion = heavy_previous.track_get_key_value(previous_track, key)
+			var new_value: Quaternion = heavy_clip.track_get_key_value(track, key)
+			var diff := old_value.angle_to(new_value)
+			if track_bone in corrected_bones:
+				if progress <= VROID_ANIM.SWORD_I_FINISH_ENVELOPE.x + 0.0001 or key == heavy_clip.track_get_key_count(track) - 1:
+					if not _check(diff < 0.0005, "Sword I start/wind-up/end must stay identical: %s key %d diff %f" % [track_bone, key, diff]):
+						return
+				else:
+					finish_changed = maxf(finish_changed, diff)
+				if key > 0:
+					var dt := maxf(key_time - previous_time, 0.001)
+					max_speed_previous = maxf(max_speed_previous, previous_pose.angle_to(old_value) / dt)
+					max_speed_new = maxf(max_speed_new, new_pose.angle_to(new_value) / dt)
+			else:
+				if not _check(diff < 0.0005, "Sword I correction leaked into another bone: " + track_bone):
+					return
+			previous_pose = old_value
+			new_pose = new_value
+			previous_time = key_time
+	if not _check(finish_changed > 0.25, "Sword I finishing phase was not corrected"):
+		return
+	if not _check(max_speed_new <= max_speed_previous * 1.5 + 1.0, "Sword I correction creates a sharp jerk: %f vs %f" % [max_speed_new, max_speed_previous]):
+		return
+	print("Sword I finish correction: max_key_change=", finish_changed, " max_angular_speed ", max_speed_previous, " -> ", max_speed_new)
+	var upper_idx := rig.find_bone("J_Bip_R_UpperArm")
+	var sword_holder := weapon_visuals.current_visual as Node3D
+	var sword_bounds: AABB = weapon_visuals._bounds_in_root(sword_holder)
+	var sword_tip_local := Vector3(sword_bounds.get_center().x, sword_bounds.end.y, sword_bounds.get_center().z)
+	var finish_hand_height := -99.0
+	var finish_tip_height := -99.0
+	var previous_tip_height := -99.0
+	for phase in [0.30, 0.36, 0.41]:
+		var early_time := heavy_clip.length * float(phase)
+		var early := []
+		for clip_name in [heavy_name, "heavy_height_test/HeavyPrevious"]:
+			animator.play(clip_name)
+			animator.seek(early_time, true)
+			rig.force_update_all_bone_transforms()
+			early.append(rig.get_bone_global_pose(hand_idx).origin)
+		if not _check((early[0] as Vector3).distance_to(early[1]) < 0.002, "Sword I initial swing (phase %f) must match the previous implementation" % phase):
+			return
+	for phase in [0.62, 0.70, 0.79, 0.88]:
+		var finish_time := heavy_clip.length * float(phase)
+		var heights := []
+		for clip_name in [heavy_name, "heavy_height_test/HeavyPrevious"]:
+			animator.play(clip_name)
+			animator.seek(finish_time, true)
+			rig.force_update_all_bone_transforms()
+			var shoulder_y: float = (rig.global_transform * rig.get_bone_global_pose(upper_idx)).origin.y
+			var hand_global: Transform3D = rig.global_transform * rig.get_bone_global_pose(hand_idx)
+			var tip_global: Vector3 = hand_global * (grip.transform * (sword_holder.transform * sword_tip_local))
+			heights.append([hand_global.origin.y - shoulder_y, tip_global.y - shoulder_y])
+		print("Sword I finish phase=", phase, " hand/tip relative to shoulder (new)=", heights[0], " (previous)=", heights[1])
+		if absf(phase - 0.79) < 0.001:
+			finish_hand_height = (heights[0] as Array)[0]
+			finish_tip_height = (heights[0] as Array)[1]
+			previous_tip_height = (heights[1] as Array)[1]
+			if not _check(finish_tip_height - previous_tip_height > 0.25 and (heights[0] as Array)[0] - (heights[1] as Array)[0] > 0.10, "Sword I finishing hand/blade is not higher than before"):
+				return
+	if not _check(finish_hand_height > -0.40 and finish_hand_height < 0.12, "Sword I finishing hand must end near shoulder height"):
+		return
+	if not _check(finish_tip_height > -0.40 and finish_tip_height < 0.30, "Sword I finishing blade tip must end near shoulder height, not overhead or at the knee"):
 		return
 	animator.play(walk)
 	animator.seek(0.02, true)
@@ -402,6 +488,136 @@ func _run() -> void:
 			" holder_position=", holder.position, " holder_scale=", holder.scale,
 			" mesh_aabb=", local_bounds, " hilt_center=", hilt_center, " grip_fraction=", anchor_fraction,
 			" expected_length=", expected_length, " measured_length=", measured_length, " fitted=", fitted_hilt)
+	# --- RF-VROID-015D B: sixth "no weapon" state -------------------------------
+	tree.active = true
+	var attack_combat = game.get("combat_controller")
+	attack_combat.attack_time_left = 0.0
+	attack_combat.attack_hit_pending = false
+	if not _check(weapon_visuals.equip(0), "Sword I start state for six-state test"):
+		return
+	game.call("_update_weapon_display")
+	var hud = game.get("touch_hud")
+	var expected_sequence := [1, 2, 3, 4, -1, 0, 1]
+	var expected_names := ["Sword II (1H)", "Dagger", "Knife", "Cutlass", "None", "Sword I (Heavy)", "Sword II (1H)"]
+	for step in range(expected_sequence.size()):
+		game.call("_cycle_weapon")
+		if not _check(weapon_visuals.current_index == int(expected_sequence[step]) and weapon_visuals.selected_name() == String(expected_names[step]), "weapon cycle step %d is out of order" % step):
+			return
+		if hud != null and not _check(int(hud.weapon_index) == int(expected_sequence[step]) + 1 and int(hud.weapon_slots) == 6, "HUD must show %d/6" % (int(expected_sequence[step]) + 1)):
+			return
+		if int(expected_sequence[step]) == -1:
+			if not _check(not weapon_visuals.has_weapon() and grip.get_node_or_null("EquippedWeapon") == null and _count_meshes(grip) == 0, "no weapon model may remain visible in the None state"):
+				return
+			game.call("_sync_weapon_pose", 1.0)
+			if not _check(float(tree.get("parameters/GripOverlay/blend_amount")) < 0.01 and float(tree.get("parameters/RunArms/blend_amount")) > 0.99, "None state must disable the finger grip and enable the full Run arms"):
+				return
+		else:
+			game.call("_sync_weapon_pose", 1.0)
+			if not _check(float(tree.get("parameters/GripOverlay/blend_amount")) > 0.99 and float(tree.get("parameters/RunArms/blend_amount")) < 0.01, "armed state must use the finger grip and the weapon-safe Run"):
+				return
+	# Currently Sword II. Re-equip scale/orientation after None, for every weapon.
+	for weapon_id in range(WEAPONS.WEAPONS.size()):
+		weapon_visuals.unequip()
+		game.call("_update_weapon_display")
+		if not _check(weapon_visuals.equip(weapon_id), "cannot re-equip after None"):
+			return
+		game.call("_update_weapon_display")
+		var again := weapon_visuals.current_visual as Node3D
+		var spec: Dictionary = WEAPONS.WEAPONS[weapon_id]
+		var again_bounds: AABB = weapon_visuals._bounds_in_root(again)
+		var again_length := again_bounds.size.y * again.scale.y * grip.global_transform.basis.get_scale().y
+		var wanted := float(spec["length"]) * float(spec.get("vroid_scale", 1.0))
+		if not _check(absf(again_length - wanted) < 0.03, "re-equipped weapon scale changed after None: " + String(spec["name"])):
+			return
+		var wanted_tilt := WEAPONS.VROID_WEAPON_GRIP_ROTATION.x - (WEAPONS.VROID_CUTLASS_OUTWARD_TILT_DEGREES if weapon_id == 4 else 0.0)
+		if not _check(absf(grip.rotation_degrees.x - wanted_tilt) < 0.1 and grip.position.y > 0.04, "re-equipped grip orientation changed after None: " + String(spec["name"])):
+			return
+	# Approved Cutlass fit must be untouched: roll -225 + 30 deg outward tilt.
+	if not _check(weapon_visuals.equip(4) and absf((weapon_visuals.current_visual.get_child(0) as Node3D).rotation_degrees.y - (WEAPONS.VROID_WEAPON_MODEL_ROLL_DEGREES + WEAPONS.VROID_CUTLASS_EXTRA_ROLL_DEGREES)) < 0.1 and absf(WEAPONS.VROID_CUTLASS_OUTWARD_TILT_DEGREES - 30.0) < 0.001, "approved Cutlass roll/tilt changed"):
+		return
+	# Other four attacks keep the standard clip; ATK without a weapon does nothing.
+	for weapon_id in [1, 2, 3, 4]:
+		weapon_visuals.equip(weapon_id)
+		game.call("_update_weapon_display")
+		if not _check(float(tree.get("parameters/SlashChoice/blend_amount")) < 0.01, "Sword II/Dagger/Knife/Cutlass must keep the standard attack"):
+			return
+	var regular_reference: Animation = VROID_ANIM.UAL2_COMBAT.build("Sword_Regular_A", animator.get_animation(walk), rig, true)
+	for track in range(regular_clip.get_track_count()):
+		for key in range(regular_clip.track_get_key_count(track)):
+			var regular_diff: float = (regular_clip.track_get_key_value(track, key) as Quaternion).angle_to(regular_reference.track_get_key_value(track, key))
+			if not _check(regular_diff < 0.0005, "standard attack clip changed"):
+				return
+	weapon_visuals.unequip()
+	game.call("_update_weapon_display")
+	attack_combat.attack_time_left = 0.0
+	attack_combat.attack_hit_pending = false
+	game.call("_start_attack")
+	if not _check(attack_combat.attack_time_left == 0.0 and not attack_combat.attack_hit_pending, "ATK without a weapon must not start a sword attack"):
+		return
+	# Switching to None in the middle of an attack must cancel it cleanly.
+	weapon_visuals.equip(0)
+	game.call("_update_weapon_display")
+	game.call("_start_attack")
+	if not _check(attack_combat.attack_time_left > 0.0 and attack_combat.attack_hit_pending, "Sword I attack did not start"):
+		return
+	weapon_visuals.equip(1)
+	game.call("_update_weapon_display")
+	if not _check(float(tree.get("parameters/SlashChoice/blend_amount")) > 0.99, "attack clip must not be swapped in the middle of a swing"):
+		return
+	game.call("_cycle_weapon")
+	game.call("_cycle_weapon")
+	game.call("_cycle_weapon")
+	game.call("_cycle_weapon")
+	if not _check(weapon_visuals.current_index == -1 and attack_combat.attack_time_left == 0.0 and not attack_combat.attack_hit_pending, "removing the weapon mid-attack must cancel the attack and its hit"):
+		return
+	tree.advance(0.2)
+	# Running switch: poses blend smoothly, never snapping.
+	game.call("_set_locomotion", "Run", true)
+	tree.advance(0.3)
+	game.call("_sync_weapon_pose", 1.0)
+	var arm_idx := rig.find_bone("J_Bip_R_UpperArm")
+	var index_idx := rig.find_bone("J_Bip_R_Index2")
+	var free_arm := []
+	var free_finger := []
+	for sample in range(4):
+		tree.advance(0.12)
+		free_arm.append(rig.get_bone_pose_rotation(arm_idx))
+		free_finger.append(rig.get_bone_pose_rotation(index_idx))
+	weapon_visuals.equip(0)
+	game.call("_update_weapon_display")
+	game.call("_sync_weapon_pose", 0.09)
+	var half_blend := float(tree.get("parameters/RunArms/blend_amount"))
+	if not _check(half_blend > 0.3 and half_blend < 0.7, "weapon pose must blend smoothly on re-equip, not snap: %f" % half_blend):
+		return
+	game.call("_sync_weapon_pose", 1.0)
+	var armed_arm := []
+	var armed_finger := []
+	for sample in range(4):
+		tree.advance(0.12)
+		armed_arm.append(rig.get_bone_pose_rotation(arm_idx))
+		armed_finger.append(rig.get_bone_pose_rotation(index_idx))
+	var arm_difference := 0.0
+	var finger_difference := 0.0
+	for sample in range(4):
+		arm_difference = maxf(arm_difference, (free_arm[sample] as Quaternion).angle_to(armed_arm[sample]))
+		finger_difference = maxf(finger_difference, (free_finger[sample] as Quaternion).angle_to(armed_finger[sample]))
+	print("Unarmed vs armed Run: right upper arm max diff=", arm_difference, " index finger diff=", finger_difference)
+	if not _check(arm_difference > 0.10, "full Run must restore the right-arm swing compared with weapon-safe Run"):
+		return
+	if not _check(finger_difference > 0.30, "finger grip must switch on at equip and off without a weapon"):
+		return
+	var free_clip: Animation = animator.get_animation(VROID_ANIM.find_clip(animator, "QuaterniusRunFree"))
+	if not _check(free_clip != null and free_clip.length == new_run.length and free_clip.get_track_count() == new_run.get_track_count(), "full Run clip must share phase/length with weapon-safe Run"):
+		return
+	for index in range(free_clip.get_track_count()):
+		if free_clip.track_get_type(index) != Animation.TYPE_ROTATION_3D:
+			continue
+		var free_path := free_clip.track_get_path(index)
+		var free_bone := String(free_path.get_subname(free_path.get_subname_count() - 1))
+		if VROID_ANIM.RUN_WEAPON_CARRY_BLEND.has(free_bone):
+			continue
+		if not _check(free_clip.rotation_track_interpolate(index, 0.3).angle_to(new_run.rotation_track_interpolate(index, 0.3)) < 0.001, "full and weapon-safe Run must differ only in the right arm: " + free_bone):
+			return
 	if not _check(weapon_visuals.equip(0), "restore Sword I after diagnostics"):
 		return
 	game.call("_update_weapon_display")
