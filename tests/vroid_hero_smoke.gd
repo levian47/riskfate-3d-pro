@@ -134,6 +134,14 @@ func _run() -> void:
 		var track_path := grip_clip.track_get_path(i)
 		if not _check(grip_overlay.is_path_filtered(track_path), "finger grip track is missing its blend filter"):
 			return
+		var original_index := animator.get_animation(walk).find_track(track_path, Animation.TYPE_ROTATION_3D)
+		if not _check(original_index >= 0, "grip must reuse the imported VRoid finger track"):
+			return
+		var original_rotation := animator.get_animation(walk).rotation_track_interpolate(original_index, 0.15)
+		var gripped_rotation := grip_clip.rotation_track_interpolate(i, 0.0)
+		var bend := original_rotation.angle_to(gripped_rotation)
+		if not _check(bend > 0.30 and bend < 1.10, "grip finger curl angle out of the initial safe range"):
+			return
 	if not _check(float(tree.get("parameters/GripOverlay/blend_amount")) > 0.99, "Sword I grip must be active by default"):
 		return
 	game.call("_cycle_weapon")
