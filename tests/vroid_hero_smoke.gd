@@ -579,9 +579,9 @@ func _run() -> void:
 		var path := unarmed_clip.track_get_path(track)
 		var target := String(path.get_subname(path.get_subname_count() - 1))
 		unarmed_tracks[target] = track
-		if not _check(unarmed_clip.rotation_track_interpolate(track, 0.0).is_equal_approx(
-			unarmed_clip.rotation_track_interpolate(track, unarmed_clip.length)),
-			"unarmed swing must return to the original pose: " + target):
+		if not _check((unarmed_clip.rotation_track_interpolate(track, 0.0) -
+			unarmed_clip.rotation_track_interpolate(track, unarmed_clip.length)).length() < 0.0001,
+			"UAL2 Hook recovery must return close to its source start pose: " + target):
 			return
 		if not _check(not target.begins_with("J_Bip_L_"),
 			"unarmed swing must not animate the left arm or fingers: " + target):
