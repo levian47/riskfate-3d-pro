@@ -41,7 +41,11 @@ func _run() -> void:
 	var attachment := rig.get_node_or_null("SwordGrip") as BoneAttachment3D
 	if not _check(attachment != null and attachment.bone_name == "J_Bip_R_Hand", "Sword I must follow the original right-hand bone"):
 		return
-	if not _check(grip.position.y > 0.04 and grip.position.y < 0.08 and grip.rotation_degrees.z < 0.0, "Sword I palm grip offset/orientation missing"):
+	# The VRoid hand/fingers point local +Y and its thumb lies at +Z.
+	# A sword still pointing along local +Y would follow the forearm; the
+	# blade must leave the grip toward the thumb side for this test pose.
+	var sword_axis := grip.transform.basis.y.normalized()
+	if not _check(grip.position.y > 0.04 and grip.position.y < 0.08 and sword_axis.dot(Vector3.BACK) > 0.95, "Sword I blade must cross the palm toward the thumb, not follow the forearm"):
 		return
 	if not _check(grip.get_node_or_null("EquippedWeapon") != null, "Sword I geometry not attached to palm"):
 		return
