@@ -22,9 +22,12 @@ const WALK_B64 := "9P/gAQv99P/aARn99f/IAUD99/+sAXz9+f+HAcv9+/9bASn+/f8nAZP+/v/uA
 const RUN_B64 := "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"
 
 
-static func build_from_reference(reference: Animation, running: bool) -> Animation:
-    # Reuse the imported VRoid skeleton track paths. Preserve the original
+static func build_from_reference(reference: Animation, running: bool, skeleton: Skeleton3D) -> Animation:
+    # Reuse the imported VRoid skeleton paths and actual bone rests. Preserve the original
     # Walk/Jog resources as a rollback option; no imported rig changes.
+    if skeleton == null:
+        push_error("Quaternius retarget needs the imported VRoid Skeleton3D")
+        return null
     var frames := RUN_FRAME_COUNT if running else WALK_FRAME_COUNT
     var duration := RUN_DURATION if running else WALK_DURATION
     var data := Marshalls.base64_to_raw(RUN_B64 if running else WALK_B64)
@@ -53,6 +56,12 @@ static func build_from_reference(reference: Animation, running: bool) -> Animati
         if not rotation_paths.has(bone_name):
             push_error("VRoid animation missing rotation track: " + bone_name)
             return null
+        var bone_index := skeleton.find_bone(bone_name)
+        if bone_index < 0:
+            push_error("VRoid skeleton missing bone: " + bone_name)
+            return null
+        # Godot 4 animation tracks contain Bone Rest, not only the pose delta.
+        var rest_rotation := skeleton.get_bone_rest(bone_index).basis.get_rotation_quaternion()
         var track := clip.add_track(Animation.TYPE_ROTATION_3D)
         clip.track_set_path(track, rotation_paths[bone_name])
         for frame in range(frames):
@@ -61,17 +70,26 @@ static func build_from_reference(reference: Animation, running: bool) -> Animati
             var z := float(data.decode_s16(offset + 4)) / 32767.0
             offset += 6
             var w := sqrt(maxf(0.0, 1.0 - x * x - y * y - z * z))
-            var pose := Quaternion(x, y, z, w).normalized()
-            clip.rotation_track_insert_key(track, duration * float(frame) / float(frames - 1), pose)
+            var rest_delta := Quaternion(x, y, z, w).normalized()
+            var local_pose := (rest_rotation * rest_delta).normalized()
+            clip.rotation_track_insert_key(track, duration * float(frame) / float(frames - 1), local_pose)
 
     if hips_position_path == NodePath():
         push_error("VRoid animation missing hips position track")
         return null
+    var hips_index := skeleton.find_bone("J_Bip_C_Hips")
+    if hips_index < 0:
+        push_error("VRoid skeleton missing hips")
+        return null
+    var hips_rest_position := skeleton.get_bone_rest(hips_index).origin
     var position_track := clip.add_track(Animation.TYPE_POSITION_3D)
     clip.track_set_path(position_track, hips_position_path)
     for frame in range(frames):
         var dx := float(data.decode_s16(offset)) / 10000.0
         var dy := float(data.decode_s16(offset + 2)) / 10000.0
         offset += 4
-        clip.position_track_insert_key(position_track, duration * float(frame) / float(frames - 1), Vector3(dx, dy, 0.0))
+        clip.position_track_insert_key(
+            position_track, duration * float(frame) / float(frames - 1),
+            hips_rest_position + Vector3(dx, dy, 0.0)
+        )
     return clip
