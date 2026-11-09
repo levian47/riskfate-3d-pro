@@ -129,7 +129,7 @@ func _run() -> void:
 	if not _check(not grip_name.is_empty(), "VRoid Sword I finger grip animation missing"):
 		return
 	var grip_clip := animator.get_animation(grip_name)
-	if not _check(grip_clip.get_track_count() == 12, "Sword I must close four fingers with three joints each"):
+	if not _check(grip_clip.get_track_count() == 14, "VRoid grip must curl twelve finger joints and two distal thumb joints"):
 		return
 	var grip_overlay := graph.get_node("GripOverlay") as AnimationNodeBlend2
 	if not _check(grip_overlay != null and grip_overlay.filter_enabled, "finger grip must be a filtered animation layer"):
@@ -161,10 +161,20 @@ func _run() -> void:
 	game.call("_update_weapon_display")
 	if not _check(grip.get_node_or_null("EquippedWeapon") == weapon_visuals.current_visual, "Dagger weapon node name was lost during switching"):
 		return
-	if not _check(float(tree.get("parameters/GripOverlay/blend_amount")) < 0.01, "non-sword weapons must not reuse the sword finger grip"):
+	if not _check(float(tree.get("parameters/GripOverlay/blend_amount")) > 0.99, "Dagger must also use the closed-hand grip"):
 		return
-	if not _check(grip.rotation_degrees.is_zero_approx(), "non-sword weapons must restore the original mount orientation"):
+	if not _check(grip.transform.basis.y.normalized().dot(Vector3.BACK) > 0.95 and grip.position.y > 0.04, "Dagger must sit across the palm, not extend the forearm"):
 		return
+	for candidate_index in [3, 4]:
+		if not _check(weapon_visuals.equip(candidate_index), "Knife/Cutlass cannot be equipped for grip test"):
+			return
+		game.call("_update_weapon_display")
+		if not _check(grip.get_node_or_null("EquippedWeapon") == weapon_visuals.current_visual, "Knife/Cutlass weapon attachment lost after switching"):
+			return
+		if not _check(grip.position.y > 0.04 and grip.transform.basis.y.normalized().dot(Vector3.BACK) > 0.95, "Knife/Cutlass must be fitted across the palm"):
+			return
+		if not _check(float(tree.get("parameters/GripOverlay/blend_amount")) > 0.99, "Knife/Cutlass must use the same closed-hand grip"):
+			return
 	if not _check(weapon_visuals.equip(0), "Sword I cannot be re-equipped"):
 		return
 	game.call("_update_weapon_display")
@@ -223,9 +233,21 @@ func _run() -> void:
 	animator.stop()
 	tree.active = true
 	game.call("_start_attack")
-	if not _check(float(game.get("combat_controller").get("attack_time_left")) > 0.0, "attack input/timing broken"):
+	var combat = game.get("combat_controller")
+	var regular_duration := regular_clip.length / VROID_ANIM.VROID_ATTACK_SPEED
+	if not _check(absf(float(combat.get("attack_duration")) - regular_duration) < 0.02, "Sword I attack timer must match slowed regular clip"):
 		return
-	print("VRoid smoke test OK: 103 bones, ", mesh_count, " mesh nodes, Quaternius Walk/Run, Sword I grip overlay, weapon switching and attack")
+	if not _check(absf(float(tree.get("parameters/AttackSpeed/scale")) - VROID_ANIM.VROID_ATTACK_SPEED) < 0.001, "VRoid visual attack speed must be reduced without changing Ninja"):
+		return
+	combat.attack_time_left = 0.0
+	if not _check(weapon_visuals.equip(1), "Sword II cannot be re-equipped for heavy timing test"):
+		return
+	game.call("_update_weapon_display")
+	game.call("_start_attack")
+	var heavy_duration := heavy_clip.length / VROID_ANIM.VROID_ATTACK_SPEED
+	if not _check(absf(float(combat.get("attack_duration")) - heavy_duration) < 0.02, "Sword II attack timer must match slowed heavy clip"):
+		return
+	print("VRoid smoke test OK: 103 bones, ", mesh_count, " mesh nodes, Quaternius Walk/Run, five palm grips, slower regular/heavy attacks")
 	game.queue_free()
 	quit(0)
 
