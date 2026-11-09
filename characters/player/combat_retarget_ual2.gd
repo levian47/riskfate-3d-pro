@@ -132,7 +132,8 @@ static func build(clip_name: String, target_reference: Animation, target_skeleto
 
 # Reuse the proven UAL2 -> VRoid rest-space conversion for the exact recorded
 # Melee_Hook + Melee_Hook_Rec frames. This path is distinct from sword retarget,
-# so no approved weapon animation gets altered. Left arm, legs and root excluded.
+# so no approved weapon animation gets altered. Left arm is held in the
+# source's bent defensive guard; legs and root motion remain excluded.
 static func build_unarmed_hook(target_reference: Animation, target_skeleton: Skeleton3D) -> Animation:
 	if target_reference == null or target_skeleton == null:
 		push_error("UAL2 Hook: target reference or skeleton missing")
@@ -150,7 +151,7 @@ static func build_unarmed_hook(target_reference: Animation, target_skeleton: Ske
 	var result := Animation.new()
 	result.length = HOOK_FRAMES.get_clip_length()
 	result.loop_mode = Animation.LOOP_NONE
-	for source_bone in HOOK_FRAMES.BONES:
+	for source_bone in HOOK_FRAMES.BONES + HOOK_FRAMES.GUARD_BONES:
 		var target_bone: String = BONE_MAP[source_bone]
 		if not target_paths.has(target_bone):
 			push_error("UAL2 Hook: missing VRoid animation bone " + target_bone)
@@ -169,12 +170,14 @@ static func build_unarmed_hook(target_reference: Animation, target_skeleton: Ske
 		var source_to_target := (target_world_rest.inverse() * source_world_rest).normalized()
 		var track := result.add_track(Animation.TYPE_ROTATION_3D)
 		result.track_set_path(track, target_paths[target_bone]["path"])
-		var frames: Array = rotations[source_bone]
-		for frame in range(HOOK_FRAMES.FRAME_COUNT):
-			var source_pose: Quaternion = frames[frame]
+		var is_left_guard := HOOK_FRAMES.GUARD_POSES.has(source_bone)
+		var frames: Array = [] if is_left_guard else rotations[source_bone]
+		var count := 2 if is_left_guard else HOOK_FRAMES.FRAME_COUNT
+		for frame in range(count):
+			var source_pose: Quaternion = HOOK_FRAMES.GUARD_POSES[source_bone] if is_left_guard else frames[frame]
 			var delta := (source_local_rest.inverse() * source_pose).normalized()
 			var aligned_delta := (source_to_target * delta * source_to_target.inverse()).normalized()
-			var at_time := float(frame) / HOOK_FRAMES.FRAME_RATE
+			var at_time := result.length * float(frame) if is_left_guard else float(frame) / HOOK_FRAMES.FRAME_RATE
 			result.rotation_track_insert_key(track, at_time, (target_local_rest * aligned_delta).normalized())
 	instance.free()
 	return result

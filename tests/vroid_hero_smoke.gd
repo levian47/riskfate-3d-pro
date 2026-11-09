@@ -583,11 +583,19 @@ func _run() -> void:
 			unarmed_clip.rotation_track_interpolate(track, unarmed_clip.length)).length() < 0.0001,
 			"UAL2 Hook recovery must return close to its source start pose: " + target):
 			return
-		if not _check(not target.begins_with("J_Bip_L_"),
-			"unarmed swing must not animate the left arm or fingers: " + target):
-			return
-	for target in ["J_Bip_R_Shoulder", "J_Bip_R_UpperArm", "J_Bip_R_LowerArm", "J_Bip_R_Hand", "J_Bip_R_Index2"]:
+		if target.begins_with("J_Bip_L_") and not target.begins_with("J_Bip_L_Shoulder") and not target.begins_with("J_Bip_L_UpperArm") and not target.begins_with("J_Bip_L_LowerArm") and not target.begins_with("J_Bip_L_Hand") and not VROID_ANIM.SWORD_GRIP_FINGER_BENDS.has(target.replace("J_Bip_L_", "J_Bip_R_")):
+			if not _check(false, "unexpected left-arm animation track: " + target):
+				return
+	for target in ["J_Bip_R_Shoulder", "J_Bip_R_UpperArm", "J_Bip_R_LowerArm", "J_Bip_R_Hand", "J_Bip_R_Index2", "J_Bip_L_Shoulder", "J_Bip_L_UpperArm", "J_Bip_L_LowerArm", "J_Bip_L_Hand", "J_Bip_L_Index2"]:
 		if not _check(unarmed_tracks.has(target), "unarmed swing missing track: " + target):
+			return
+	# The source left arm is a fixed guard during the complete right-hand hook.
+	# It must not copy the source's separate, wide left-hand swing.
+	for target in ["J_Bip_L_Shoulder", "J_Bip_L_UpperArm", "J_Bip_L_LowerArm", "J_Bip_L_Hand"]:
+		var guard_track: int = unarmed_tracks[target]
+		if not _check(unarmed_clip.rotation_track_interpolate(guard_track, 0.10).angle_to(
+			unarmed_clip.rotation_track_interpolate(guard_track, 0.45)) < 0.005,
+			"left arm must maintain the same protective guard during the right hook: " + target):
 			return
 	var right_track: int = unarmed_tracks["J_Bip_R_UpperArm"]
 	var windup_pose := unarmed_clip.rotation_track_interpolate(right_track, 0.08)
@@ -598,8 +606,9 @@ func _run() -> void:
 	var graph_attack := tree.tree_root as AnimationNodeBlendTree
 	var one_shot := graph_attack.get_node("Attack") as AnimationNodeOneShot
 	var right_finger_path := unarmed_clip.track_get_path(unarmed_tracks["J_Bip_R_Index2"])
-	if not _check(one_shot.is_path_filtered(right_finger_path),
-		"right fist must be curled by the attack overlay"):
+	var left_finger_path := unarmed_clip.track_get_path(unarmed_tracks["J_Bip_L_Index2"])
+	if not _check(one_shot.is_path_filtered(right_finger_path) and one_shot.is_path_filtered(left_finger_path),
+		"both fists must be curled by the attack overlay"):
 		return
 	if not _check(unarmed_clip.rotation_track_interpolate(unarmed_tracks["J_Bip_R_Index2"], 0.0).angle_to(
 		unarmed_clip.rotation_track_interpolate(unarmed_tracks["J_Bip_R_Index2"], 0.47)) > 0.55,
@@ -610,16 +619,25 @@ func _run() -> void:
 	tree.active = false
 	var right_hand_index := rig.find_bone("J_Bip_R_Hand")
 	var left_hand_index := rig.find_bone("J_Bip_L_Hand")
+	var left_upper_index := rig.find_bone("J_Bip_L_UpperArm")
+	var left_lower_index := rig.find_bone("J_Bip_L_LowerArm")
+	var left_guard_elbow_dot := 1.0
 	var fist_positions := []
 	for sample_time in [0.0, 0.10, 0.26, 0.42, unarmed_clip.length]:
 		animator.play(unarmed_name)
 		animator.seek(sample_time, true)
 		rig.force_update_all_bone_transforms()
+		var left_shoulder := rig.get_bone_global_pose(left_upper_index).origin
+		var left_elbow := rig.get_bone_global_pose(left_lower_index).origin
+		var left_wrist := rig.get_bone_global_pose(left_hand_index).origin
+		var upper_direction := (left_elbow - left_shoulder).normalized()
+		var lower_direction := (left_wrist - left_elbow).normalized()
+		left_guard_elbow_dot = minf(left_guard_elbow_dot, upper_direction.dot(lower_direction))
 		fist_positions.append([
 			rig.get_bone_global_pose(right_hand_index).origin,
-			rig.get_bone_global_pose(left_hand_index).origin
+			left_wrist
 		])
-	print("UNARMED_RIGHT_SWEEP positions=", fist_positions)
+	print("UNARMED_RIGHT_SWEEP positions=", fist_positions, " left_elbow_dot=", left_guard_elbow_dot)
 	var right_windup: Vector3 = fist_positions[1][0]
 	var right_hit: Vector3 = fist_positions[2][0]
 	var left_windup: Vector3 = fist_positions[1][1]
@@ -628,8 +646,10 @@ func _run() -> void:
 		and absf(right_hit.y - right_windup.y) < 0.55,
 		"authored right hook must travel a meaningful arc near the upper body"):
 		return
-	if not _check(left_windup.distance_to(left_hit) < right_windup.distance_to(right_hit) * 0.65,
-		"left arm must not perform a second strike"):
+	if not _check(left_windup.distance_to(left_hit) < right_windup.distance_to(right_hit) * 0.85,
+		"left guard must not perform a second strike"):
+		return
+	if not _check(left_guard_elbow_dot < 0.85, "left forearm must remain bent in the guard, never straight out"):
 		return
 	animator.stop()
 	tree.active = true

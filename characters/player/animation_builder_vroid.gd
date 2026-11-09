@@ -214,8 +214,8 @@ static func _raise_heavy_sword_arc(source: Animation) -> Animation:
 
 # The authored Quaternius UAL2 Melee_Hook + Melee_Hook_Rec is retargeted
 # through the same rest-space mapping as the approved UAL2 sword attacks.
-# Only right arm/chest source motion is transferred; keyframe finger curl is
-# added here because the original UAL2 hand pose does not key every VRoid digit.
+# The left arm uses the source's held defensive guard (not a second punch).
+# Keyframed finger curl closes both fists for the duration of the attack.
 static func _unarmed_swing(walk: Animation, skeleton: Skeleton3D) -> Animation:
 	var hook := UAL2_COMBAT.build_unarmed_hook(walk, skeleton)
 	if hook == null:
@@ -230,18 +230,20 @@ static func _unarmed_swing(walk: Animation, skeleton: Skeleton3D) -> Animation:
 		if path.get_subname_count() == 0:
 			continue
 		var bone := String(path.get_subname(path.get_subname_count() - 1))
-		if not SWORD_GRIP_FINGER_BENDS.has(bone):
+		var mirror_name := bone.replace("J_Bip_L_", "J_Bip_R_")
+		if not SWORD_GRIP_FINGER_BENDS.has(mirror_name):
 			continue
 		var baseline := walk.rotation_track_interpolate(index, 0.15)
 		var track := hook.add_track(Animation.TYPE_ROTATION_3D)
 		hook.track_set_path(track, path)
-		var bend := float(SWORD_GRIP_FINGER_BENDS[bone])
+		var bend := float(SWORD_GRIP_FINGER_BENDS[mirror_name])
+		var curl_axis := Vector3.FORWARD if bone.begins_with("J_Bip_L_") else Vector3.BACK
 		for key in range(times.size()):
-			var curl := Quaternion(Vector3.BACK, bend * float(curl_weights[key]))
+			var curl := Quaternion(curl_axis, bend * float(curl_weights[key]))
 			hook.rotation_track_insert_key(track, float(times[key]), (baseline * curl).normalized())
 		finger_tracks += 1
-	if finger_tracks != SWORD_GRIP_FINGER_BENDS.size():
-		push_error("UAL2 Hook: VRoid right-hand finger tracks missing")
+	if finger_tracks != SWORD_GRIP_FINGER_BENDS.size() * 2:
+		push_error("UAL2 Hook: VRoid left/right finger tracks missing")
 		return null
 	return hook
 
