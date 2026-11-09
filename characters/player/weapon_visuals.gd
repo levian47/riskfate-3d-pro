@@ -2,11 +2,11 @@ extends RefCounted
 # Visual-only weapon testing. No damage, animation or equipment rules here.
 # Each imported model is fitted to the same hand mount at runtime.
 const WEAPONS := [
-	{"name": "Sword I", "path": "res://assets/equipment/weapons/quaternius_sword_01.glb", "length": 1.35},
-	{"name": "Sword II", "path": "res://assets/equipment/weapons/quaternius_sword_02.glb", "length": 1.25},
+	{"name": "Sword I (Heavy)", "path": "res://assets/equipment/weapons/quaternius_sword_01.glb", "length": 1.35, "vroid_scale": 1.75},
+	{"name": "Sword II (1H)", "path": "res://assets/equipment/weapons/quaternius_sword_02.glb", "length": 1.25},
 	{"name": "Dagger", "path": "res://assets/equipment/weapons/quaternius_dagger_01.glb", "length": 0.85},
 	{"name": "Knife", "path": "res://assets/equipment/weapons/quaternius_knife_01.glb", "length": 0.72},
-	{"name": "Cutlass", "path": "res://assets/equipment/weapons/quaternius_cutlass_01.fbx", "length": 1.20}
+	{"name": "Cutlass", "path": "res://assets/equipment/weapons/quaternius_cutlass_01.fbx", "length": 1.20, "vroid_scale": 0.75}
 ]
 
 # VRoid right-hand fingers extend local +Y and the thumb lies at +Z.
@@ -25,6 +25,8 @@ const VROID_CUTLASS_EXTRA_ROLL_DEGREES := -225.0
 # Small additional advance from the current ~15% grip point toward the guard.
 # Measured relative to model length; does not change lateral centering.
 const VROID_GRIP_ADVANCE_FRACTION := 0.035
+# Dagger and Knife: advance another 5% of their respective total model lengths.
+const VROID_DAGGER_EXTRA_GRIP_ADVANCE_FRACTION := 0.05
 
 var is_vroid := false
 var mount: Node3D
@@ -111,7 +113,10 @@ func equip(index: int) -> bool:
 	# VRoid source geometry is scaled to the existing player capsule.
 	# Compensate for that parent scale so equipped weapons keep their world size.
 	var inherited_scale := maxf(mount.global_transform.basis.get_scale().y, 0.0001)
-	var factor := float(specification["length"]) / (bounds.size.y * inherited_scale)
+	var visual_length := float(specification["length"])
+	if is_vroid:
+		visual_length *= float(specification.get("vroid_scale", 1.0))
+	var factor := visual_length / (bounds.size.y * inherited_scale)
 	# For VRoid, the palm must land at the MIDDLE of the grip region, not
 	# near the pommel. Imported weapon axes differ, so sample the actual mesh
 	# after reorientation. Keep the established Ninja fitting unchanged.
@@ -119,7 +124,10 @@ func equip(index: int) -> bool:
 	var center := _hilt_anchor_in_root(holder, bounds) if is_vroid else bounds.get_center()
 	if is_vroid:
 		# Move the palm farther up the handle while preserving its X/Z fit.
-		center.y += bounds.size.y * VROID_GRIP_ADVANCE_FRACTION
+		var advance := VROID_GRIP_ADVANCE_FRACTION
+		if index in [2, 3]:
+			advance += VROID_DAGGER_EXTRA_GRIP_ADVANCE_FRACTION
+		center.y += bounds.size.y * advance
 	holder.scale = Vector3.ONE * factor
 	holder.position = Vector3(
 		-center.x * factor,
