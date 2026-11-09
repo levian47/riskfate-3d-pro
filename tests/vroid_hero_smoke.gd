@@ -199,14 +199,14 @@ func _run() -> void:
 	var slash_blend := graph.get_node("SlashChoice") as AnimationNodeBlend2
 	if not _check(slash_blend != null, "UAL2 combat clip selector missing"):
 		return
-	if not _check(float(tree.get("parameters/SlashChoice/blend_amount")) < 0.01, "Sword I must select regular attack"):
+	if not _check(float(tree.get("parameters/SlashChoice/blend_amount")) > 0.99, "Sword I heavy must select heavy attack"):
 		return
-	if not _check(weapon_visuals.equip(1), "Sword II cannot be equipped for heavy preview"):
+	if not _check(weapon_visuals.equip(1), "Sword II cannot be equipped for regular one-hand preview"):
 		return
 	game.call("_update_weapon_display")
-	if not _check(float(tree.get("parameters/SlashChoice/blend_amount")) > 0.99, "Sword II must select heavy preview"):
+	if not _check(float(tree.get("parameters/SlashChoice/blend_amount")) < 0.01, "Sword II must select regular one-hand preview"):
 		return
-	if not _check(weapon_visuals.equip(0), "Sword I re-equip after heavy preview failed"):
+	if not _check(weapon_visuals.equip(0), "Sword I re-equip after regular preview failed"):
 		return
 	game.call("_update_weapon_display")
 	game.call("_set_locomotion", "Walk", true)
@@ -234,18 +234,18 @@ func _run() -> void:
 	tree.active = true
 	game.call("_start_attack")
 	var combat = game.get("combat_controller")
-	var regular_duration := regular_clip.length / VROID_ANIM.VROID_ATTACK_SPEED
-	if not _check(absf(float(combat.get("attack_duration")) - regular_duration) < 0.02, "Sword I attack timer must match slowed regular clip"):
+	var heavy_duration := heavy_clip.length / VROID_ANIM.VROID_ATTACK_SPEED
+	if not _check(absf(float(combat.get("attack_duration")) - heavy_duration) < 0.02, "Sword I attack timer must match slowed heavy clip"):
 		return
 	if not _check(absf(float(tree.get("parameters/AttackSpeed/scale")) - VROID_ANIM.VROID_ATTACK_SPEED) < 0.001, "VRoid visual attack speed must be reduced without changing Ninja"):
 		return
 	combat.attack_time_left = 0.0
-	if not _check(weapon_visuals.equip(1), "Sword II cannot be re-equipped for heavy timing test"):
+	if not _check(weapon_visuals.equip(1), "Sword II cannot be re-equipped for regular timing test"):
 		return
 	game.call("_update_weapon_display")
 	game.call("_start_attack")
-	var heavy_duration := heavy_clip.length / VROID_ANIM.VROID_ATTACK_SPEED
-	if not _check(absf(float(combat.get("attack_duration")) - heavy_duration) < 0.02, "Sword II attack timer must match slowed heavy clip"):
+	var regular_duration := regular_clip.length / VROID_ANIM.VROID_ATTACK_SPEED
+	if not _check(absf(float(combat.get("attack_duration")) - regular_duration) < 0.02, "Sword II attack timer must match slowed regular clip"):
 		return
 	# Diagnostic: identify each imported weapon's actual mesh orientation and
 	# grip anchor before altering artwork-relative offsets. Keep in test logs.
@@ -256,7 +256,10 @@ func _run() -> void:
 		var source := holder.get_child(0) as Node3D
 		var local_bounds: AABB = weapon_visuals._bounds_in_root(holder)
 		var hilt_center: Vector3 = weapon_visuals._hilt_anchor_in_root(holder, local_bounds)
-		hilt_center.y += local_bounds.size.y * WEAPONS.VROID_GRIP_ADVANCE_FRACTION
+		var advance := WEAPONS.VROID_GRIP_ADVANCE_FRACTION
+		if weapon_id in [2, 3]:
+			advance += WEAPONS.VROID_DAGGER_EXTRA_GRIP_ADVANCE_FRACTION
+		hilt_center.y += local_bounds.size.y * advance
 		var fitted_hilt: Vector3 = holder.transform * hilt_center
 		if not _check(fitted_hilt.length() < 0.025,
 			"weapon grip midpoint displaced from mount, including vertical position"):
@@ -271,8 +274,18 @@ func _run() -> void:
 			return
 		# Check that the anchor is not on the pommel / very end of the grip.
 		var anchor_fraction := (hilt_center.y - local_bounds.position.y) / local_bounds.size.y
-		if not _check(anchor_fraction > 0.16 and anchor_fraction < 0.24,
-			"weapon grip did not advance slightly from the previous handle position"):
+		var min_grip_fraction := 0.21 if weapon_id in [2, 3] else 0.16
+		var max_grip_fraction := 0.29 if weapon_id in [2, 3] else 0.24
+		if not _check(anchor_fraction > min_grip_fraction and anchor_fraction < max_grip_fraction,
+			"weapon grip fraction does not reflect the requested dagger advance"):
+			return
+		# Requested sizes are relative to the original imported weapon lengths.
+		# On the legacy Ninja, vroid_scale is deliberately ignored.
+		var specification: Dictionary = WEAPONS.WEAPONS[weapon_id]
+		var expected_length := float(specification["length"]) * float(specification.get("vroid_scale", 1.0))
+		var measured_length := local_bounds.size.y * holder.scale.y * grip.global_transform.basis.get_scale().y
+		if not _check(absf(measured_length - expected_length) < 0.03,
+			"VRoid weapon length does not match the requested scaling"):
 			return
 		if not _check(grip.position.z > 0.02, "VRoid weapon must project forward of the palm"):
 			return
@@ -280,11 +293,12 @@ func _run() -> void:
 			" mount=", grip.position, " mount_rotation=", grip.rotation_degrees,
 			" source_rotation=", source.rotation_degrees,
 			" holder_position=", holder.position, " holder_scale=", holder.scale,
-			" mesh_aabb=", local_bounds, " hilt_center=", hilt_center, " grip_fraction=", anchor_fraction, " fitted=", fitted_hilt)
+			" mesh_aabb=", local_bounds, " hilt_center=", hilt_center, " grip_fraction=", anchor_fraction,
+			" expected_length=", expected_length, " measured_length=", measured_length, " fitted=", fitted_hilt)
 	if not _check(weapon_visuals.equip(0), "restore Sword I after diagnostics"):
 		return
 	game.call("_update_weapon_display")
-	print("VRoid smoke test OK: 103 bones, ", mesh_count, " mesh nodes, Quaternius Walk/Run, five mid-handle grips, 90-degree weapon axial twist, slower regular/heavy attacks")
+	print("VRoid smoke test OK: 103 bones, ", mesh_count, " mesh nodes, Quaternius Walk/Run, heavy Sword I x1.75, one-hand Sword II, Cutlass x0.75, dagger grips +5%, aligned attack timings")
 	game.queue_free()
 	quit(0)
 
