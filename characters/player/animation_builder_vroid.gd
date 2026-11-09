@@ -87,6 +87,16 @@ static func _add_clip(root: AnimationNodeBlendTree, node_name: String, animation
 	root.add_node(node_name, clip_node)
 
 
+static func _find_skeleton(node: Node) -> Skeleton3D:
+	if node is Skeleton3D:
+		return node as Skeleton3D
+	for child in node.get_children():
+		var found := _find_skeleton(child)
+		if found != null:
+			return found
+	return null
+
+
 static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_speed: float) -> AnimationTree:
 	var walk_name := find_clip(animator, "Walk")
 	var jog_name := find_clip(animator, "Jog")
@@ -103,9 +113,15 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 		push_error("VRoid sword placeholder missing right arm rotation tracks")
 		return null
 	library.add_animation("SwordSlash", swing)
+	# Godot 4 bone animation values include the actual per-bone rest transform.
+	# The previous retarget missed this and collapsed the VRoid pose in gameplay.
+	var skeleton := _find_skeleton(model)
+	if skeleton == null:
+		push_error("Imported VRoid Skeleton3D not found")
+		return null
 	# The original imported Walk/Jog clips are kept intact on the VRoid model.
-	var replacement_walk: Animation = QUATERNIUS_LOCOMOTION.build_from_reference(walk, false)
-	var replacement_run: Animation = QUATERNIUS_LOCOMOTION.build_from_reference(walk, true)
+	var replacement_walk: Animation = QUATERNIUS_LOCOMOTION.build_from_reference(walk, false, skeleton)
+	var replacement_run: Animation = QUATERNIUS_LOCOMOTION.build_from_reference(walk, true, skeleton)
 	if replacement_walk == null or replacement_run == null:
 		push_error("Failed to retarget Quaternius locomotion to VRoid skeleton")
 		return null
