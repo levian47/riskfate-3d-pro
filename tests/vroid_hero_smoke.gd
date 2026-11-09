@@ -81,6 +81,36 @@ func _run() -> void:
 			return
 		if not _check(start_pose.angle_to(end_pose) < 0.02, "new locomotion must have a seamless loop"):
 			return
+	# Regression: Godot 4 bone transform tracks must include bone rest.
+	# Without rest position, hips fall to y≈0; without rest rotations,
+	# limbs collapse into a sideways/T-pose despite a passing basic smoke test.
+	var hips_index := rig.find_bone("J_Bip_C_Hips")
+	var thigh_index := rig.find_bone("J_Bip_L_UpperLeg")
+	if not _check(hips_index >= 0 and thigh_index >= 0, "VRoid hips/thigh rest missing"):
+		return
+	var hips_rest := rig.get_bone_rest(hips_index).origin
+	var thigh_rest := rig.get_bone_rest(thigh_index).basis.get_rotation_quaternion()
+	for candidate in [new_walk, new_run]:
+		var clip: Animation = candidate as Animation
+		var hips_track := -1
+		var thigh_track := -1
+		for index in range(clip.get_track_count()):
+			var path: NodePath = clip.track_get_path(index)
+			if path.get_subname_count() == 0:
+				continue
+			var bone_name := String(path.get_subname(path.get_subname_count() - 1))
+			if bone_name == "J_Bip_C_Hips" and clip.track_get_type(index) == Animation.TYPE_POSITION_3D:
+				hips_track = index
+			if bone_name == "J_Bip_L_UpperLeg" and clip.track_get_type(index) == Animation.TYPE_ROTATION_3D:
+				thigh_track = index
+		if not _check(hips_track >= 0 and thigh_track >= 0, "Quaternius tracks missing hips/thigh"):
+			return
+		var hips_pose := clip.position_track_interpolate(hips_track, 0.0)
+		if not _check(hips_pose.distance_to(hips_rest) < 0.10, "Quaternius hips position omitted Bone Rest"):
+			return
+		var thigh_pose := clip.rotation_track_interpolate(thigh_track, 0.0)
+		if not _check(thigh_pose.angle_to(thigh_rest) < 1.7, "Quaternius thigh rotation omitted Bone Rest"):
+			return
 	var graph := tree.tree_root as AnimationNodeBlendTree
 	if not _check(graph != null, "VRoid AnimationTree root missing"):
 		return
