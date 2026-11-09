@@ -22,6 +22,9 @@ const VROID_WEAPON_MODEL_ROLL_DEGREES := 90.0
 # Extra clockwise roll for the Cutlass, relative to its previous +90° pose.
 # Negative rotation follows Godot's local +Y right-hand convention.
 const VROID_CUTLASS_EXTRA_ROLL_DEGREES := -225.0
+# Trial cutlass-only outward lean from the palm, without changing axial roll or hilt fit.
+# On the VRoid right-hand rest bone, local +Y faces away from the torso.
+const VROID_CUTLASS_OUTWARD_TILT_DEGREES := 12.0
 # Small additional advance from the current ~15% grip point toward the guard.
 # Measured relative to model length; does not change lateral centering.
 const VROID_GRIP_ADVANCE_FRACTION := 0.035
@@ -77,6 +80,9 @@ func equip(index: int) -> bool:
 	# Change only the VRoid visual grip; restore identity for the Ninja.
 	mount.position = VROID_WEAPON_GRIP_OFFSET if is_vroid else Vector3.ZERO
 	mount.rotation_degrees = VROID_WEAPON_GRIP_ROTATION if is_vroid else Vector3.ZERO
+	if is_vroid and index == 4:
+		# Reduce local X pitch: tip leans outward instead of toward the body.
+		mount.rotation_degrees.x -= VROID_CUTLASS_OUTWARD_TILT_DEGREES
 	var specification: Dictionary = WEAPONS[index]
 	var packed := load(String(specification["path"])) as PackedScene
 	if packed == null:

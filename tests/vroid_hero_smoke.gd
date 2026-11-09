@@ -321,6 +321,17 @@ func _run() -> void:
 		if not _check(absf(source.rotation_degrees.y - expected_roll) < 0.1,
 			"wrong weapon axial roll, including Cutlass clockwise correction"):
 			return
+		# Rest-relative blade direction must lean outward only for the Cutlass;
+		# switching back to other weapons resets the shared hand attachment.
+		var expected_mount_x := WEAPONS.VROID_WEAPON_GRIP_ROTATION.x
+		if weapon_id == 4:
+			expected_mount_x -= WEAPONS.VROID_CUTLASS_OUTWARD_TILT_DEGREES
+			if not _check(grip.transform.basis.y.normalized().y > 0.15,
+				"Cutlass blade must lean outward from right-hand palm"):
+				return
+		if not _check(absf(grip.rotation_degrees.x - expected_mount_x) < 0.1,
+			"Cutlass-only outward tilt leaked to another weapon"):
+			return
 		# Check that the anchor is not on the pommel / very end of the grip.
 		var anchor_fraction := (hilt_center.y - local_bounds.position.y) / local_bounds.size.y
 		var min_grip_fraction := 0.25 if weapon_id in [2, 3] else 0.16
