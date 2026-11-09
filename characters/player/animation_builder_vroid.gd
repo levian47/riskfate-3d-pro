@@ -227,7 +227,7 @@ const UNARMED_GUARD_ROTATIONS := {
 }
 const UNARMED_WINDUP_ROTATIONS := {
 	"J_Bip_R_Shoulder": Vector3(-0.06, 0.0, -0.12),
-	"J_Bip_R_UpperArm": Vector3(0.18, 0.30, -0.55),
+	"J_Bip_R_UpperArm": Vector3(0.18, 0.30, -0.08),
 	"J_Bip_R_LowerArm": Vector3(0.13, -0.05, -0.28),
 	"J_Bip_R_Hand": Vector3(0.0, 0.06, 0.0),
 	"J_Bip_C_Chest": Vector3(0.0, 0.12, 0.0),
