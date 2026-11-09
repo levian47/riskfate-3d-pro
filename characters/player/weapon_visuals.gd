@@ -17,6 +17,8 @@ const WEAPONS := [
 # The legacy Ninja mount remains unchanged.
 const VROID_WEAPON_GRIP_OFFSET := Vector3(0.0, 0.058, 0.035)
 const VROID_WEAPON_GRIP_ROTATION := Vector3(90.0, 0.0, -8.0)
+# Rotate around each model's longitudinal Y axis, without twisting the hand.
+const VROID_WEAPON_MODEL_ROLL_DEGREES := 90.0
 
 var is_vroid := false
 var mount: Node3D
@@ -87,6 +89,11 @@ func equip(index: int) -> bool:
 	elif bounds.size.z > bounds.size.y * 1.25 and bounds.size.z > bounds.size.x:
 		imported.rotation_degrees.x = -90.0
 		bounds = _bounds_in_root(holder)
+	# User-requested 90-degree twist of the weapon itself, not the hand bone.
+	# Recompute the AABB after both importer-axis correction and the twist.
+	if is_vroid:
+		imported.rotation_degrees.y += VROID_WEAPON_MODEL_ROLL_DEGREES
+		bounds = _bounds_in_root(holder)
 	if bounds.size.y <= 0.001:
 		mount.remove_child(holder)
 		holder.queue_free()
@@ -96,15 +103,15 @@ func equip(index: int) -> bool:
 	# Compensate for that parent scale so equipped weapons keep their world size.
 	var inherited_scale := maxf(mount.global_transform.basis.get_scale().y, 0.0001)
 	var factor := float(specification["length"]) / (bounds.size.y * inherited_scale)
-	# The source origin is generally near the guard, with the grip below it.
-	# The blade curves or widens away from its handle, especially on Cutlass.
-	# For VRoid place the palm around the hilt profile instead of the entire AABB.
+	# For VRoid, the palm must land at the MIDDLE of the grip region, not
+	# near the pommel. Imported weapon axes differ, so sample the actual mesh
+	# after reorientation. Keep the established Ninja fitting unchanged.
 	var grip_y := minf(0.0, bounds.position.y) * 0.5
-	var center := _hilt_center_in_root(holder, bounds) if is_vroid else bounds.get_center()
+	var center := _hilt_anchor_in_root(holder, bounds) if is_vroid else bounds.get_center()
 	holder.scale = Vector3.ONE * factor
 	holder.position = Vector3(
 		-center.x * factor,
-		-grip_y * factor,
+		-center.y * factor if is_vroid else -grip_y * factor,
 		-center.z * factor
 	)
 	if current_visual != null:
@@ -128,16 +135,19 @@ func selected_name() -> String:
 	return String(WEAPONS[current_index]["name"])
 
 
-func _hilt_center_in_root(root: Node3D, bounds: AABB) -> Vector3:
-	# The lowest 18% of a vertical weapon is the handle/pommel region.
-	# Looking at actual vertex positions rather than the full mesh bounds
-	# avoids centering a curved blade instead of the grip. Used only on equip.
+func _hilt_anchor_in_root(root: Node3D, bounds: AABB) -> Vector3:
+	# The bottom 30% of the length bounds the grip/guard region for these
+	# imported test weapons. Unlike the old pommel-only fit, sample its
+	# vertical midpoint as well as its lateral center. Revisit after visual
+	# review, especially for the curved FBX Cutlass.
 	var meshes: Array[MeshInstance3D] = []
 	_collect_meshes(root, meshes)
 	var inverse := root.global_transform.affine_inverse()
-	var handle_top := bounds.position.y + bounds.size.y * 0.18
+	var handle_top := bounds.position.y + bounds.size.y * 0.30
 	var min_x := INF
 	var max_x := -INF
+	var min_y := INF
+	var max_y := -INF
 	var min_z := INF
 	var max_z := -INF
 	var samples := 0
@@ -153,13 +163,19 @@ func _hilt_center_in_root(root: Node3D, bounds: AABB) -> Vector3:
 					continue
 				min_x = minf(min_x, point.x)
 				max_x = maxf(max_x, point.x)
+				min_y = minf(min_y, point.y)
+				max_y = maxf(max_y, point.y)
 				min_z = minf(min_z, point.z)
 				max_z = maxf(max_z, point.z)
 				samples += 1
 	if samples == 0:
 		# Fallback if an imported mesh does not expose CPU vertices.
-		return bounds.get_center()
-	return Vector3((min_x + max_x) * 0.5, 0.0, (min_z + max_z) * 0.5)
+		return Vector3(bounds.get_center().x, bounds.position.y + bounds.size.y * 0.15, bounds.get_center().z)
+	return Vector3(
+		(min_x + max_x) * 0.5,
+		(min_y + max_y) * 0.5,
+		(min_z + max_z) * 0.5
+	)
 
 func _bounds_in_root(root: Node3D) -> AABB:
 	var meshes: Array[MeshInstance3D] = []
