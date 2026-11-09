@@ -12,7 +12,7 @@ const UAL2_COMBAT := preload("res://characters/player/combat_retarget_ual2.gd")
 # Sword Regular ~0.45 s -> ~0.64 s, Sword Heavy ~0.75 s -> ~1.07 s.
 const VROID_ATTACK_SPEED := 0.70
 # Preview-only lift of Sword I's one-handed heavy swing; no timing or hitbox changes.
-const SWORD_I_ATTACK_LIFT_DEGREES := 14.0
+const SWORD_I_ATTACK_LIFT_DEGREES := 34.0
 # Retain Quaternius Run leg/body timing, but keep the weapon arm close to the
 # neutral walking carry instead of letting its high run swing cross the head.
 const RUN_WEAPON_CARRY_BLEND := {
