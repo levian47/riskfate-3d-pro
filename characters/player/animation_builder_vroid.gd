@@ -1,12 +1,21 @@
 extends RefCounted
 # VRoid-only animation graph. The original Ninja graph and its approved
 # animation resources are deliberately left untouched for regression testing.
-# Original VRoid Walk/Jog are retained as rollback clips. New Walk/Run come
-# from retargeted CC0 Quaternius motion; Idle, Jump, attack stay provisional.
-# functional placeholders until purpose-made VRoid clips are available.
+# Original imported VRoid Walk/Jog remain available for rollback.
+# Seven owner-approved Walk/Run/attack/grip motions are frozen as native .tres
+# Animation resources. Original CC0 source and the retargeting functions are
+# kept for independent recovery/regression. Only Idle/Jump are provisional.
 
 const QUATERNIUS_LOCOMOTION := preload("res://characters/player/locomotion_quaternius.gd")
 const UAL2_COMBAT := preload("res://characters/player/combat_retarget_ual2.gd")
+# Independent Godot animations: do not modify approved keyframes at runtime.
+const APPROVED_WALK := preload("res://characters/player/animations/walk.tres")
+const APPROVED_RUN_ARMED := preload("res://characters/player/animations/run_armed.tres")
+const APPROVED_RUN_UNARMED := preload("res://characters/player/animations/run_unarmed.tres")
+const APPROVED_SWORD_REGULAR := preload("res://characters/player/animations/attack_sword_regular_1h.tres")
+const APPROVED_SWORD_HEAVY := preload("res://characters/player/animations/attack_sword_heavy_1h.tres")
+const APPROVED_UNARMED_HOOK := preload("res://characters/player/animations/attack_unarmed_hook.tres")
+const APPROVED_GRIP := preload("res://characters/player/animations/grip_one_handed.tres")
 
 # VRoid-only preview attack speed. Keeps legacy Ninja timing untouched.
 # Sword Regular ~0.45 s -> ~0.64 s, Sword Heavy ~0.75 s -> ~1.07 s.
@@ -306,43 +315,31 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 	if skeleton == null:
 		push_error("Imported VRoid Skeleton3D not found")
 		return null
-	# Source library: CC0 UAL2 65-bone combat motions, retargeted in the
-	# current 103-bone VRoid rest pose. The old procedural slash stays
-	# available as an unused local function only for regression diagnosis.
-	var swing := UAL2_COMBAT.build("Sword_Regular_A", walk, skeleton, true)
-	var heavy := UAL2_COMBAT.build("Sword_Heavy_A", walk, skeleton, true)
-	if swing == null or heavy == null:
-		push_error("UAL2 Sword attack retargeting failed")
-		return null
-	heavy = _raise_heavy_sword_arc(heavy)
+	# Godot 4.7.2 ResourceSaver-frozen clips from the owner-approved PR #15.
+	# No runtime retargeting/rebaking. Retarget source scripts stay in repo
+	# for recovering/editing clips only on a separately approved task.
+	var swing: Animation = APPROVED_SWORD_REGULAR
+	var heavy: Animation = APPROVED_SWORD_HEAVY
+	var unarmed_swing: Animation = APPROVED_UNARMED_HOOK
+	var grip: Animation = APPROVED_GRIP
+	var replacement_walk: Animation = APPROVED_WALK
+	var safe_run: Animation = APPROVED_RUN_ARMED
+	var replacement_run: Animation = APPROVED_RUN_UNARMED
+	var approved_counts := [
+		[swing, 10], [heavy, 10], [unarmed_swing, 38], [grip, 14],
+		[replacement_walk, 23], [safe_run, 23], [replacement_run, 23]
+	]
+	for pair in approved_counts:
+		var clip: Animation = pair[0]
+		if clip == null or clip.get_track_count() != int(pair[1]):
+			push_error("VRoid approved Animation resource missing or corrupted")
+			return null
 	library.add_animation("SwordSlash", swing)
 	library.add_animation("SwordHeavyCandidate", heavy)
-	var unarmed_swing := _unarmed_swing(walk, skeleton)
-	if unarmed_swing == null:
-		return null
 	library.add_animation("UnarmedSwing", unarmed_swing)
-	var grip := _sword_grip(walk)
-	if grip.get_track_count() != SWORD_GRIP_FINGER_BENDS.size():
-		push_error("VRoid weapon grip requires all expected finger and distal thumb tracks")
-		return null
 	library.add_animation("SwordGrip", grip)
-	# Godot 4 bone animation values include the actual per-bone rest transform.
-	# The previous retarget missed this and collapsed the VRoid pose in gameplay.
-	# The original imported Walk/Jog clips are kept intact on the VRoid model.
-	var replacement_walk: Animation = QUATERNIUS_LOCOMOTION.build_from_reference(walk, false, skeleton)
-	var replacement_run: Animation = QUATERNIUS_LOCOMOTION.build_from_reference(walk, true, skeleton)
-	if replacement_walk == null or replacement_run == null:
-		push_error("Failed to retarget Quaternius locomotion to VRoid skeleton")
-		return null
-	var safe_run := _safe_weapon_run(replacement_run, replacement_walk)
-	if safe_run == null:
-		push_error("Failed to build VRoid weapon-safe running arm pose")
-		return null
 	library.add_animation("QuaterniusWalk", replacement_walk)
 	library.add_animation("QuaterniusRun", safe_run)
-	# Unarmed run: the complete original Quaternius Run, including the natural
-	# right-arm swing. It has the same length/phase as the weapon-safe Run
-	# (that one is a duplicate with four right-arm tracks retuned).
 	library.add_animation("QuaterniusRunFree", replacement_run)
 	if animator.add_animation_library("vroid", library) != OK:
 		return null

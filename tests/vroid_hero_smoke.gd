@@ -82,6 +82,69 @@ func _run() -> void:
 		return
 	if not _check(new_run.length > 0.90 and new_run.length < 1.00, "forward jog must replace overly aggressive sprint"):
 		return
+	# Verify the seven frozen clips against the original on-demand generation.
+	# The source functions remain recovery-only; runtime must use .tres.
+	var source_walk: Animation = animator.get_animation(walk)
+	var reference_walk := VROID_ANIM.QUATERNIUS_LOCOMOTION.build_from_reference(source_walk, false, rig)
+	var reference_run := VROID_ANIM.QUATERNIUS_LOCOMOTION.build_from_reference(source_walk, true, rig)
+	var reference_sword_regular := VROID_ANIM.UAL2_COMBAT.build("Sword_Regular_A", source_walk, rig, true)
+	var reference_sword_heavy := VROID_ANIM._raise_heavy_sword_arc(
+		VROID_ANIM.UAL2_COMBAT.build("Sword_Heavy_A", source_walk, rig, true))
+	var approved_references := {
+		"QuaterniusWalk": reference_walk,
+		"QuaterniusRunFree": reference_run,
+		"QuaterniusRun": VROID_ANIM._safe_weapon_run(reference_run, reference_walk),
+		"SwordSlash": reference_sword_regular,
+		"SwordHeavyCandidate": reference_sword_heavy,
+		"UnarmedSwing": VROID_ANIM._unarmed_swing(source_walk, rig),
+		"SwordGrip": VROID_ANIM._sword_grip(source_walk),
+	}
+	var frozen_paths := {
+		"QuaterniusWalk": "walk.tres",
+		"QuaterniusRunFree": "run_unarmed.tres",
+		"QuaterniusRun": "run_armed.tres",
+		"SwordSlash": "attack_sword_regular_1h.tres",
+		"SwordHeavyCandidate": "attack_sword_heavy_1h.tres",
+		"UnarmedSwing": "attack_unarmed_hook.tres",
+		"SwordGrip": "grip_one_handed.tres",
+	}
+	for clip_name in approved_references:
+		var baked := animator.get_animation("vroid/" + clip_name) as Animation
+		var original: Animation = approved_references[clip_name]
+		var file_path: String = "res://characters/player/animations/" + String(frozen_paths[clip_name])
+		if not _check(ResourceLoader.exists(file_path, "Animation")
+			and baked == load(file_path)
+			and original != null, "approved VRoid .tres not wired to runtime: " + clip_name):
+			return
+		if not _check(baked.get_track_count() == original.get_track_count()
+			and absf(baked.length - original.length) < 0.0001
+			and baked.loop_mode == original.loop_mode,
+			"approved VRoid clip structure changed: " + clip_name):
+			return
+		for track in range(original.get_track_count()):
+			if not _check(baked.track_get_type(track) == original.track_get_type(track)
+				and baked.track_get_path(track) == original.track_get_path(track)
+				and baked.track_get_key_count(track) == original.track_get_key_count(track),
+				"approved VRoid animation track changed: " + clip_name + " / " + str(track)):
+				return
+			for key in range(original.track_get_key_count(track)):
+				if not _check(absf(baked.track_get_key_time(track, key) - original.track_get_key_time(track, key)) < 0.0001,
+					"approved VRoid animation timing changed: " + clip_name):
+					return
+				var actual_key = baked.track_get_key_value(track, key)
+				var source_key = original.track_get_key_value(track, key)
+				var key_delta := 0.0
+				if actual_key is Quaternion:
+					key_delta = (actual_key as Quaternion - source_key as Quaternion).length()
+				elif actual_key is Vector3:
+					key_delta = (actual_key as Vector3 - source_key as Vector3).length()
+				elif actual_key is float:
+					key_delta = absf(float(actual_key) - float(source_key))
+				elif actual_key != source_key:
+					key_delta = INF
+				if not _check(key_delta < 0.0002,
+					"approved VRoid keyframe modified: " + clip_name + " track=" + str(track) + " key=" + str(key)):
+					return
 	# Weapon-safe running only retunes the right arm; verify the original
 	# Quaternius gait, torso and left arm are left identical.
 	var original_run := VROID_ANIM.QUATERNIUS_LOCOMOTION.build_from_reference(animator.get_animation(walk), true, rig)
