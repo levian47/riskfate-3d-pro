@@ -317,6 +317,9 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 			# the same RunSpeed, so switching only crossfades the right arm.
 			_add_clip(root, "RunFree", "vroid/QuaterniusRunFree")
 			var run_arms := AnimationNodeBlend2.new()
+			# Both Run clips must advance at zero blend weight: an equip/unequip
+			# crossfade otherwise resumes the inactive clip at an older gait phase.
+			run_arms.sync = true
 			root.add_node("RunArms", run_arms)
 			root.connect_node("RunArms", 0, state)
 			root.connect_node("RunArms", 1, "RunFree")
