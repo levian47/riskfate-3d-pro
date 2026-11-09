@@ -86,12 +86,16 @@ static func build_debug_controls(canvas: CanvasLayer, ninja_visual_controls: boo
 	var toggle := Button.new()
 	toggle.name = "DebugToggleButton"
 	toggle.text = "DEBUG"
-	toggle.anchor_left = 0.5
-	toggle.anchor_right = 0.5
-	toggle.offset_left = -45.0
-	toggle.offset_right = 45.0
-	toggle.offset_top = 51.0
-	toggle.offset_bottom = 86.0
+	# Left screen edge, vertically centered: clear of the top-left FULL
+	# control, bottom-left joystick and the main play area.
+	toggle.anchor_left = 0.0
+	toggle.anchor_right = 0.0
+	toggle.anchor_top = 0.5
+	toggle.anchor_bottom = 0.5
+	toggle.offset_left = 10.0
+	toggle.offset_right = 86.0
+	toggle.offset_top = -21.0
+	toggle.offset_bottom = 21.0
 	canvas.add_child(toggle)
 
 	var panel := PanelContainer.new()
