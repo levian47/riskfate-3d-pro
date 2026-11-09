@@ -255,11 +255,18 @@ func _run() -> void:
 		var holder := weapon_visuals.current_visual as Node3D
 		var source := holder.get_child(0) as Node3D
 		var local_bounds: AABB = weapon_visuals._bounds_in_root(holder)
+		var hilt_center: Vector3 = weapon_visuals._hilt_center_in_root(holder, local_bounds)
+		var fitted_hilt: Vector3 = holder.transform * hilt_center
+		if not _check(absf(fitted_hilt.x) < 0.025 and absf(fitted_hilt.z) < 0.025,
+			"weapon handle center displaced from mount, possibly by the blade AABB"):
+			return
+		if not _check(grip.position.z > 0.02, "VRoid weapon must project forward of the palm"):
+			return
 		print("WEAPON_FIT id=", weapon_id, " name=", WEAPONS.WEAPONS[weapon_id]["name"],
 			" mount=", grip.position, " mount_rotation=", grip.rotation_degrees,
 			" source_rotation=", source.rotation_degrees,
 			" holder_position=", holder.position, " holder_scale=", holder.scale,
-			" mesh_aabb=", local_bounds)
+			" mesh_aabb=", local_bounds, " hilt_center=", hilt_center, " fitted=", fitted_hilt)
 	if not _check(weapon_visuals.equip(0), "restore Sword I after diagnostics"):
 		return
 	game.call("_update_weapon_display")
