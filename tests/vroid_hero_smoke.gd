@@ -16,6 +16,12 @@ func _check(condition: bool, message: String) -> bool:
 
 
 func _run() -> void:
+	# Temporary inventory to find licensed authored fist clips in current UAL2 source.
+	var ual2_source := VROID_ANIM.UAL2_COMBAT.SOURCE.instantiate()
+	var ual2_player := VROID_ANIM.UAL2_COMBAT._find_animator(ual2_source)
+	if ual2_player != null:
+		print("AVAILABLE_UAL2_CLIPS=", ual2_player.get_animation_list())
+	ual2_source.free()
 	var packed := load("res://main.tscn") as PackedScene
 	if not _check(packed != null, "main.tscn not loaded"):
 		return
