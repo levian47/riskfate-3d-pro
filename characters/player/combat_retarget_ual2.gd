@@ -4,6 +4,17 @@ extends RefCounted
 # transferred; locomotion and lower-body/root motion stay with the game.
 const SOURCE := preload("res://assets/animations/ual2_selected_combat.glb")
 const SAMPLE_FPS := 30.0
+# Controlled exaggeration of existing CC0 attack keys for a more readable
+# wind-up and wider follow-through. No new procedural slash replaces the
+# authored animation. The gain fades to 1.0 at both clip ends.
+const ATTACK_SWEEP_GAIN := {
+	"clavicle_r": 1.18,
+	"upperarm_r": 1.48,
+	"lowerarm_r": 1.23,
+	"hand_r": 1.16,
+	"spine_02": 1.12,
+	"spine_03": 1.10,
+}
 const BONE_MAP := {
 	# Godot import omits spine_01 rotation when it is constant in UAL2;
 	# retain VRoid spine animation from underlying locomotion.
@@ -55,7 +66,7 @@ static func _rotation_paths(clip: Animation) -> Dictionary:
 		paths[String(path.get_subname(path.get_subname_count() - 1))] = {"path": path, "index": i}
 	return paths
 
-static func build(clip_name: String, target_reference: Animation, target_skeleton: Skeleton3D) -> Animation:
+static func build(clip_name: String, target_reference: Animation, target_skeleton: Skeleton3D, wider_arc: bool = false) -> Animation:
 	if target_reference == null or target_skeleton == null:
 		push_error("UAL2 retarget: VRoid reference or skeleton missing")
 		return null
@@ -104,6 +115,15 @@ static func build(clip_name: String, target_reference: Animation, target_skeleto
 			var sample_time := result.length * float(frame) / float(frame_count - 1)
 			var pose: Quaternion = source_clip.rotation_track_interpolate(source_track, sample_time)
 			var delta := (source_local_rest.inverse() * pose).normalized()
+			if wider_arc and ATTACK_SWEEP_GAIN.has(source_bone):
+				var progress := sample_time / maxf(result.length, 0.001)
+				# Peak gain during the swing, but keep authored anticipation
+				# and return keys aligned for seamless one-shot blending.
+				var envelope := sin(PI * progress)
+				var gain := 1.0 + (float(ATTACK_SWEEP_GAIN[source_bone]) - 1.0) * envelope
+				var angle := delta.get_angle()
+				if angle > 0.00001:
+					delta = Quaternion(delta.get_axis(), minf(angle * gain, PI - 0.02)).normalized()
 			var aligned_delta := (source_to_target * delta * source_to_target.inverse()).normalized()
 			result.rotation_track_insert_key(track, sample_time, (target_local_rest * aligned_delta).normalized())
 	instance.free()
