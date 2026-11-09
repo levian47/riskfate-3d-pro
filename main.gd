@@ -35,6 +35,11 @@ var crowd_mode_button: Button
 var fps_limit_button: Button
 var crowd_build_label: Label
 var crowd_stats_label: Label
+var debug_panel: PanelContainer
+var debug_toggle_button: Button
+var debug_skeleton_button: Button
+var debug_material_button: Button
+var debug_naruto_button: Button
 var animator: AnimationPlayer
 var camera: Camera3D
 var skeleton_debug: MeshInstance3D
@@ -51,6 +56,8 @@ var movement_controller = MOVEMENT_CONTROLLER.new()
 var combat_controller = COMBAT_CONTROLLER.new()
 var weapon_visuals = WEAPON_VISUALS.new()
 var touch_hud
+const WEAPON_POSE_BLEND_TIME := 0.18
+var weapon_pose_blend := 1.0 # 1 = armed (finger grip, weapon-safe Run), 0 = no weapon
 var fps_label: Label
 var fps_update_elapsed := 0.0
 
@@ -79,6 +86,8 @@ func _process(delta: float) -> void:
 
 func _physics_process(delta: float) -> void:
 	combat_controller.physics_step(delta, self, hero, visual)
+
+	_sync_weapon_pose(delta)
 
 	# Motion is isolated from combat and animation state transitions.
 	var launched: bool = movement_controller.physics_step(hero, visual, camera, touch_hud, delta)
@@ -111,6 +120,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_R:
 		_toggle_naruto_run()
 		return
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_P:
+		_toggle_run_mode()
+		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_K:
 		_toggle_skeleton_debug()
 		return
@@ -122,6 +134,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F9:
 		_toggle_fps_limit()
+		return
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F10:
+		_toggle_debug_panel()
 		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_M:
 		_cycle_ninja_materials()
@@ -140,6 +155,18 @@ func _unhandled_input(event: InputEvent) -> void:
 			camera_zoom = minf(28.0, camera_zoom + 1.0)
 			camera.size = camera_zoom
 
+func _toggle_run_mode() -> void:
+	movement_controller.run_by_default = not movement_controller.run_by_default
+	_update_weapon_display()
+
+
+func _toggle_debug_panel() -> void:
+	if debug_panel == null:
+		return
+	debug_panel.visible = not debug_panel.visible
+	debug_toggle_button.text = "CLOSE" if debug_panel.visible else "DEBUG"
+
+
 func _toggle_naruto_run() -> void:
 	if not use_legacy_hero:
 		return # No VRoid-compatible Naruto animation has been supplied.
@@ -149,6 +176,8 @@ func _toggle_naruto_run() -> void:
 	if touch_hud != null:
 		touch_hud.naruto_run_enabled = naruto_run_enabled
 		touch_hud.queue_redraw()
+	if debug_naruto_button != null:
+		debug_naruto_button.text = "RUN ON" if naruto_run_enabled else "RUN OFF"
 	_update_weapon_display()
 
 
@@ -159,6 +188,8 @@ func _toggle_skeleton_debug() -> void:
 	if touch_hud != null:
 		touch_hud.skeleton_enabled = skeleton_debug.visible
 		touch_hud.queue_redraw()
+	if debug_skeleton_button != null:
+		debug_skeleton_button.text = "SKEL ON" if skeleton_debug.visible else "SKEL OFF"
 
 
 func _cycle_ninja_materials() -> void:
@@ -170,6 +201,8 @@ func _cycle_ninja_materials() -> void:
 	if touch_hud != null:
 		touch_hud.material_variant = material_variant_index
 		touch_hud.queue_redraw()
+	if debug_material_button != null:
+		debug_material_button.text = "MAT O" if material_variant_index == 0 else "MAT A"
 	_update_weapon_display()
 
 
@@ -275,11 +308,35 @@ func _cycle_weapon() -> void:
 func _update_weapon_display() -> void:
 	if touch_hud != null:
 		touch_hud.weapon_index = weapon_visuals.current_index + 1
+		touch_hud.weapon_slots = 5 if use_legacy_hero else WEAPON_VISUALS.WEAPONS.size() + 1
 		touch_hud.queue_redraw()
+	if not use_legacy_hero and animation_tree != null:
+		# Switching across armed/unarmed modes cancels the incompatible attack.
+		# Sword-to-sword switches retain the existing in-flight clip behaviour.
+		if not weapon_visuals.has_weapon() or (combat_controller.attack_time_left > 0.0 and float(animation_tree.get("parameters/UnarmedChoice/blend_amount")) > 0.5):
+			combat_controller.cancel_attack(animation_tree)
+		_sync_weapon_pose(0.0)
 	var help_label := get_node_or_null("HUD/HelpPanel/HelpText") as Label
 	if help_label != null:
-		help_label.text = HUD_BUILDER.desktop_help_text(weapon_visuals.selected_name(), naruto_run_enabled, use_legacy_hero)
+		help_label.text = HUD_BUILDER.desktop_help_text(weapon_visuals.selected_name(), naruto_run_enabled, use_legacy_hero, movement_controller.run_by_default)
 		help_label.text += (" | M: MAT %s" % ["O", "A", "B"][material_variant_index]) if use_legacy_hero else " | VRoid"
+
+
+func _sync_weapon_pose(delta: float) -> void:
+	# VRoid only. Armed: closed-hand grip + weapon-safe Run. Unarmed: open hand
+	# + full Run. Both are smoothed so that a switch never pops the pose.
+	if use_legacy_hero or animation_tree == null:
+		return
+	var armed: bool = weapon_visuals.has_weapon()
+	weapon_pose_blend = move_toward(weapon_pose_blend, 1.0 if armed else 0.0, delta / WEAPON_POSE_BLEND_TIME)
+	animation_tree.set("parameters/GripOverlay/blend_amount", weapon_pose_blend)
+	animation_tree.set("parameters/RunArms/blend_amount", 1.0 - weapon_pose_blend)
+	# Sword I previews the one-handed heavy strike; the others use the standard 1H.
+	# The clip choice is held until the current attack has finished.
+	if combat_controller.attack_time_left <= 0.0:
+		animation_tree.set("parameters/UnarmedChoice/blend_amount", 0.0 if armed else 1.0)
+		if armed:
+			animation_tree.set("parameters/SlashChoice/blend_amount", 1.0 if weapon_visuals.current_index == 0 else 0.0)
 
 
 func _start_dash() -> void:
@@ -352,7 +409,7 @@ func _build_hero() -> void:
 		if use_legacy_hero:
 			animation_tree = ANIMATION_BUILDER.setup_animation_tree(model, animator, ATTACK_SPEED)
 		else:
-			animation_tree = VROID_ANIMATION_BUILDER.setup_animation_tree(model, animator, ATTACK_SPEED)
+			animation_tree = VROID_ANIMATION_BUILDER.setup_animation_tree(model, animator, VROID_ANIMATION_BUILDER.VROID_ATTACK_SPEED)
 		if animation_tree != null:
 			naruto_clip_speed_ratio = float(animation_tree.get("parameters/NarutoFullSpeed/scale"))
 			_set_locomotion("Idle")
@@ -361,7 +418,21 @@ func _build_hero() -> void:
 
 func _start_attack() -> void:
 	# Maintain the existing desktop/mobile signal and test-facing entrypoint.
-	combat_controller.start_attack(animation_tree, animator)
+	if use_legacy_hero:
+		combat_controller.start_attack(animation_tree, animator)
+	else:
+		if combat_controller.attack_time_left > 0.0:
+			return
+		if not weapon_visuals.has_weapon():
+			# Accepted right hook with a separate training-only unarmed hit profile.
+			_sync_weapon_pose(0.0)
+			animation_tree.set("parameters/AttackSpeed/scale", VROID_ANIMATION_BUILDER.UNARMED_ATTACK_SPEED)
+			combat_controller.start_attack(animation_tree, animator, VROID_ANIMATION_BUILDER.UNARMED_ATTACK_SPEED, "UnarmedSwing", true, true)
+			return
+		# Keep the animation playback rate consistent with the armed cooldown.
+		animation_tree.set("parameters/AttackSpeed/scale", VROID_ANIMATION_BUILDER.VROID_ATTACK_SPEED)
+		var clip := "SwordHeavyCandidate" if weapon_visuals.current_index == 0 else "SwordSlash"
+		combat_controller.start_attack(animation_tree, animator, VROID_ANIMATION_BUILDER.VROID_ATTACK_SPEED, clip)
 
 
 func _resolve_training_hit() -> void:
@@ -419,72 +490,27 @@ func _build_ui() -> void:
 	canvas.name = "HUD"
 	add_child(canvas)
 	fps_label = HUD_BUILDER.build_fps_counter(canvas)
-	crowd_button = Button.new()
-	crowd_button.name = "CrowdBenchmarkButton"
-	crowd_button.text = "LOAD 0"
-	crowd_button.anchor_left = 0.5
-	crowd_button.anchor_right = 0.5
-	crowd_button.offset_left = -76.0
-	crowd_button.offset_right = 76.0
-	crowd_button.offset_top = 54.0
-	crowd_button.offset_bottom = 97.0
+	var debug_controls: Dictionary = HUD_BUILDER.build_debug_controls(canvas, use_legacy_hero)
+	debug_panel = debug_controls["panel"] as PanelContainer
+	debug_toggle_button = debug_controls["toggle"] as Button
+	crowd_button = debug_controls["crowd"] as Button
+	crowd_mode_button = debug_controls["mode"] as Button
+	fps_limit_button = debug_controls["limit"] as Button
+	crowd_stats_label = debug_controls["stats"] as Label
+	crowd_build_label = debug_controls["build"] as Label
+	debug_skeleton_button = debug_controls["skeleton"] as Button
+	debug_material_button = debug_controls.get("materials") as Button
+	debug_naruto_button = debug_controls.get("naruto") as Button
+	debug_toggle_button.pressed.connect(_toggle_debug_panel)
 	crowd_button.pressed.connect(_cycle_crowd_benchmark)
-	canvas.add_child(crowd_button)
-	crowd_mode_button = Button.new()
-	crowd_mode_button.name = "CrowdModeButton"
-	crowd_mode_button.text = "MODE RUN"
-	crowd_mode_button.anchor_left = 0.5
-	crowd_mode_button.anchor_right = 0.5
-	crowd_mode_button.offset_left = -100.0
-	crowd_mode_button.offset_right = 100.0
-	crowd_mode_button.offset_top = 102.0
-	crowd_mode_button.offset_bottom = 145.0
 	crowd_mode_button.pressed.connect(_cycle_crowd_mode)
-	canvas.add_child(crowd_mode_button)
-	crowd_stats_label = Label.new()
-	crowd_stats_label.name = "CrowdDrawStats"
-	crowd_stats_label.text = "Draws: -- visible / -- shadow"
-	crowd_stats_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	crowd_stats_label.anchor_left = 0.5
-	crowd_stats_label.anchor_right = 0.5
-	crowd_stats_label.offset_left = -150.0
-	crowd_stats_label.offset_right = 150.0
-	crowd_stats_label.offset_top = 149.0
-	crowd_stats_label.offset_bottom = 171.0
-	crowd_stats_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	crowd_stats_label.add_theme_font_size_override("font_size", 14)
-	crowd_stats_label.add_theme_color_override("font_shadow_color", Color.BLACK)
-	crowd_stats_label.add_theme_constant_override("shadow_offset_x", 1)
-	crowd_stats_label.add_theme_constant_override("shadow_offset_y", 1)
-	crowd_stats_label.visible = false
-	canvas.add_child(crowd_stats_label)
-	fps_limit_button = Button.new()
-	fps_limit_button.name = "FPSLimitButton"
-	fps_limit_button.text = "FPS CAP 60"
-	fps_limit_button.anchor_left = 0.5
-	fps_limit_button.anchor_right = 0.5
-	fps_limit_button.offset_left = -104.0
-	fps_limit_button.offset_right = 104.0
-	fps_limit_button.offset_top = 177.0
-	fps_limit_button.offset_bottom = 220.0
 	fps_limit_button.pressed.connect(_toggle_fps_limit)
-	canvas.add_child(fps_limit_button)
-	crowd_build_label = Label.new()
-	crowd_build_label.name = "CrowdBuildLabel"
-	crowd_build_label.text = "BUILD CLASSIC (6 MATERIALS)" if OS.has_feature("legacy_crowd") else "BUILD OPTIMIZED (1 MATERIAL)"
-	crowd_build_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	crowd_build_label.anchor_left = 0.5
-	crowd_build_label.anchor_right = 0.5
-	crowd_build_label.offset_left = -190.0
-	crowd_build_label.offset_right = 190.0
-	crowd_build_label.offset_top = 224.0
-	crowd_build_label.offset_bottom = 246.0
-	crowd_build_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	crowd_build_label.add_theme_font_size_override("font_size", 15)
-	crowd_build_label.add_theme_color_override("font_shadow_color", Color.BLACK)
-	crowd_build_label.add_theme_constant_override("shadow_offset_x", 1)
-	crowd_build_label.add_theme_constant_override("shadow_offset_y", 1)
-	canvas.add_child(crowd_build_label)
+	debug_skeleton_button.pressed.connect(_toggle_skeleton_debug)
+	if debug_material_button != null:
+		debug_material_button.pressed.connect(_cycle_ninja_materials)
+		debug_material_button.text = "MAT O" if material_variant_index == 0 else "MAT A"
+	if debug_naruto_button != null:
+		debug_naruto_button.pressed.connect(_toggle_naruto_run)
 	if DisplayServer.is_touchscreen_available():
 		# Multiple fingers are handled independently in touch_hud.gd.
 		touch_hud = TOUCH_HUD_SCRIPT.new()
@@ -497,10 +523,7 @@ func _build_ui() -> void:
 		touch_hud.zoom_requested.connect(_cycle_mobile_zoom)
 		touch_hud.fullscreen_requested.connect(_toggle_fullscreen)
 		touch_hud.weapon_requested.connect(_cycle_weapon)
-		touch_hud.materials_requested.connect(_cycle_ninja_materials)
 		touch_hud.material_variant = material_variant_index
-		touch_hud.naruto_requested.connect(_toggle_naruto_run)
-		touch_hud.skeleton_requested.connect(_toggle_skeleton_debug)
 		_update_weapon_display()
 		touch_hud.zoom_level = mobile_zoom_index + 1
 		return

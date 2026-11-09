@@ -3,6 +3,9 @@ name: Godot Web / GitHub Pages
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, edited, closed]
   workflow_dispatch:
     inputs:
       build_android:
@@ -22,9 +25,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  # PR events never deploy Pages directly. Ask the trusted main workflow to
+  # rebuild production and previews together when an opted-in PR changes.
+  refresh_preview:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.body, '<!-- riskfate:web-preview -->')
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Request main Pages preview refresh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run "Godot Web / GitHub Pages" --repo "$GITHUB_REPOSITORY" --ref main
+
+  build:
+    # Test PR changes without deploying them; main/manual runs keep Pages publishing.
+    if: github.event_name != 'pull_request' || github.event.action == 'opened' || github.event.action == 'reopened' || github.event.action == 'synchronize'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - name: Check out game
         uses: actions/checkout@v4
@@ -100,6 +122,86 @@ jobs:
           cd "$RUNNER_TEMP"
           "$GODOT_BIN" --headless --main-pack "$GITHUB_WORKSPACE/dist/builds/${GITHUB_SHA:0:12}/index.pck" --script res://tests/gameplay_smoke.gd
 
+      - name: Browser smoke-test exported Web (Chromium / WebGL 2)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Only a pinned test runner is installed; gameplay has no Node dependency.
+          npm install --no-save --no-package-lock --ignore-scripts playwright@1.65.0
+          npx playwright install --with-deps --only-shell chromium
+          web_dir="$PWD/dist/builds/${GITHUB_SHA:0:12}"
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory "$web_dir" \
+            > "$RUNNER_TEMP/browser-http.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          BASE_URL="http://127.0.0.1:8765/" SCREENSHOT_DIR="$RUNNER_TEMP/browser-smoke" \
+            node tests/browser_smoke.mjs
+
+      - name: Upload browser diagnostics if a test fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-smoke-${{ github.run_number }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/browser-smoke/
+            ${{ runner.temp }}/browser-http.log
+          if-no-files-found: ignore
+          retention-days: 7
+      # Opt-in only: a same-repository PR includes the marker below in its body.
+      # The main game and previews are deployed together, preserving the home page.
+      - name: Build opted-in Web PR previews (no Android)
+        if: github.event_name != 'pull_request'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/pulls?state=open&per_page=50" \
+            | jq -r --arg repo "${GITHUB_REPOSITORY}" '
+              .[] | select(.head.repo.full_name == $repo)
+                  | select((.body // "") | startswith("<!-- riskfate:web-preview -->"))
+                  | [.number, .head.sha] | join(" ")
+            ' | sed -n '1,2p' > "$RUNNER_TEMP/riskfate-web-previews.txt"
+
+          while read -r pr sha; do
+            [[ "$pr" =~ ^[0-9]+$ && "$sha" =~ ^[0-9a-f]{40}$ ]] || exit 1
+            git fetch --no-tags --depth=1 origin "refs/pull/${pr}/head"
+            [[ "$(git rev-parse FETCH_HEAD)" == "$sha" ]] || {
+              echo "PR $pr changed during checkout; retry workflow" >&2
+              exit 1
+            }
+            source="$RUNNER_TEMP/riskfate-preview-$pr"
+            git worktree add --detach "$source" FETCH_HEAD
+            "$GODOT_BIN" --headless --path "$source" --editor --quit
+            "$GODOT_BIN" --headless --path "$source" --script res://tests/gameplay_smoke.gd
+            "$GODOT_BIN" --headless --path "$source" --script res://tests/vroid_hero_smoke.gd
+
+            base="$GITHUB_WORKSPACE/dist/previews/pr-$pr"
+            revision="${sha:0:12}"
+            mkdir -p "$base/builds/$revision"
+            "$GODOT_BIN" --headless --path "$source" --export-release Web "$base/builds/$revision/index.html"
+            for ext in html js wasm pck; do
+              test -s "$base/builds/$revision/index.$ext"
+            done
+            (
+              cd "$RUNNER_TEMP"
+              "$GODOT_BIN" --headless --main-pack "$base/builds/$revision/index.pck" --script res://tests/gameplay_smoke.gd
+            )
+            cat > "$base/index.html" <<EOF
+          <!doctype html>
+          <html lang="uk">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <meta http-equiv="refresh" content="0;url=builds/$revision/">
+            <title>Riskfate 3D Pro — PR #$pr preview</title>
+          </head>
+          <body><a href="builds/$revision/">Відкрити Web-preview PR #$pr</a></body>
+          </html>
+          EOF
+            echo "Preview PR #$pr: https://levian47.github.io/riskfate-3d-pro/previews/pr-$pr/"
+          done < "$RUNNER_TEMP/riskfate-web-previews.txt"
+
       - name: Set up Java 17 for native Android export
         if: github.event_name == 'workflow_dispatch' && inputs.build_android == true
         uses: actions/setup-java@v4
@@ -156,11 +258,13 @@ jobs:
           if-no-files-found: error
           retention-days: 30
       - name: Upload Pages artifact
+        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v4
         with:
           path: dist
 
   deploy:
+    if: github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     environment:
