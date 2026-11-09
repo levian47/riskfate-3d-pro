@@ -212,46 +212,40 @@ static func _raise_heavy_sword_arc(source: Animation) -> Animation:
 	return elevated
 
 
-# Short alternating right/left fist combo on the existing VRoid rig.
-# These are authored key poses sampled into an Animation at scene setup;
-# no runtime IK, new asset, or changes to the approved sword clips.
-const UNARMED_COMBO_TIMES := [0.0, 0.10, 0.18, 0.27, 0.37, 0.48, 0.58, 0.70, 0.80]
-const UNARMED_GUARD_WEIGHT := [0.0, 0.8, 1.0, 1.0, 1.0, 1.0, 1.0, 0.65, 0.0]
-const UNARMED_RIGHT_STRIKE := [0.0, 0.0, 0.30, 1.0, 0.35, 0.0, 0.0, 0.0, 0.0]
-const UNARMED_LEFT_STRIKE := [0.0, 0.0, 0.0, 0.0, 0.25, 1.0, 0.38, 0.0, 0.0]
+# One broad right-handed hook for unarmed preview. The left arm retains
+# the active locomotion clip; only the right shoulder/arm, torso and fist are
+# keyed. Wind-up -> sweep across the chest -> controlled recovery.
+const UNARMED_SWING_TIMES := [0.0, 0.10, 0.22, 0.30, 0.47, 0.55, 0.67, 0.78]
+const UNARMED_SWING_GUARD := [0.0, 0.65, 1.0, 1.0, 1.0, 1.0, 0.65, 0.0]
+const UNARMED_SWING_WINDUP := [0.0, 0.0, 0.85, 1.0, 0.0, 0.0, 0.0, 0.0]
+const UNARMED_SWING_STRIKE := [0.0, 0.0, 0.0, 0.0, 1.0, 0.85, 0.20, 0.0]
 const UNARMED_GUARD_ROTATIONS := {
-	"J_Bip_R_Shoulder": Vector3(-0.08, 0.02, -0.12),
-	"J_Bip_R_UpperArm": Vector3(-0.52, 0.12, -0.45),
-	"J_Bip_R_LowerArm": Vector3(0.20, 0.03, -0.80),
-	"J_Bip_R_Hand": Vector3(0.08, 0.0, 0.05),
-	"J_Bip_L_Shoulder": Vector3(-0.08, -0.02, 0.12),
-	"J_Bip_L_UpperArm": Vector3(-0.52, -0.12, 0.45),
-	"J_Bip_L_LowerArm": Vector3(0.20, -0.03, 0.80),
-	"J_Bip_L_Hand": Vector3(0.08, 0.0, -0.05),
+	"J_Bip_R_Shoulder": Vector3(-0.06, 0.03, -0.10),
+	"J_Bip_R_UpperArm": Vector3(-0.45, 0.10, -0.42),
+	"J_Bip_R_LowerArm": Vector3(0.15, 0.02, -0.76),
+	"J_Bip_R_Hand": Vector3(0.06, 0.0, 0.05),
 }
-const UNARMED_RIGHT_ROTATIONS := {
-	"J_Bip_R_Shoulder": Vector3(-0.02, 0.06, 0.0),
-	"J_Bip_R_UpperArm": Vector3(-0.43, -0.12, 0.15),
-	"J_Bip_R_LowerArm": Vector3(-0.25, 0.0, 0.78),
-	"J_Bip_R_Hand": Vector3(-0.06, 0.0, -0.08),
-	"J_Bip_C_Chest": Vector3(0.0, -0.13, 0.0),
-	"J_Bip_C_UpperChest": Vector3(0.0, -0.08, 0.0),
+const UNARMED_WINDUP_ROTATIONS := {
+	"J_Bip_R_Shoulder": Vector3(-0.06, 0.0, -0.12),
+	"J_Bip_R_UpperArm": Vector3(0.18, 0.30, -0.55),
+	"J_Bip_R_LowerArm": Vector3(0.13, -0.05, -0.28),
+	"J_Bip_R_Hand": Vector3(0.0, 0.06, 0.0),
+	"J_Bip_C_Chest": Vector3(0.0, 0.12, 0.0),
 }
-const UNARMED_LEFT_ROTATIONS := {
-	"J_Bip_L_Shoulder": Vector3(-0.02, -0.06, 0.0),
-	"J_Bip_L_UpperArm": Vector3(-0.43, 0.12, -0.15),
-	"J_Bip_L_LowerArm": Vector3(-0.25, 0.0, -0.78),
-	"J_Bip_L_Hand": Vector3(-0.06, 0.0, 0.08),
-	"J_Bip_C_Chest": Vector3(0.0, 0.13, 0.0),
-	"J_Bip_C_UpperChest": Vector3(0.0, 0.08, 0.0),
+const UNARMED_SWEEP_ROTATIONS := {
+	"J_Bip_R_Shoulder": Vector3(-0.08, 0.02, 0.14),
+	"J_Bip_R_UpperArm": Vector3(-0.45, -0.40, 0.25),
+	"J_Bip_R_LowerArm": Vector3(-0.20, 0.0, 1.10),
+	"J_Bip_R_Hand": Vector3(-0.06, 0.0, -0.15),
+	"J_Bip_C_Chest": Vector3(0.0, -0.26, 0.0),
+	"J_Bip_C_UpperChest": Vector3(0.0, -0.15, 0.0),
 }
 
-static func _unarmed_combo(walk: Animation) -> Animation:
+static func _unarmed_swing(walk: Animation) -> Animation:
 	var clip := Animation.new()
-	clip.length = UNARMED_COMBO_TIMES.back()
+	clip.length = UNARMED_SWING_TIMES.back()
 	clip.loop_mode = Animation.LOOP_NONE
-	var right_arm_tracks := 0
-	var left_arm_tracks := 0
+	var right_upper_arm_tracks := 0
 	var curled_finger_tracks := 0
 	for index in range(walk.get_track_count()):
 		if walk.track_get_type(index) != Animation.TYPE_ROTATION_3D:
@@ -260,42 +254,38 @@ static func _unarmed_combo(walk: Animation) -> Animation:
 		if path.get_subname_count() == 0:
 			continue
 		var bone := String(path.get_subname(path.get_subname_count() - 1))
-		var finger_name := bone.replace("J_Bip_L_", "J_Bip_R_")
-		var is_finger := SWORD_GRIP_FINGER_BENDS.has(finger_name)
+		var is_right_finger := bone.begins_with("J_Bip_R_") and SWORD_GRIP_FINGER_BENDS.has(bone)
 		var is_arm := UNARMED_GUARD_ROTATIONS.has(bone)
 		var is_torso := bone in ["J_Bip_C_Chest", "J_Bip_C_UpperChest"]
-		if not (is_arm or is_finger or is_torso):
+		if not (is_arm or is_right_finger or is_torso):
 			continue
 		var track := clip.add_track(Animation.TYPE_ROTATION_3D)
 		clip.track_set_path(track, path)
 		var baseline := walk.rotation_track_interpolate(index, 0.15)
-		if is_finger:
+		if is_right_finger:
 			curled_finger_tracks += 1
 		elif bone == "J_Bip_R_UpperArm":
-			right_arm_tracks += 1
-		elif bone == "J_Bip_L_UpperArm":
-			left_arm_tracks += 1
-		for phase in range(UNARMED_COMBO_TIMES.size()):
-			var guard := float(UNARMED_GUARD_WEIGHT[phase])
-			var right := float(UNARMED_RIGHT_STRIKE[phase])
-			var left := float(UNARMED_LEFT_STRIKE[phase])
+			right_upper_arm_tracks += 1
+		for phase in range(UNARMED_SWING_TIMES.size()):
+			var guard := float(UNARMED_SWING_GUARD[phase])
+			var windup := float(UNARMED_SWING_WINDUP[phase])
+			var strike := float(UNARMED_SWING_STRIKE[phase])
 			var pose: Quaternion
-			if is_finger:
-				var bend := float(SWORD_GRIP_FINGER_BENDS[finger_name])
-				var curl_axis := Vector3.FORWARD if bone.begins_with("J_Bip_L_") else Vector3.BACK
-				pose = (baseline * Quaternion(curl_axis, bend * guard)).normalized()
+			if is_right_finger:
+				var bend := float(SWORD_GRIP_FINGER_BENDS[bone])
+				pose = (baseline * Quaternion(Vector3.BACK, bend * guard)).normalized()
 			else:
 				var offset := Vector3.ZERO
 				if is_arm:
 					offset += (UNARMED_GUARD_ROTATIONS[bone] as Vector3) * guard
-				if UNARMED_RIGHT_ROTATIONS.has(bone):
-					offset += (UNARMED_RIGHT_ROTATIONS[bone] as Vector3) * right
-				if UNARMED_LEFT_ROTATIONS.has(bone):
-					offset += (UNARMED_LEFT_ROTATIONS[bone] as Vector3) * left
+				if UNARMED_WINDUP_ROTATIONS.has(bone):
+					offset += (UNARMED_WINDUP_ROTATIONS[bone] as Vector3) * windup
+				if UNARMED_SWEEP_ROTATIONS.has(bone):
+					offset += (UNARMED_SWEEP_ROTATIONS[bone] as Vector3) * strike
 				pose = (baseline * Quaternion.from_euler(offset)).normalized()
-			clip.rotation_track_insert_key(track, float(UNARMED_COMBO_TIMES[phase]), pose)
-	if right_arm_tracks != 1 or left_arm_tracks != 1 or curled_finger_tracks != SWORD_GRIP_FINGER_BENDS.size() * 2:
-		push_error("VRoid unarmed combo requires both upper arms and every finger track")
+			clip.rotation_track_insert_key(track, float(UNARMED_SWING_TIMES[phase]), pose)
+	if right_upper_arm_tracks != 1 or curled_finger_tracks != SWORD_GRIP_FINGER_BENDS.size():
+		push_error("VRoid unarmed swing requires the right upper arm and all right-hand finger tracks")
 		return null
 	return clip
 
@@ -366,10 +356,10 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 	heavy = _raise_heavy_sword_arc(heavy)
 	library.add_animation("SwordSlash", swing)
 	library.add_animation("SwordHeavyCandidate", heavy)
-	var unarmed_combo := _unarmed_combo(walk)
-	if unarmed_combo == null:
+	var unarmed_swing := _unarmed_swing(walk)
+	if unarmed_swing == null:
 		return null
-	library.add_animation("UnarmedCombo", unarmed_combo)
+	library.add_animation("UnarmedSwing", unarmed_swing)
 	var grip := _sword_grip(walk)
 	if grip.get_track_count() != SWORD_GRIP_FINGER_BENDS.size():
 		push_error("VRoid weapon grip requires all expected finger and distal thumb tracks")
@@ -453,17 +443,17 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 	root.add_node("SlashChoice", slash_choice)
 	root.connect_node("SlashChoice", 0, "SwordSlash")
 	root.connect_node("SlashChoice", 1, "SwordHeavyCandidate")
-	_add_clip(root, "UnarmedCombo", "vroid/UnarmedCombo")
+	_add_clip(root, "UnarmedSwing", "vroid/UnarmedSwing")
 	var unarmed_choice := AnimationNodeBlend2.new()
 	root.add_node("UnarmedChoice", unarmed_choice)
 	root.connect_node("UnarmedChoice", 0, "SlashChoice")
-	root.connect_node("UnarmedChoice", 1, "UnarmedCombo")
+	root.connect_node("UnarmedChoice", 1, "UnarmedSwing")
 	var attack_speed_node := AnimationNodeTimeScale.new()
 	var attack_layer := AnimationNodeOneShot.new()
 	attack_layer.fadein_time = 0.09
 	attack_layer.fadeout_time = 0.10
 	attack_layer.filter_enabled = true
-	for clip in [swing, unarmed_combo]:
+	for clip in [swing, unarmed_swing]:
 		for index in range(clip.get_track_count()):
 			attack_layer.set_filter_path(clip.track_get_path(index), true)
 	root.add_node("AttackSpeed", attack_speed_node)

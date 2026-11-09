@@ -421,12 +421,16 @@ func _start_attack() -> void:
 	if use_legacy_hero:
 		combat_controller.start_attack(animation_tree, animator)
 	else:
-		if not weapon_visuals.has_weapon():
-			# Fist combo is visual-only; do not inherit the sword training hit.
-			_sync_weapon_pose(0.0)
-			combat_controller.start_attack(animation_tree, animator, VROID_ANIMATION_BUILDER.UNARMED_ATTACK_SPEED, "UnarmedCombo", false)
+		if combat_controller.attack_time_left > 0.0:
 			return
-		# Match VRoid-only playback and the selected heavy/regular source clip.
+		if not weapon_visuals.has_weapon():
+			# A single right-hand sweeping strike; visual-only without melee damage.
+			_sync_weapon_pose(0.0)
+			animation_tree.set("parameters/AttackSpeed/scale", VROID_ANIMATION_BUILDER.UNARMED_ATTACK_SPEED)
+			combat_controller.start_attack(animation_tree, animator, VROID_ANIMATION_BUILDER.UNARMED_ATTACK_SPEED, "UnarmedSwing", false)
+			return
+		# Keep the animation playback rate consistent with the armed cooldown.
+		animation_tree.set("parameters/AttackSpeed/scale", VROID_ANIMATION_BUILDER.VROID_ATTACK_SPEED)
 		var clip := "SwordHeavyCandidate" if weapon_visuals.current_index == 0 else "SwordSlash"
 		combat_controller.start_attack(animation_tree, animator, VROID_ANIMATION_BUILDER.VROID_ATTACK_SPEED, clip)
 

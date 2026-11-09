@@ -541,7 +541,7 @@ func _run() -> void:
 	# Approved Cutlass fit must be untouched: roll -225 + 30 deg outward tilt.
 	if not _check(weapon_visuals.equip(4) and absf((weapon_visuals.current_visual.get_child(0) as Node3D).rotation_degrees.y - (WEAPONS.VROID_WEAPON_MODEL_ROLL_DEGREES + WEAPONS.VROID_CUTLASS_EXTRA_ROLL_DEGREES)) < 0.1 and absf(WEAPONS.VROID_CUTLASS_OUTWARD_TILT_DEGREES - 30.0) < 0.001, "approved Cutlass roll/tilt changed"):
 		return
-	# Other four attacks keep the standard clip; ATK without a weapon does nothing.
+	# Other four attacks keep the standard clip; unarmed attack uses a separate right-arm swing.
 	for weapon_id in [1, 2, 3, 4]:
 		weapon_visuals.equip(weapon_id)
 		game.call("_update_weapon_display")
@@ -558,45 +558,60 @@ func _run() -> void:
 	attack_combat.attack_time_left = 0.0
 	attack_combat.attack_hit_pending = false
 	game.call("_start_attack")
-	var unarmed_name := VROID_ANIM.find_clip(animator, "UnarmedCombo")
-	if not _check(not unarmed_name.is_empty(), "unarmed fist animation missing"):
+	var unarmed_name := VROID_ANIM.find_clip(animator, "UnarmedSwing")
+	if not _check(not unarmed_name.is_empty(), "unarmed right swing missing"):
 		return
 	var unarmed_clip := animator.get_animation(unarmed_name)
-	if not _check(attack_combat.attack_time_left > 0.75 and not attack_combat.attack_hit_pending, "ATK without weapon must animate without sword damage"):
+	if not _check(unarmed_clip.length > 0.70 and unarmed_clip.length < 0.82,
+		"unarmed swing must have one concise wind-up/strike/recovery"):
 		return
-	if not _check(float(tree.get("parameters/UnarmedChoice/blend_amount")) > 0.99, "unarmed combo must be selected"):
+	if not _check(absf(attack_combat.attack_time_left - unarmed_clip.length / VROID_ANIM.UNARMED_ATTACK_SPEED) < 0.01 and not attack_combat.attack_hit_pending,
+		"ATK without a weapon must run a correctly timed visual-only swing"):
+		return
+	if not _check(absf(float(tree.get("parameters/AttackSpeed/scale")) - VROID_ANIM.UNARMED_ATTACK_SPEED) < 0.001,
+		"unarmed visual animation rate must match the hit-free cooldown"):
+		return
+	if not _check(float(tree.get("parameters/UnarmedChoice/blend_amount")) > 0.99,
+		"unarmed swing must be selected"):
 		return
 	var unarmed_tracks := {}
 	for track in range(unarmed_clip.get_track_count()):
 		var path := unarmed_clip.track_get_path(track)
 		var target := String(path.get_subname(path.get_subname_count() - 1))
 		unarmed_tracks[target] = track
-		if not _check(unarmed_clip.rotation_track_interpolate(track, 0.0).is_equal_approx(unarmed_clip.rotation_track_interpolate(track, unarmed_clip.length)), "unarmed combo must return to start: " + target):
+		if not _check(unarmed_clip.rotation_track_interpolate(track, 0.0).is_equal_approx(
+			unarmed_clip.rotation_track_interpolate(track, unarmed_clip.length)),
+			"unarmed swing must return to the original pose: " + target):
 			return
-	for target in ["J_Bip_R_UpperArm", "J_Bip_L_UpperArm", "J_Bip_R_Index2", "J_Bip_L_Index2"]:
-		if not _check(unarmed_tracks.has(target), "unarmed combo missing bone: " + target):
+		if not _check(not target.begins_with("J_Bip_L_"),
+			"unarmed swing must not animate the left arm or fingers: " + target):
+			return
+	for target in ["J_Bip_R_Shoulder", "J_Bip_R_UpperArm", "J_Bip_R_LowerArm", "J_Bip_R_Hand", "J_Bip_R_Index2"]:
+		if not _check(unarmed_tracks.has(target), "unarmed swing missing track: " + target):
 			return
 	var right_track: int = unarmed_tracks["J_Bip_R_UpperArm"]
-	var left_track: int = unarmed_tracks["J_Bip_L_UpperArm"]
-	var right_jab := unarmed_clip.rotation_track_interpolate(right_track, 0.27)
-	var left_jab := unarmed_clip.rotation_track_interpolate(left_track, 0.48)
-	if not _check(right_jab.angle_to(unarmed_clip.rotation_track_interpolate(right_track, 0.10)) > 0.25, "right fist must extend visibly"):
+	var windup_pose := unarmed_clip.rotation_track_interpolate(right_track, 0.30)
+	var swing_pose := unarmed_clip.rotation_track_interpolate(right_track, 0.47)
+	if not _check(windup_pose.angle_to(swing_pose) > 0.55,
+		"right arm must trace one broad sweep, not a short jab"):
 		return
-	if not _check(left_jab.angle_to(unarmed_clip.rotation_track_interpolate(left_track, 0.10)) > 0.25, "left fist must extend visibly"):
-		return
-	var animation_graph := tree.tree_root as AnimationNodeBlendTree
-	var one_shot := animation_graph.get_node("Attack") as AnimationNodeOneShot
+	var graph_attack := tree.tree_root as AnimationNodeBlendTree
+	var one_shot := graph_attack.get_node("Attack") as AnimationNodeOneShot
 	var right_finger_path := unarmed_clip.track_get_path(unarmed_tracks["J_Bip_R_Index2"])
-	var left_finger_path := unarmed_clip.track_get_path(unarmed_tracks["J_Bip_L_Index2"])
-	if not _check(one_shot.is_path_filtered(right_finger_path) and one_shot.is_path_filtered(left_finger_path), "unarmed fist curl must be included in the attack layer"):
+	if not _check(one_shot.is_path_filtered(right_finger_path),
+		"right fist must be curled by the attack overlay"):
 		return
-	# Measure actual fist displacement on the VRoid skeleton; angular change
-	# by itself cannot prove that a jab moves forward in front of the torso.
+	if not _check(unarmed_clip.rotation_track_interpolate(unarmed_tracks["J_Bip_R_Index2"], 0.0).angle_to(
+		unarmed_clip.rotation_track_interpolate(unarmed_tracks["J_Bip_R_Index2"], 0.47)) > 0.55,
+		"right fingers must curl into a fist for the strike"):
+		return
+	# Check actual fist arc with the Godot skeleton; rotating bone keys alone is
+	# not evidence of a broad strike in the character's local coordinates.
 	tree.active = false
 	var right_hand_index := rig.find_bone("J_Bip_R_Hand")
 	var left_hand_index := rig.find_bone("J_Bip_L_Hand")
 	var fist_positions := []
-	for sample_time in [0.10, 0.27, 0.48]:
+	for sample_time in [0.10, 0.30, 0.47, 0.55, unarmed_clip.length]:
 		animator.play(unarmed_name)
 		animator.seek(sample_time, true)
 		rig.force_update_all_bone_transforms()
@@ -604,23 +619,18 @@ func _run() -> void:
 			rig.get_bone_global_pose(right_hand_index).origin,
 			rig.get_bone_global_pose(left_hand_index).origin
 		])
-	print("UNARMED_FIST_TRAJECTORY guard=", fist_positions[0], " right=", fist_positions[1], " left=", fist_positions[2])
-	var right_guard: Vector3 = fist_positions[0][0]
-	var left_guard: Vector3 = fist_positions[0][1]
-	var right_hit: Vector3 = fist_positions[1][0]
+	print("UNARMED_RIGHT_SWEEP positions=", fist_positions)
+	var right_windup: Vector3 = fist_positions[1][0]
+	var right_hit: Vector3 = fist_positions[2][0]
+	var left_windup: Vector3 = fist_positions[1][1]
 	var left_hit: Vector3 = fist_positions[2][1]
-	if not _check(right_guard.z - right_hit.z > 0.16 and absf(right_hit.x) < absf(right_guard.x) and absf(right_hit.y - right_guard.y) < 0.22,
-		"right punch must extend forward from chest without dropping"):
+	if not _check(right_hit.x - right_windup.x > 0.25 and right_windup.z - right_hit.z > 0.12
+		and absf(right_hit.y - right_windup.y) < 0.35,
+		"right fist must sweep across the chest and forward at chest height"):
 		return
-	if not _check(left_guard.z - left_hit.z > 0.16 and absf(left_hit.x) < absf(left_guard.x) and absf(left_hit.y - left_guard.y) < 0.22,
-		"left punch must extend forward from chest without dropping"):
+	if not _check(left_windup.distance_to(left_hit) < right_windup.distance_to(right_hit) * 0.6,
+		"left arm must not perform a second strike"):
 		return
-	for finger_bone in ["J_Bip_R_Index2", "J_Bip_L_Index2"]:
-		var finger_track: int = unarmed_tracks[finger_bone]
-		if not _check(unarmed_clip.rotation_track_interpolate(finger_track, 0.0).angle_to(
-			unarmed_clip.rotation_track_interpolate(finger_track, 0.27)) > 0.55,
-			"unarmed jab must visibly close both fists: " + finger_bone):
-			return
 	animator.stop()
 	tree.active = true
 	# A new weapon cancels an active fist combo, preventing punches with a sword.
