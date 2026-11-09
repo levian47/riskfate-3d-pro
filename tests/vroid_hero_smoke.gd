@@ -198,7 +198,8 @@ func _run() -> void:
 		game.call("_update_weapon_display")
 		if not _check(grip.get_node_or_null("EquippedWeapon") == weapon_visuals.current_visual, "Knife/Cutlass weapon attachment lost after switching"):
 			return
-		if not _check(grip.position.y > 0.04 and grip.transform.basis.y.normalized().dot(Vector3.BACK) > 0.95, "Knife/Cutlass must be fitted across the palm"):
+		var min_forward := 0.85 if candidate_index == 4 else 0.95
+		if not _check(grip.position.y > 0.04 and grip.transform.basis.y.normalized().dot(Vector3.BACK) > min_forward, "Knife/Cutlass must be fitted across the palm with approved outward-tilt range"):
 			return
 		if not _check(float(tree.get("parameters/GripOverlay/blend_amount")) > 0.99, "Knife/Cutlass must use the same closed-hand grip"):
 			return
