@@ -11,6 +11,14 @@ const UAL2_COMBAT := preload("res://characters/player/combat_retarget_ual2.gd")
 # VRoid-only preview attack speed. Keeps legacy Ninja timing untouched.
 # Sword Regular ~0.45 s -> ~0.64 s, Sword Heavy ~0.75 s -> ~1.07 s.
 const VROID_ATTACK_SPEED := 0.70
+# Retain Quaternius Run leg/body timing, but keep the weapon arm close to the
+# neutral walking carry instead of letting its high run swing cross the head.
+const RUN_WEAPON_CARRY_BLEND := {
+	"J_Bip_R_Shoulder": 0.90,
+	"J_Bip_R_UpperArm": 0.92,
+	"J_Bip_R_LowerArm": 0.86,
+	"J_Bip_R_Hand": 0.82,
+}
 
 const ARM_BONES := [
 	"J_Bip_R_Shoulder", "J_Bip_R_UpperArm", "J_Bip_R_LowerArm",
@@ -97,6 +105,39 @@ static func _sword_swing(walk: Animation) -> Animation:
 	return clip
 
 
+static func _safe_weapon_run(run: Animation, walk: Animation) -> Animation:
+	# A derived Run variant: do not modify imported Walk/Jog or the source
+	# Quaternius motion. Only the four right-arm bone rotations are blended
+	# toward the neutral position sampled from the approved Walk cycle.
+	# Left-arm counter-swing, legs, hips and torso continue using real Run.
+	var corrected := run.duplicate() as Animation
+	for track in range(corrected.get_track_count()):
+		if corrected.track_get_type(track) != Animation.TYPE_ROTATION_3D:
+			continue
+		var path := corrected.track_get_path(track)
+		if path.get_subname_count() == 0:
+			continue
+		var bone := String(path.get_subname(path.get_subname_count() - 1))
+		if not RUN_WEAPON_CARRY_BLEND.has(bone):
+			continue
+		var walk_track := walk.find_track(path, Animation.TYPE_ROTATION_3D)
+		if walk_track < 0:
+			push_error("VRoid weapon run missing Walk arm track: " + bone)
+			return null
+		var neutral := walk.rotation_track_interpolate(walk_track, 0.0)
+		# Four evenly spaced walking poses average out the arm swing while
+		# preserving the imported VRoid bone-rest orientation.
+		for i in range(1, 4):
+			var sample_time := walk.length * float(i) / 4.0
+			var sampled := walk.rotation_track_interpolate(walk_track, sample_time)
+			neutral = neutral.slerp(sampled, 1.0 / float(i + 1)).normalized()
+		for key in range(corrected.track_get_key_count(track)):
+			var original: Quaternion = run.track_get_key_value(track, key)
+			var blend := float(RUN_WEAPON_CARRY_BLEND[bone])
+			corrected.track_set_key_value(track, key, original.slerp(neutral, blend).normalized())
+	return corrected
+
+
 static func _sword_grip(walk: Animation) -> Animation:
 	# VRoid finger joints extend along local +Y, with the knuckles distributed
 	# along local Z. Positive local-Z curl bends the fingers toward the palm.
@@ -155,8 +196,8 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 	# Source library: CC0 UAL2 65-bone combat motions, retargeted in the
 	# current 103-bone VRoid rest pose. The old procedural slash stays
 	# available as an unused local function only for regression diagnosis.
-	var swing := UAL2_COMBAT.build("Sword_Regular_A", walk, skeleton)
-	var heavy := UAL2_COMBAT.build("Sword_Heavy_A", walk, skeleton)
+	var swing := UAL2_COMBAT.build("Sword_Regular_A", walk, skeleton, true)
+	var heavy := UAL2_COMBAT.build("Sword_Heavy_A", walk, skeleton, true)
 	if swing == null or heavy == null:
 		push_error("UAL2 Sword attack retargeting failed")
 		return null
@@ -175,8 +216,12 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 	if replacement_walk == null or replacement_run == null:
 		push_error("Failed to retarget Quaternius locomotion to VRoid skeleton")
 		return null
+	var safe_run := _safe_weapon_run(replacement_run, replacement_walk)
+	if safe_run == null:
+		push_error("Failed to build VRoid weapon-safe running arm pose")
+		return null
 	library.add_animation("QuaterniusWalk", replacement_walk)
-	library.add_animation("QuaterniusRun", replacement_run)
+	library.add_animation("QuaterniusRun", safe_run)
 	if animator.add_animation_library("vroid", library) != OK:
 		return null
 
