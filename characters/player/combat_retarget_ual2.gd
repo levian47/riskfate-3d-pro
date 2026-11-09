@@ -5,7 +5,8 @@ extends RefCounted
 const SOURCE := preload("res://assets/animations/ual2_selected_combat.glb")
 const SAMPLE_FPS := 30.0
 const BONE_MAP := {
-	"spine_01": "J_Bip_C_Spine",
+	# Godot import omits spine_01 rotation when it is constant in UAL2;
+	# retain VRoid spine animation from underlying locomotion.
 	"spine_02": "J_Bip_C_Chest",
 	"spine_03": "J_Bip_C_UpperChest",
 	"clavicle_l": "J_Bip_L_Shoulder",
