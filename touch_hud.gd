@@ -62,6 +62,12 @@ func _layout() -> Dictionary:
 	var attack_radius := 70.0 * scale
 	var jump_radius := 46.0 * scale
 	var dash_radius := 46.0 * scale
+	# A single upper-right column: FULL, ZOOM, WPN. Keep at least
+	# 12 scaled pixels between the drawn circles and their tap targets.
+	var secondary_radius := maxf(zoom_radius, fullscreen_radius)
+	var secondary_x := width - margin - secondary_radius
+	var secondary_top := margin + secondary_radius
+	var secondary_step := secondary_radius * 2.7
 	return {
 		"stick": Vector2(maxf(margin + stick_radius, width * 0.17), height - margin - stick_radius),
 		"stick_radius": stick_radius,
@@ -71,12 +77,12 @@ func _layout() -> Dictionary:
 		"jump_radius": jump_radius,
 		"dash": Vector2(width - margin - attack_radius * 2.30 - dash_radius, height - margin - attack_radius * 2.0 - dash_radius),
 		"dash_radius": dash_radius,
-		"zoom": Vector2(width - margin - zoom_radius, margin + zoom_radius),
+		"fullscreen": Vector2(secondary_x, secondary_top),
+		"fullscreen_radius": fullscreen_radius,
+		"zoom": Vector2(secondary_x, secondary_top + secondary_step),
 		"zoom_radius": zoom_radius,
-		"weapon": Vector2(width - margin - zoom_radius, margin + zoom_radius * 3.6),
-		"weapon_radius": zoom_radius,
-		"fullscreen": Vector2(margin + fullscreen_radius, margin + fullscreen_radius),
-		"fullscreen_radius": fullscreen_radius
+		"weapon": Vector2(secondary_x, secondary_top + secondary_step * 2.0),
+		"weapon_radius": zoom_radius
 	}
 
 func _input(event: InputEvent) -> void:
