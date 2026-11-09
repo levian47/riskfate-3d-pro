@@ -605,6 +605,22 @@ func _run() -> void:
 			rig.get_bone_global_pose(left_hand_index).origin
 		])
 	print("UNARMED_FIST_TRAJECTORY guard=", fist_positions[0], " right=", fist_positions[1], " left=", fist_positions[2])
+	var right_guard: Vector3 = fist_positions[0][0]
+	var left_guard: Vector3 = fist_positions[0][1]
+	var right_hit: Vector3 = fist_positions[1][0]
+	var left_hit: Vector3 = fist_positions[2][1]
+	if not _check(right_guard.z - right_hit.z > 0.16 and absf(right_hit.x) < absf(right_guard.x) and absf(right_hit.y - right_guard.y) < 0.22,
+		"right punch must extend forward from chest without dropping"):
+		return
+	if not _check(left_guard.z - left_hit.z > 0.16 and absf(left_hit.x) < absf(left_guard.x) and absf(left_hit.y - left_guard.y) < 0.22,
+		"left punch must extend forward from chest without dropping"):
+		return
+	for finger_bone in ["J_Bip_R_Index2", "J_Bip_L_Index2"]:
+		var finger_track: int = unarmed_tracks[finger_bone]
+		if not _check(unarmed_clip.rotation_track_interpolate(finger_track, 0.0).angle_to(
+			unarmed_clip.rotation_track_interpolate(finger_track, 0.27)) > 0.55,
+			"unarmed jab must visibly close both fists: " + finger_bone):
+			return
 	animator.stop()
 	tree.active = true
 	# A new weapon cancels an active fist combo, preventing punches with a sword.
