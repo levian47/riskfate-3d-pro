@@ -107,7 +107,7 @@ static func _sword_grip(walk: Animation) -> Animation:
 		if not SWORD_GRIP_FINGER_BENDS.has(bone):
 			continue
 		var baseline := walk.rotation_track_interpolate(index, 0.15)
-		var curl := Quaternion(Vector3.FORWARD, float(SWORD_GRIP_FINGER_BENDS[bone]))
+		var curl := Quaternion(Vector3.BACK, float(SWORD_GRIP_FINGER_BENDS[bone]))
 		var track := grip.add_track(Animation.TYPE_ROTATION_3D)
 		grip.track_set_path(track, path)
 		grip.rotation_track_insert_key(track, 0.0, baseline * curl)
