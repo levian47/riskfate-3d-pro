@@ -38,6 +38,13 @@ func _run() -> void:
 	var grip := rig.get_node_or_null("SwordGrip/WeaponMount") as Node3D
 	if not _check(grip != null, "weapon mount missing on VRoid hand"):
 		return
+	var attachment := rig.get_node_or_null("SwordGrip") as BoneAttachment3D
+	if not _check(attachment != null and attachment.bone_name == "J_Bip_R_Hand", "Sword I must follow the original right-hand bone"):
+		return
+	if not _check(grip.position.y > 0.04 and grip.position.y < 0.08 and grip.rotation_degrees.z < 0.0, "Sword I palm grip offset/orientation missing"):
+		return
+	if not _check(grip.get_node_or_null("EquippedWeapon") != null, "Sword I geometry not attached to palm"):
+		return
 	var animator := game.get("animator") as AnimationPlayer
 	var tree := game.get("animation_tree") as AnimationTree
 	if not _check(animator != null and tree != null and tree.active, "VRoid animation graph missing"):
@@ -114,6 +121,30 @@ func _run() -> void:
 	var graph := tree.tree_root as AnimationNodeBlendTree
 	if not _check(graph != null, "VRoid AnimationTree root missing"):
 		return
+	var grip_name := VROID_ANIM.find_clip(animator, "SwordGrip")
+	if not _check(not grip_name.is_empty(), "VRoid Sword I finger grip animation missing"):
+		return
+	var grip_clip := animator.get_animation(grip_name)
+	if not _check(grip_clip.get_track_count() == 12, "Sword I must close four fingers with three joints each"):
+		return
+	var grip_overlay := graph.get_node("GripOverlay") as AnimationNodeBlend2
+	if not _check(grip_overlay != null and grip_overlay.filter_enabled, "finger grip must be a filtered animation layer"):
+		return
+	for i in range(grip_clip.get_track_count()):
+		var track_path := grip_clip.track_get_path(i)
+		if not _check(grip_overlay.is_path_filtered(track_path), "finger grip track is missing its blend filter"):
+			return
+	if not _check(float(tree.get("parameters/GripOverlay/blend_amount")) > 0.99, "Sword I grip must be active by default"):
+		return
+	game.call("_cycle_weapon")
+	if not _check(float(tree.get("parameters/GripOverlay/blend_amount")) < 0.01, "other weapons must not reuse Sword I grip pose"):
+		return
+	var weapon_visuals = game.get("weapon_visuals")
+	if not _check(weapon_visuals.equip(0), "Sword I cannot be re-equipped"):
+		return
+	game.call("_update_weapon_display")
+	if not _check(float(tree.get("parameters/GripOverlay/blend_amount")) > 0.99, "Sword I grip not restored after switching weapons"):
+		return
 	var walk_node := graph.get_node("Walk") as AnimationNodeAnimation
 	var run_node := graph.get_node("Run") as AnimationNodeAnimation
 	if not _check(walk_node != null and run_node != null and String(walk_node.animation) == new_walk_name and String(run_node.animation) == new_run_name, "gameplay graph not using new Walk/Run"):
@@ -125,6 +156,12 @@ func _run() -> void:
 	game.call("_set_locomotion", "Run", true)
 	tree.advance(0.10)
 	if not _check(String(game.get("locomotion_state")) == "Run", "Run transition unavailable"):
+		return
+	game.call("_set_locomotion", "Jump", true)
+	tree.advance(0.10)
+	game.call("_set_locomotion", "Idle", true)
+	tree.advance(0.10)
+	if not _check(grip.get_node_or_null("EquippedWeapon") != null, "weapon mount lost during animation transitions"):
 		return
 	var bone := rig.find_bone("J_Bip_L_UpperLeg")
 	tree.active = false
@@ -140,7 +177,7 @@ func _run() -> void:
 	game.call("_start_attack")
 	if not _check(float(game.get("combat_controller").get("attack_time_left")) > 0.0, "attack input/timing broken"):
 		return
-	print("VRoid smoke test OK: 103 bones, ", mesh_count, " mesh nodes, original Walk/Jog and Quaternius Walk/Run, weapon mount and attack")
+	print("VRoid smoke test OK: 103 bones, ", mesh_count, " mesh nodes, Quaternius Walk/Run, Sword I grip overlay, weapon switching and attack")
 	game.queue_free()
 	quit(0)
 
