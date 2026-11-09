@@ -562,8 +562,8 @@ func _run() -> void:
 	if not _check(not unarmed_name.is_empty(), "unarmed right swing missing"):
 		return
 	var unarmed_clip := animator.get_animation(unarmed_name)
-	if not _check(unarmed_clip.length > 0.70 and unarmed_clip.length < 0.82,
-		"unarmed swing must have one concise wind-up/strike/recovery"):
+	if not _check(unarmed_clip.length > 1.04 and unarmed_clip.length < 1.08,
+		"unarmed hook and recovery must preserve source duration"):
 		return
 	if not _check(absf(attack_combat.attack_time_left - unarmed_clip.length / VROID_ANIM.UNARMED_ATTACK_SPEED) < 0.01 and not attack_combat.attack_hit_pending,
 		"ATK without a weapon must run a correctly timed visual-only swing"):
@@ -590,8 +590,8 @@ func _run() -> void:
 		if not _check(unarmed_tracks.has(target), "unarmed swing missing track: " + target):
 			return
 	var right_track: int = unarmed_tracks["J_Bip_R_UpperArm"]
-	var windup_pose := unarmed_clip.rotation_track_interpolate(right_track, 0.30)
-	var swing_pose := unarmed_clip.rotation_track_interpolate(right_track, 0.47)
+	var windup_pose := unarmed_clip.rotation_track_interpolate(right_track, 0.08)
+	var swing_pose := unarmed_clip.rotation_track_interpolate(right_track, 0.30)
 	if not _check(windup_pose.angle_to(swing_pose) > 0.55,
 		"right arm must trace one broad sweep, not a short jab"):
 		return
@@ -611,7 +611,7 @@ func _run() -> void:
 	var right_hand_index := rig.find_bone("J_Bip_R_Hand")
 	var left_hand_index := rig.find_bone("J_Bip_L_Hand")
 	var fist_positions := []
-	for sample_time in [0.10, 0.30, 0.47, 0.55, unarmed_clip.length]:
+	for sample_time in [0.0, 0.10, 0.26, 0.42, unarmed_clip.length]:
 		animator.play(unarmed_name)
 		animator.seek(sample_time, true)
 		rig.force_update_all_bone_transforms()
@@ -624,11 +624,11 @@ func _run() -> void:
 	var right_hit: Vector3 = fist_positions[2][0]
 	var left_windup: Vector3 = fist_positions[1][1]
 	var left_hit: Vector3 = fist_positions[2][1]
-	if not _check(right_hit.x - right_windup.x > 0.25 and right_windup.z - right_hit.z > 0.12
-		and absf(right_hit.y - right_windup.y) < 0.35,
-		"right fist must sweep across the chest and forward at chest height"):
+	if not _check(right_windup.distance_to(right_hit) > 0.22
+		and absf(right_hit.y - right_windup.y) < 0.55,
+		"authored right hook must travel a meaningful arc near the upper body"):
 		return
-	if not _check(left_windup.distance_to(left_hit) < right_windup.distance_to(right_hit) * 0.6,
+	if not _check(left_windup.distance_to(left_hit) < right_windup.distance_to(right_hit) * 0.65,
 		"left arm must not perform a second strike"):
 		return
 	animator.stop()

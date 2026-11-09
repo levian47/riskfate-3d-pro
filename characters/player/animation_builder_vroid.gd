@@ -212,41 +212,17 @@ static func _raise_heavy_sword_arc(source: Animation) -> Animation:
 	return elevated
 
 
-# One broad right-handed hook for unarmed preview. The left arm retains
-# the active locomotion clip; only the right shoulder/arm, torso and fist are
-# keyed. Wind-up -> sweep across the chest -> controlled recovery.
-const UNARMED_SWING_TIMES := [0.0, 0.10, 0.22, 0.30, 0.47, 0.55, 0.67, 0.78]
-const UNARMED_SWING_GUARD := [0.0, 0.65, 1.0, 1.0, 1.0, 1.0, 0.65, 0.0]
-const UNARMED_SWING_WINDUP := [0.0, 0.0, 0.85, 1.0, 0.0, 0.0, 0.0, 0.0]
-const UNARMED_SWING_STRIKE := [0.0, 0.0, 0.0, 0.0, 1.0, 0.85, 0.20, 0.0]
-const UNARMED_GUARD_ROTATIONS := {
-	"J_Bip_R_Shoulder": Vector3(-0.06, 0.03, -0.10),
-	"J_Bip_R_UpperArm": Vector3(-0.45, 0.10, -0.42),
-	"J_Bip_R_LowerArm": Vector3(0.15, 0.02, -0.76),
-	"J_Bip_R_Hand": Vector3(0.06, 0.0, 0.05),
-}
-const UNARMED_WINDUP_ROTATIONS := {
-	"J_Bip_R_Shoulder": Vector3(-0.06, 0.0, -0.12),
-	"J_Bip_R_UpperArm": Vector3(0.18, 0.30, -0.08),
-	"J_Bip_R_LowerArm": Vector3(0.13, -0.05, -0.28),
-	"J_Bip_R_Hand": Vector3(0.0, 0.06, 0.0),
-	"J_Bip_C_Chest": Vector3(0.0, 0.12, 0.0),
-}
-const UNARMED_SWEEP_ROTATIONS := {
-	"J_Bip_R_Shoulder": Vector3(-0.08, 0.02, 0.14),
-	"J_Bip_R_UpperArm": Vector3(-0.45, -0.40, 0.25),
-	"J_Bip_R_LowerArm": Vector3(-0.20, 0.0, 1.10),
-	"J_Bip_R_Hand": Vector3(-0.06, 0.0, -0.15),
-	"J_Bip_C_Chest": Vector3(0.0, -0.26, 0.0),
-	"J_Bip_C_UpperChest": Vector3(0.0, -0.15, 0.0),
-}
-
-static func _unarmed_swing(walk: Animation) -> Animation:
-	var clip := Animation.new()
-	clip.length = UNARMED_SWING_TIMES.back()
-	clip.loop_mode = Animation.LOOP_NONE
-	var right_upper_arm_tracks := 0
-	var curled_finger_tracks := 0
+# The authored Quaternius UAL2 Melee_Hook + Melee_Hook_Rec is retargeted
+# through the same rest-space mapping as the approved UAL2 sword attacks.
+# Only right arm/chest source motion is transferred; keyframe finger curl is
+# added here because the original UAL2 hand pose does not key every VRoid digit.
+static func _unarmed_swing(walk: Animation, skeleton: Skeleton3D) -> Animation:
+	var hook := UAL2_COMBAT.build_unarmed_hook(walk, skeleton)
+	if hook == null:
+		return null
+	var finger_tracks := 0
+	var times := [0.0, 0.08, 0.20, 0.47, 0.68, hook.length]
+	var curl_weights := [0.0, 0.85, 1.0, 1.0, 0.65, 0.0]
 	for index in range(walk.get_track_count()):
 		if walk.track_get_type(index) != Animation.TYPE_ROTATION_3D:
 			continue
@@ -254,40 +230,20 @@ static func _unarmed_swing(walk: Animation) -> Animation:
 		if path.get_subname_count() == 0:
 			continue
 		var bone := String(path.get_subname(path.get_subname_count() - 1))
-		var is_right_finger := bone.begins_with("J_Bip_R_") and SWORD_GRIP_FINGER_BENDS.has(bone)
-		var is_arm := UNARMED_GUARD_ROTATIONS.has(bone)
-		var is_torso := bone in ["J_Bip_C_Chest", "J_Bip_C_UpperChest"]
-		if not (is_arm or is_right_finger or is_torso):
+		if not SWORD_GRIP_FINGER_BENDS.has(bone):
 			continue
-		var track := clip.add_track(Animation.TYPE_ROTATION_3D)
-		clip.track_set_path(track, path)
 		var baseline := walk.rotation_track_interpolate(index, 0.15)
-		if is_right_finger:
-			curled_finger_tracks += 1
-		elif bone == "J_Bip_R_UpperArm":
-			right_upper_arm_tracks += 1
-		for phase in range(UNARMED_SWING_TIMES.size()):
-			var guard := float(UNARMED_SWING_GUARD[phase])
-			var windup := float(UNARMED_SWING_WINDUP[phase])
-			var strike := float(UNARMED_SWING_STRIKE[phase])
-			var pose: Quaternion
-			if is_right_finger:
-				var bend := float(SWORD_GRIP_FINGER_BENDS[bone])
-				pose = (baseline * Quaternion(Vector3.BACK, bend * guard)).normalized()
-			else:
-				var offset := Vector3.ZERO
-				if is_arm:
-					offset += (UNARMED_GUARD_ROTATIONS[bone] as Vector3) * guard
-				if UNARMED_WINDUP_ROTATIONS.has(bone):
-					offset += (UNARMED_WINDUP_ROTATIONS[bone] as Vector3) * windup
-				if UNARMED_SWEEP_ROTATIONS.has(bone):
-					offset += (UNARMED_SWEEP_ROTATIONS[bone] as Vector3) * strike
-				pose = (baseline * Quaternion.from_euler(offset)).normalized()
-			clip.rotation_track_insert_key(track, float(UNARMED_SWING_TIMES[phase]), pose)
-	if right_upper_arm_tracks != 1 or curled_finger_tracks != SWORD_GRIP_FINGER_BENDS.size():
-		push_error("VRoid unarmed swing requires the right upper arm and all right-hand finger tracks")
+		var track := hook.add_track(Animation.TYPE_ROTATION_3D)
+		hook.track_set_path(track, path)
+		var bend := float(SWORD_GRIP_FINGER_BENDS[bone])
+		for key in range(times.size()):
+			var curl := Quaternion(Vector3.BACK, bend * float(curl_weights[key]))
+			hook.rotation_track_insert_key(track, float(times[key]), (baseline * curl).normalized())
+		finger_tracks += 1
+	if finger_tracks != SWORD_GRIP_FINGER_BENDS.size():
+		push_error("UAL2 Hook: VRoid right-hand finger tracks missing")
 		return null
-	return clip
+	return hook
 
 
 static func _sword_grip(walk: Animation) -> Animation:
@@ -356,7 +312,7 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 	heavy = _raise_heavy_sword_arc(heavy)
 	library.add_animation("SwordSlash", swing)
 	library.add_animation("SwordHeavyCandidate", heavy)
-	var unarmed_swing := _unarmed_swing(walk)
+	var unarmed_swing := _unarmed_swing(walk, skeleton)
 	if unarmed_swing == null:
 		return null
 	library.add_animation("UnarmedSwing", unarmed_swing)

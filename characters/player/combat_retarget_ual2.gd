@@ -3,6 +3,7 @@ extends RefCounted
 # approved 103-bone VRoid skeleton. Only selected upper-body channels are
 # transferred; locomotion and lower-body/root motion stay with the game.
 const SOURCE := preload("res://assets/animations/ual2_selected_combat.glb")
+const HOOK_FRAMES := preload("res://characters/player/ual2_hook_samples.gd")
 const SAMPLE_FPS := 30.0
 # Controlled exaggeration of existing CC0 attack keys for a more readable
 # wind-up and wider follow-through. No new procedural slash replaces the
@@ -126,5 +127,54 @@ static func build(clip_name: String, target_reference: Animation, target_skeleto
 					delta = Quaternion(delta.get_axis(), minf(angle * gain, PI - 0.02)).normalized()
 			var aligned_delta := (source_to_target * delta * source_to_target.inverse()).normalized()
 			result.rotation_track_insert_key(track, sample_time, (target_local_rest * aligned_delta).normalized())
+	instance.free()
+	return result
+
+# Reuse the proven UAL2 -> VRoid rest-space conversion for the exact recorded
+# Melee_Hook + Melee_Hook_Rec frames. This path is distinct from sword retarget,
+# so no approved weapon animation gets altered. Left arm, legs and root excluded.
+static func build_unarmed_hook(target_reference: Animation, target_skeleton: Skeleton3D) -> Animation:
+	if target_reference == null or target_skeleton == null:
+		push_error("UAL2 Hook: target reference or skeleton missing")
+		return null
+	var rotations := HOOK_FRAMES.decode_tracks()
+	if rotations.size() != HOOK_FRAMES.BONES.size():
+		return null
+	var instance := SOURCE.instantiate()
+	var source_skeleton := _find_skeleton(instance)
+	if source_skeleton == null:
+		push_error("UAL2 Hook: source skeleton missing")
+		instance.free()
+		return null
+	var target_paths := _rotation_paths(target_reference)
+	var result := Animation.new()
+	result.length = HOOK_FRAMES.get_clip_length()
+	result.loop_mode = Animation.LOOP_NONE
+	for source_bone in HOOK_FRAMES.BONES:
+		var target_bone: String = BONE_MAP[source_bone]
+		if not target_paths.has(target_bone):
+			push_error("UAL2 Hook: missing VRoid animation bone " + target_bone)
+			instance.free()
+			return null
+		var src_index := source_skeleton.find_bone(source_bone)
+		var dst_index := target_skeleton.find_bone(target_bone)
+		if src_index < 0 or dst_index < 0:
+			push_error("UAL2 Hook: skeleton bone missing: " + source_bone)
+			instance.free()
+			return null
+		var source_local_rest := source_skeleton.get_bone_rest(src_index).basis.get_rotation_quaternion()
+		var source_world_rest := source_skeleton.get_bone_global_rest(src_index).basis.get_rotation_quaternion()
+		var target_local_rest := target_skeleton.get_bone_rest(dst_index).basis.get_rotation_quaternion()
+		var target_world_rest := target_skeleton.get_bone_global_rest(dst_index).basis.get_rotation_quaternion()
+		var source_to_target := (target_world_rest.inverse() * source_world_rest).normalized()
+		var track := result.add_track(Animation.TYPE_ROTATION_3D)
+		result.track_set_path(track, target_paths[target_bone]["path"])
+		var frames: Array = rotations[source_bone]
+		for frame in range(HOOK_FRAMES.FRAME_COUNT):
+			var source_pose: Quaternion = frames[frame]
+			var delta := (source_local_rest.inverse() * source_pose).normalized()
+			var aligned_delta := (source_to_target * delta * source_to_target.inverse()).normalized()
+			var at_time := float(frame) / HOOK_FRAMES.FRAME_RATE
+			result.rotation_track_insert_key(track, at_time, (target_local_rest * aligned_delta).normalized())
 	instance.free()
 	return result
