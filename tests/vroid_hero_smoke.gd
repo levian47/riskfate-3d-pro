@@ -22,6 +22,13 @@ func _run() -> void:
 	if ual2_player != null:
 		print("AVAILABLE_UAL2_CLIPS=", ual2_player.get_animation_list())
 	ual2_source.free()
+	var zip := ZIPReader.new()
+	if zip.open("res://assets_source/animation_libraries/quaternius/ual1_standard_godot.zip") == OK:
+		for filename in zip.get_files():
+			var label := filename.to_lower()
+			if "punch" in label or "fight" in label or "attack" in label or "combat" in label or "melee" in label or "unarmed" in label or "animations" in label:
+				print("AVAILABLE_UAL1_FILE=", filename)
+		zip.close()
 	var packed := load("res://main.tscn") as PackedScene
 	if not _check(packed != null, "main.tscn not loaded"):
 		return
