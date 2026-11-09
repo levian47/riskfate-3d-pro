@@ -255,10 +255,19 @@ func _run() -> void:
 		var holder := weapon_visuals.current_visual as Node3D
 		var source := holder.get_child(0) as Node3D
 		var local_bounds: AABB = weapon_visuals._bounds_in_root(holder)
-		var hilt_center: Vector3 = weapon_visuals._hilt_center_in_root(holder, local_bounds)
+		var hilt_center: Vector3 = weapon_visuals._hilt_anchor_in_root(holder, local_bounds)
 		var fitted_hilt: Vector3 = holder.transform * hilt_center
-		if not _check(absf(fitted_hilt.x) < 0.025 and absf(fitted_hilt.z) < 0.025,
-			"weapon handle center displaced from mount, possibly by the blade AABB"):
+		if not _check(fitted_hilt.length() < 0.025,
+			"weapon grip midpoint displaced from mount, including vertical position"):
+			return
+		# Twist the model about the blade's Y axis; do not twist the VRoid hand.
+		if not _check(absf(source.rotation_degrees.y - WEAPONS.VROID_WEAPON_MODEL_ROLL_DEGREES) < 0.1,
+			"weapon model missing requested 90 degree axial turn"):
+			return
+		# Check that the anchor is not on the pommel / very end of the grip.
+		var anchor_fraction := (hilt_center.y - local_bounds.position.y) / local_bounds.size.y
+		if not _check(anchor_fraction > 0.04 and anchor_fraction < 0.29,
+			"weapon grip anchor not within the lower-middle handle region"):
 			return
 		if not _check(grip.position.z > 0.02, "VRoid weapon must project forward of the palm"):
 			return
@@ -266,11 +275,11 @@ func _run() -> void:
 			" mount=", grip.position, " mount_rotation=", grip.rotation_degrees,
 			" source_rotation=", source.rotation_degrees,
 			" holder_position=", holder.position, " holder_scale=", holder.scale,
-			" mesh_aabb=", local_bounds, " hilt_center=", hilt_center, " fitted=", fitted_hilt)
+			" mesh_aabb=", local_bounds, " hilt_center=", hilt_center, " grip_fraction=", anchor_fraction, " fitted=", fitted_hilt)
 	if not _check(weapon_visuals.equip(0), "restore Sword I after diagnostics"):
 		return
 	game.call("_update_weapon_display")
-	print("VRoid smoke test OK: 103 bones, ", mesh_count, " mesh nodes, Quaternius Walk/Run, five palm grips, slower regular/heavy attacks")
+	print("VRoid smoke test OK: 103 bones, ", mesh_count, " mesh nodes, Quaternius Walk/Run, five mid-handle grips, 90-degree weapon axial twist, slower regular/heavy attacks")
 	game.queue_free()
 	quit(0)
 
