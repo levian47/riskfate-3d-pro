@@ -326,7 +326,7 @@ func _run() -> void:
 		var expected_mount_x := WEAPONS.VROID_WEAPON_GRIP_ROTATION.x
 		if weapon_id == 4:
 			expected_mount_x -= WEAPONS.VROID_CUTLASS_OUTWARD_TILT_DEGREES
-			if not _check(grip.transform.basis.y.normalized().y > 0.15,
+			if not _check(grip.transform.basis.y.normalized().y > 0.42,
 				"Cutlass blade must lean outward from right-hand palm"):
 				return
 		if not _check(absf(grip.rotation_degrees.x - expected_mount_x) < 0.1,
