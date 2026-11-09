@@ -61,48 +61,6 @@ try {
   await page.waitForTimeout(500);
 
   assert.deepEqual(errors, [], "Browser errors during game startup/input");
-
-  // TEMPORARY DIAGNOSTIC ONLY: check real GitHub Pages rather than localhost.
-  // Removed after investigating external URL failures; never part of gameplay.
-  for (const suffix of ["builds/68cd86d4b3ad/", "builds/b6fec5891f0b/", ""]) {
-    const url = "https://levian47.github.io/riskfate-3d-pro/previews/pr-15/" + suffix;
-    const remote = await context.newPage();
-    const events = [];
-    remote.on("pageerror", (e) => events.push("pageerror " + e.message));
-    remote.on("console", (e) => {
-      if (e.type() === "error") events.push("console " + e.text().slice(0, 280));
-    });
-    remote.on("response", (e) => {
-      if (e.status() >= 400) events.push("HTTP " + e.status() + " " + e.url());
-    });
-    remote.on("requestfailed", (r) => events.push("failed " + r.url() + " " + (r.failure()?.errorText ?? "?")));
-    let responseCode = null;
-    let visitError = null;
-    try {
-      const response = await remote.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
-      responseCode = response?.status();
-      await remote.waitForTimeout(7000);
-    } catch (e) {
-      visitError = String(e.message ?? e).slice(0, 400);
-    }
-    let info = {};
-    try {
-      info = await remote.evaluate(() => ({
-        url: location.href,
-        title: document.title,
-        text: document.body?.innerText?.slice(0, 400),
-        notice: document.getElementById("status-notice")?.textContent,
-        canvas: !!document.getElementById("canvas"),
-        canvasWidth: document.getElementById("canvas")?.width,
-        overlayDisplay: document.getElementById("status") && getComputedStyle(document.getElementById("status")).display,
-      }));
-    } catch (e) {
-      info = {error: String(e)};
-    }
-    console.log("LIVE_PREVIEW_DIAG=" + JSON.stringify({url,responseCode,visitError,info,events:events.slice(0,12)}));
-    await remote.close();
-  }
-
   console.log("PASS: exported Godot game initialized in Chromium/WebGL 2; input generated no browser errors");
 } catch (error) {
   console.error("FAIL: browser smoke-test: " + (error.stack ?? error));
