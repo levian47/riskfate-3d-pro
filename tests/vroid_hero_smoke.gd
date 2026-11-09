@@ -271,6 +271,36 @@ func _run() -> void:
 		return
 	var bone := rig.find_bone("J_Bip_L_UpperLeg")
 	tree.active = false
+	# Validate a real kinematic height change, not only extra rotation keys:
+	# compare the right wrist in the same retargeted heavy clip with/without lift.
+	var heavy_baseline: Animation = VROID_ANIM.UAL2_COMBAT.build("Sword_Heavy_A", animator.get_animation(walk), rig, true)
+	if not _check(heavy_baseline != null, "heavy sword baseline unavailable"):
+		return
+	var diagnostic_library := AnimationLibrary.new()
+	diagnostic_library.add_animation("HeavyBaseline", heavy_baseline)
+	if not _check(animator.add_animation_library("heavy_height_test", diagnostic_library) == OK,
+		"cannot register heavy-attack baseline"):
+		return
+	var hand_idx := rig.find_bone("J_Bip_R_Hand")
+	if not _check(hand_idx >= 0, "right hand missing for attack height test"):
+		return
+	var attack_height_gain := 0.0
+	for phase in [0.35, 0.50, 0.65]:
+		var time := heavy_clip.length * float(phase)
+		animator.play("heavy_height_test/HeavyBaseline")
+		animator.seek(time, true)
+		rig.force_update_all_bone_transforms()
+		var original_y := rig.get_bone_global_pose(hand_idx).origin.y
+		animator.play(heavy_name)
+		animator.seek(time, true)
+		rig.force_update_all_bone_transforms()
+		var raised_y := rig.get_bone_global_pose(hand_idx).origin.y
+		var delta_y := raised_y - original_y
+		attack_height_gain = maxf(attack_height_gain, delta_y)
+		print("Sword I attack height phase=", phase, " baseline_hand_y=", original_y,
+			" raised_hand_y=", raised_y, " extra_y=", delta_y)
+	if not _check(attack_height_gain > 0.035, "Sword I heavy attack failed to lift the sword hand"):
+		return
 	animator.play(walk)
 	animator.seek(0.02, true)
 	var before := rig.get_bone_pose_rotation(bone)
