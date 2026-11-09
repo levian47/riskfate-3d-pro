@@ -279,8 +279,9 @@ func _update_weapon_display() -> void:
 	# All five VRoid weapons use the same provisional closed-hand finger/thumb pose.
 	if not use_legacy_hero and animation_tree != null:
 		animation_tree.set("parameters/GripOverlay/blend_amount", 1.0)
-		# Sword II is a heavy-attack candidate, not an approved two-hand grip.
-		animation_tree.set("parameters/SlashChoice/blend_amount", 1.0 if weapon_visuals.current_index == 1 else 0.0)
+		# Sword I previews the one-handed heavy strike; Sword II is standard 1H.
+		# A true two-handed grip/strike requires a separate approved animation.
+		animation_tree.set("parameters/SlashChoice/blend_amount", 1.0 if weapon_visuals.current_index == 0 else 0.0)
 	var help_label := get_node_or_null("HUD/HelpPanel/HelpText") as Label
 	if help_label != null:
 		help_label.text = HUD_BUILDER.desktop_help_text(weapon_visuals.selected_name(), naruto_run_enabled, use_legacy_hero)
@@ -370,7 +371,7 @@ func _start_attack() -> void:
 		combat_controller.start_attack(animation_tree, animator)
 	else:
 		# Match VRoid-only playback and the selected heavy/regular source clip.
-		var clip := "SwordHeavyCandidate" if weapon_visuals.current_index == 1 else "SwordSlash"
+		var clip := "SwordHeavyCandidate" if weapon_visuals.current_index == 0 else "SwordSlash"
 		combat_controller.start_attack(animation_tree, animator, VROID_ANIMATION_BUILDER.VROID_ATTACK_SPEED, clip)
 
 
