@@ -11,6 +11,8 @@ const UAL2_COMBAT := preload("res://characters/player/combat_retarget_ual2.gd")
 # VRoid-only preview attack speed. Keeps legacy Ninja timing untouched.
 # Sword Regular ~0.45 s -> ~0.64 s, Sword Heavy ~0.75 s -> ~1.07 s.
 const VROID_ATTACK_SPEED := 0.70
+# Preview-only lift of Sword I's one-handed heavy swing; no timing or hitbox changes.
+const SWORD_I_ATTACK_LIFT_DEGREES := 14.0
 # Retain Quaternius Run leg/body timing, but keep the weapon arm close to the
 # neutral walking carry instead of letting its high run swing cross the head.
 const RUN_WEAPON_CARRY_BLEND := {
@@ -138,6 +140,27 @@ static func _safe_weapon_run(run: Animation, walk: Animation) -> Animation:
 	return corrected
 
 
+static func _raise_heavy_sword_arc(source: Animation) -> Animation:
+	# Retain the authored heavy-strike keys, raising only the right upper arm
+	# during the middle of the blow. Rest pose and clip endpoints are unchanged.
+	var elevated := source.duplicate() as Animation
+	for track in range(elevated.get_track_count()):
+		if elevated.track_get_type(track) != Animation.TYPE_ROTATION_3D:
+			continue
+		var path := elevated.track_get_path(track)
+		if path.get_subname_count() == 0:
+			continue
+		if String(path.get_subname(path.get_subname_count() - 1)) != "J_Bip_R_UpperArm":
+			continue
+		for key in range(elevated.track_get_key_count(track)):
+			var progress := elevated.track_get_key_time(track, key) / maxf(elevated.length, 0.001)
+			var lift := deg_to_rad(SWORD_I_ATTACK_LIFT_DEGREES) * sin(PI * progress)
+			var pose: Quaternion = elevated.track_get_key_value(track, key)
+			elevated.track_set_key_value(track, key,
+				(Quaternion(Vector3.BACK, -lift) * pose).normalized())
+	return elevated
+
+
 static func _sword_grip(walk: Animation) -> Animation:
 	# VRoid finger joints extend along local +Y, with the knuckles distributed
 	# along local Z. Positive local-Z curl bends the fingers toward the palm.
@@ -201,6 +224,7 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 	if swing == null or heavy == null:
 		push_error("UAL2 Sword attack retargeting failed")
 		return null
+	heavy = _raise_heavy_sword_arc(heavy)
 	library.add_animation("SwordSlash", swing)
 	library.add_animation("SwordHeavyCandidate", heavy)
 	var grip := _sword_grip(walk)
