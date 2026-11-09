@@ -82,6 +82,11 @@ jobs:
         run: |
           "$GODOT_BIN" --headless --path . --script res://tests/vroid_hero_smoke.gd
 
+      # Temporary migration step: capture approved VRoid curves as Godot .tres.
+      - name: Bake approved VRoid clips for migration (temporary)
+        run: |
+          "$GODOT_BIN" --headless --path . --script res://tests/export_approved_vroid_animations.gd
+
       - name: Export Web build
         run: |
           mkdir -p dist
