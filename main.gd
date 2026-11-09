@@ -424,10 +424,10 @@ func _start_attack() -> void:
 		if combat_controller.attack_time_left > 0.0:
 			return
 		if not weapon_visuals.has_weapon():
-			# A single right-hand sweeping strike; visual-only without melee damage.
+			# Accepted right hook with a separate training-only unarmed hit profile.
 			_sync_weapon_pose(0.0)
 			animation_tree.set("parameters/AttackSpeed/scale", VROID_ANIMATION_BUILDER.UNARMED_ATTACK_SPEED)
-			combat_controller.start_attack(animation_tree, animator, VROID_ANIMATION_BUILDER.UNARMED_ATTACK_SPEED, "UnarmedSwing", false)
+			combat_controller.start_attack(animation_tree, animator, VROID_ANIMATION_BUILDER.UNARMED_ATTACK_SPEED, "UnarmedSwing", true, true)
 			return
 		# Keep the animation playback rate consistent with the armed cooldown.
 		animation_tree.set("parameters/AttackSpeed/scale", VROID_ANIMATION_BUILDER.VROID_ATTACK_SPEED)
