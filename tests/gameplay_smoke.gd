@@ -48,6 +48,10 @@ func _run_checks() -> void:
 	var debug_toggle := game.get_node_or_null("HUD/DebugToggleButton") as Button
 	if not _require(debug_panel != null and not debug_panel.visible and debug_toggle != null and debug_toggle.text == "DEBUG" and debug_toggle.pressed.is_connected(Callable(game, "_toggle_debug_panel")), "Debug panel must start hidden with a functional toggle"):
 		return
+	if not _require(is_zero_approx(debug_toggle.anchor_left) and is_zero_approx(debug_toggle.anchor_top) and is_zero_approx(debug_panel.anchor_left) and is_zero_approx(debug_panel.anchor_top), "DEBUG button and panel must both anchor to the upper-left viewport corner"):
+		return
+	if not _require(debug_toggle.offset_left >= 8.0 and debug_panel.offset_left >= 8.0 and debug_panel.offset_top >= debug_toggle.offset_bottom + 8.0, "Left-side diagnostic panel must begin below DEBUG without overlapping the button"):
+		return
 	debug_toggle.pressed.emit()
 	if not _require(debug_panel.visible and debug_toggle.text == "CLOSE", "DEBUG must open diagnostic controls"):
 		return
@@ -543,6 +547,18 @@ func _run_checks() -> void:
 	var layout: Dictionary = touch_controls.call("_layout")
 	if not _require(float(layout["zoom_radius"]) >= 24.0 and float(layout["zoom_radius"]) < float(layout["jump_radius"]), "Secondary HUD buttons must be compact but touch accessible"):
 		return
+	for viewport_size in [Vector2(1280.0, 720.0), Vector2(768.0, 432.0)]:
+		touch_controls.size = viewport_size
+		var mobile_layout: Dictionary = touch_controls.call("_layout")
+		var full: Vector2 = mobile_layout["fullscreen"]
+		var zoom: Vector2 = mobile_layout["zoom"]
+		var weapon: Vector2 = mobile_layout["weapon"]
+		var tap_distance: float = float(mobile_layout["zoom_radius"]) * 2.4
+		if not _require(full.x > viewport_size.x * 0.8 and is_equal_approx(full.x, zoom.x) and is_equal_approx(zoom.x, weapon.x), "FULL, ZOOM and WPN must align at the upper-right on both landscape sizes"):
+			return
+		if not _require(full.y < zoom.y and zoom.y < weapon.y and weapon.y < viewport_size.y * 0.5 and full.distance_to(zoom) > tap_distance and zoom.distance_to(weapon) > tap_distance, "Upper-right buttons must be ordered and have separate touch targets"):
+			return
+	touch_controls.size = Vector2(1280.0, 720.0)
 	var jump_center: Vector2 = layout["jump"]
 	var dash_center: Vector2 = layout["dash"]
 	var attack_center: Vector2 = layout["attack"]
