@@ -16,19 +16,6 @@ func _check(condition: bool, message: String) -> bool:
 
 
 func _run() -> void:
-	# Temporary inventory to find licensed authored fist clips in current UAL2 source.
-	var ual2_source := VROID_ANIM.UAL2_COMBAT.SOURCE.instantiate()
-	var ual2_player := VROID_ANIM.UAL2_COMBAT._find_animator(ual2_source)
-	if ual2_player != null:
-		print("AVAILABLE_UAL2_CLIPS=", ual2_player.get_animation_list())
-	ual2_source.free()
-	var zip := ZIPReader.new()
-	if zip.open("res://assets_source/animation_libraries/quaternius/ual1_standard_godot.zip") == OK:
-		for filename in zip.get_files():
-			var label := filename.to_lower()
-			if "punch" in label or "fight" in label or "attack" in label or "combat" in label or "melee" in label or "unarmed" in label or "animations" in label:
-				print("AVAILABLE_UAL1_FILE=", filename)
-		zip.close()
 	var packed := load("res://main.tscn") as PackedScene
 	if not _check(packed != null, "main.tscn not loaded"):
 		return
@@ -571,11 +558,44 @@ func _run() -> void:
 	attack_combat.attack_time_left = 0.0
 	attack_combat.attack_hit_pending = false
 	game.call("_start_attack")
-	if not _check(attack_combat.attack_time_left == 0.0 and not attack_combat.attack_hit_pending, "ATK without a weapon must not start a sword attack"):
+	var unarmed_name := VROID_ANIM.find_clip(animator, "UnarmedCombo")
+	if not _check(not unarmed_name.is_empty(), "unarmed fist animation missing"):
 		return
-	# Switching to None in the middle of an attack must cancel it cleanly.
+	var unarmed_clip := animator.get_animation(unarmed_name)
+	if not _check(attack_combat.attack_time_left > 0.75 and not attack_combat.attack_hit_pending, "ATK without weapon must animate without sword damage"):
+		return
+	if not _check(float(tree.get("parameters/UnarmedChoice/blend_amount")) > 0.99, "unarmed combo must be selected"):
+		return
+	var unarmed_tracks := {}
+	for track in range(unarmed_clip.get_track_count()):
+		var path := unarmed_clip.track_get_path(track)
+		var target := String(path.get_subname(path.get_subname_count() - 1))
+		unarmed_tracks[target] = track
+		if not _check(unarmed_clip.rotation_track_interpolate(track, 0.0).is_equal_approx(unarmed_clip.rotation_track_interpolate(track, unarmed_clip.length)), "unarmed combo must return to start: " + target):
+			return
+	for target in ["J_Bip_R_UpperArm", "J_Bip_L_UpperArm", "J_Bip_R_Index2", "J_Bip_L_Index2"]:
+		if not _check(unarmed_tracks.has(target), "unarmed combo missing bone: " + target):
+			return
+	var right_track: int = unarmed_tracks["J_Bip_R_UpperArm"]
+	var left_track: int = unarmed_tracks["J_Bip_L_UpperArm"]
+	var right_jab := unarmed_clip.rotation_track_interpolate(right_track, 0.27)
+	var left_jab := unarmed_clip.rotation_track_interpolate(left_track, 0.48)
+	if not _check(right_jab.angle_to(unarmed_clip.rotation_track_interpolate(right_track, 0.10)) > 0.25, "right fist must extend visibly"):
+		return
+	if not _check(left_jab.angle_to(unarmed_clip.rotation_track_interpolate(left_track, 0.10)) > 0.25, "left fist must extend visibly"):
+		return
+	var animation_graph := tree.tree_root as AnimationNodeBlendTree
+	var one_shot := animation_graph.get_node("Attack") as AnimationNodeOneShot
+	var right_finger_path := unarmed_clip.track_get_path(unarmed_tracks["J_Bip_R_Index2"])
+	var left_finger_path := unarmed_clip.track_get_path(unarmed_tracks["J_Bip_L_Index2"])
+	if not _check(one_shot.is_path_filtered(right_finger_path) and one_shot.is_path_filtered(left_finger_path), "unarmed fist curl must be included in the attack layer"):
+		return
+	# A new weapon cancels an active fist combo, preventing punches with a sword.
 	weapon_visuals.equip(0)
 	game.call("_update_weapon_display")
+	if not _check(attack_combat.attack_time_left == 0.0 and float(tree.get("parameters/UnarmedChoice/blend_amount")) < 0.01, "re-equipping during unarmed attack must cancel fist combo"):
+		return
+	# Switching to None in the middle of an attack must cancel it cleanly.
 	game.call("_start_attack")
 	if not _check(attack_combat.attack_time_left > 0.0 and attack_combat.attack_hit_pending, "Sword I attack did not start"):
 		return

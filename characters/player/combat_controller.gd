@@ -15,7 +15,7 @@ var attack_duration := 0.0
 var attack_hit_pending := false
 
 
-func start_attack(animation_tree: AnimationTree, animator: AnimationPlayer, speed: float = ATTACK_SPEED, clip_short_name: String = "SwordSlash") -> void:
+func start_attack(animation_tree: AnimationTree, animator: AnimationPlayer, speed: float = ATTACK_SPEED, clip_short_name: String = "SwordSlash", can_hit: bool = true) -> void:
 	if animation_tree == null or attack_time_left > 0.0:
 		return
 	# Default arguments preserve the approved Ninja timing and clip.
@@ -26,7 +26,8 @@ func start_attack(animation_tree: AnimationTree, animator: AnimationPlayer, spee
 		return
 	attack_duration = animator.get_animation(clip_name).length / maxf(speed, 0.001)
 	attack_time_left = attack_duration
-	attack_hit_pending = true
+	# Fist animations are visual-only until unarmed damage/range are approved.
+	attack_hit_pending = can_hit
 	animation_tree.set("parameters/Attack/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
 
 

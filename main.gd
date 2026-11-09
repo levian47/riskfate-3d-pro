@@ -311,8 +311,9 @@ func _update_weapon_display() -> void:
 		touch_hud.weapon_slots = 5 if use_legacy_hero else WEAPON_VISUALS.WEAPONS.size() + 1
 		touch_hud.queue_redraw()
 	if not use_legacy_hero and animation_tree != null:
-		# Removing the weapon mid-attack must not leave a sword animation or a late hit.
-		if not weapon_visuals.has_weapon():
+		# Switching across armed/unarmed modes cancels the incompatible attack.
+		# Sword-to-sword switches retain the existing in-flight clip behaviour.
+		if not weapon_visuals.has_weapon() or (combat_controller.attack_time_left > 0.0 and float(animation_tree.get("parameters/UnarmedChoice/blend_amount")) > 0.5):
 			combat_controller.cancel_attack(animation_tree)
 		_sync_weapon_pose(0.0)
 	var help_label := get_node_or_null("HUD/HelpPanel/HelpText") as Label
@@ -332,8 +333,10 @@ func _sync_weapon_pose(delta: float) -> void:
 	animation_tree.set("parameters/RunArms/blend_amount", 1.0 - weapon_pose_blend)
 	# Sword I previews the one-handed heavy strike; the others use the standard 1H.
 	# The clip choice is held until the current attack has finished.
-	if armed and combat_controller.attack_time_left <= 0.0:
-		animation_tree.set("parameters/SlashChoice/blend_amount", 1.0 if weapon_visuals.current_index == 0 else 0.0)
+	if combat_controller.attack_time_left <= 0.0:
+		animation_tree.set("parameters/UnarmedChoice/blend_amount", 0.0 if armed else 1.0)
+		if armed:
+			animation_tree.set("parameters/SlashChoice/blend_amount", 1.0 if weapon_visuals.current_index == 0 else 0.0)
 
 
 func _start_dash() -> void:
@@ -419,7 +422,10 @@ func _start_attack() -> void:
 		combat_controller.start_attack(animation_tree, animator)
 	else:
 		if not weapon_visuals.has_weapon():
-			return # No unarmed attack: ATK without a weapon does nothing.
+			# Fist combo is visual-only; do not inherit the sword training hit.
+			_sync_weapon_pose(0.0)
+			combat_controller.start_attack(animation_tree, animator, VROID_ANIMATION_BUILDER.UNARMED_ATTACK_SPEED, "UnarmedCombo", false)
+			return
 		# Match VRoid-only playback and the selected heavy/regular source clip.
 		var clip := "SwordHeavyCandidate" if weapon_visuals.current_index == 0 else "SwordSlash"
 		combat_controller.start_attack(animation_tree, animator, VROID_ANIMATION_BUILDER.VROID_ATTACK_SPEED, clip)
