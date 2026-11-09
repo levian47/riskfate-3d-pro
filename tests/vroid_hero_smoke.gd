@@ -347,6 +347,8 @@ func _run() -> void:
 					max_speed_previous = maxf(max_speed_previous, previous_pose.angle_to(old_value) / dt)
 					max_speed_new = maxf(max_speed_new, new_pose.angle_to(new_value) / dt)
 			else:
+				if diff >= 0.0005:
+					print("SWORD_I_DIFF unrelated_bone=", track_bone, " key=", key, " diff=", diff, " old=", old_value, " new=", new_value)
 				if not _check(diff < 0.0005, "Sword I correction leaked into another bone: " + track_bone):
 					return
 			previous_pose = old_value
