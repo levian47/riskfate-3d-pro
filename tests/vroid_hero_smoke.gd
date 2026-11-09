@@ -397,6 +397,21 @@ func _run() -> void:
 				return
 	if not _check(finish_hand_height > -0.40 and finish_hand_height < 0.12, "Sword I finishing hand must end near shoulder height"):
 		return
+	# Temporary diagnostic: sample wrist-local pitch axes to find the
+	# smallest finishing correction that lifts the actual blade tip.
+	animator.play(heavy_name)
+	animator.seek(heavy_clip.length * 0.79, true)
+	rig.force_update_all_bone_transforms()
+	var baseline_hand: Quaternion = rig.get_bone_pose_rotation(hand_idx)
+	for correction_axis in [Vector3.RIGHT, Vector3.LEFT, Vector3.UP, Vector3.DOWN, Vector3.FORWARD, Vector3.BACK]:
+		rig.set_bone_pose_rotation(hand_idx, (Quaternion(correction_axis, 0.20) * baseline_hand).normalized())
+		rig.force_update_all_bone_transforms()
+		var altered_hand: Transform3D = rig.global_transform * rig.get_bone_global_pose(hand_idx)
+		var altered_shoulder_y: float = (rig.global_transform * rig.get_bone_global_pose(upper_idx)).origin.y
+		var altered_tip: Vector3 = altered_hand * (grip.transform * (sword_holder.transform * sword_tip_local))
+		print("SWORD_I_WRIST_PROBE axis=", correction_axis, " tip_above_shoulder=", altered_tip.y - altered_shoulder_y)
+	rig.set_bone_pose_rotation(hand_idx, baseline_hand)
+	rig.force_update_all_bone_transforms()
 	if not _check(finish_tip_height > -0.40 and finish_tip_height < 0.30, "Sword I finishing blade tip must end near shoulder height, not overhead or at the knee"):
 		return
 	animator.play(walk)
