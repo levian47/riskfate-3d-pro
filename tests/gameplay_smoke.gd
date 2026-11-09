@@ -21,7 +21,7 @@ func _run_checks() -> void:
 	await process_frame
 	if not _require(Engine.max_fps == 60, "Engine must read the 60 FPS project limit"):
 		return
-	var limit_button := game.get_node_or_null("HUD/FPSLimitButton") as Button
+	var limit_button := game.get_node_or_null("HUD/DebugPanel/Content/Grid/FPSLimitButton") as Button
 	if not _require(limit_button != null and limit_button.text == "FPS CAP 60" and limit_button.pressed.is_connected(Callable(game, "_toggle_fps_limit")), "FPS cap button must start at 60 and be connected"):
 		return
 	limit_button.pressed.emit()
@@ -30,7 +30,7 @@ func _run_checks() -> void:
 	limit_button.pressed.emit()
 	if not _require(Engine.max_fps == 60 and limit_button.text == "FPS CAP 60", "FPS limit must restore 60 on the next tap"):
 		return
-	var build_label := game.get_node_or_null("HUD/CrowdBuildLabel") as Label
+	var build_label := game.get_node_or_null("HUD/DebugPanel/Content/CrowdBuildLabel") as Label
 	var expected_build := "BUILD CLASSIC (6 MATERIALS)" if OS.has_feature("legacy_crowd") else "BUILD OPTIMIZED (1 MATERIAL)"
 	if not _require(build_label != null and build_label.text == expected_build, "Build label must identify the selected rendering variant"):
 		return
@@ -43,8 +43,21 @@ func _run_checks() -> void:
 	game.call("_process", 0.51)
 	if not _require(fps_label.text.begins_with("FPS: ") and fps_label.text != "FPS: --", "FPS counter must update from Engine FPS"):
 		return
-	# The standalone HUD builder must preserve the original scene paths
-	# and the desktop fullscreen action; the mobile HUD remains unchanged.
+	# Debug controls must remain hidden until explicitly opened on phone or desktop.
+	var debug_panel := game.get_node_or_null("HUD/DebugPanel") as PanelContainer
+	var debug_toggle := game.get_node_or_null("HUD/DebugToggleButton") as Button
+	if not _require(debug_panel != null and not debug_panel.visible and debug_toggle != null and debug_toggle.text == "DEBUG" and debug_toggle.pressed.is_connected(Callable(game, "_toggle_debug_panel")), "Debug panel must start hidden with a functional toggle"):
+		return
+	debug_toggle.pressed.emit()
+	if not _require(debug_panel.visible and debug_toggle.text == "CLOSE", "DEBUG must open diagnostic controls"):
+		return
+	debug_toggle.pressed.emit()
+	if not _require(not debug_panel.visible and debug_toggle.text == "DEBUG", "DEBUG must close diagnostic controls"):
+		return
+	var debug_skel := game.get_node_or_null("HUD/DebugPanel/Content/Grid/SkeletonDebugButton") as Button
+	if not _require(debug_skel != null and debug_skel.text == "SKEL OFF" and debug_skel.pressed.is_connected(Callable(game, "_toggle_skeleton_debug")), "Skeleton toggle must be accessible only within DEBUG"):
+		return
+	# The standalone HUD builder retains accepted gameplay controls and fullscreen.
 	var hud_panel := game.get_node_or_null("HUD/FPSCounter") as PanelContainer
 	if not _require(hud_panel != null and hud_panel.get_node_or_null("Stats/FPSLabel") == fps_label and hud_panel.get_node_or_null("Stats/PingLabel") == ping_label, "HUD counter hierarchy must survive extraction"):
 		return
@@ -813,9 +826,9 @@ func _run_checks() -> void:
 	if not _require(selected_crowd_mesh != null and selected_crowd_mesh.get_surface_count() == expected_surfaces, "Benchmark mesh must respect the build feature tag"):
 		return
 	var bench = game.get("crowd_benchmark")
-	var bench_button := game.get_node_or_null("HUD/CrowdBenchmarkButton") as Button
-	var mode_button := game.get_node_or_null("HUD/CrowdModeButton") as Button
-	var draw_stats := game.get_node_or_null("HUD/CrowdDrawStats") as Label
+	var bench_button := game.get_node_or_null("HUD/DebugPanel/Content/Grid/CrowdBenchmarkButton") as Button
+	var mode_button := game.get_node_or_null("HUD/DebugPanel/Content/Grid/CrowdModeButton") as Button
+	var draw_stats := game.get_node_or_null("HUD/DebugPanel/Content/CrowdDrawStats") as Label
 	if not _require(bench != null and bench_button != null and mode_button != null and draw_stats != null, "Benchmark and diagnostic HUD controls must exist"):
 		return
 	if not _require(bench_button.text == "LOAD 0" and mode_button.text == "MODE RUN" and not draw_stats.visible, "Crowd diagnostics must start disabled"):
