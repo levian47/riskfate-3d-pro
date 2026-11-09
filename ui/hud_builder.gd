@@ -51,7 +51,13 @@ static func build_fps_counter(canvas: CanvasLayer) -> Label:
 static func build_desktop_controls(canvas: CanvasLayer) -> Button:
 	var panel := PanelContainer.new()
 	panel.name = "HelpPanel"
-	panel.position = Vector2(18, 18)
+	# Keep desktop help out of the upper-left DEBUG controls.
+	panel.anchor_top = 1.0
+	panel.anchor_bottom = 1.0
+	panel.offset_left = 18.0
+	panel.offset_right = 18.0
+	panel.offset_top = -132.0
+	panel.offset_bottom = -18.0
 	canvas.add_child(panel)
 	var label := Label.new()
 	label.name = "HelpText"
@@ -86,26 +92,28 @@ static func build_debug_controls(canvas: CanvasLayer, ninja_visual_controls: boo
 	var toggle := Button.new()
 	toggle.name = "DebugToggleButton"
 	toggle.text = "DEBUG"
-	# Left screen edge, vertically centered: clear of the top-left FULL
-	# control, bottom-left joystick and the main play area.
+	# Top-left, directly above the diagnostic panel. Gameplay controls sit on the right.
 	toggle.anchor_left = 0.0
 	toggle.anchor_right = 0.0
-	toggle.anchor_top = 0.5
-	toggle.anchor_bottom = 0.5
+	toggle.anchor_top = 0.0
+	toggle.anchor_bottom = 0.0
 	toggle.offset_left = 10.0
 	toggle.offset_right = 86.0
-	toggle.offset_top = -21.0
-	toggle.offset_bottom = 21.0
+	toggle.offset_top = 10.0
+	toggle.offset_bottom = 52.0
 	canvas.add_child(toggle)
 
 	var panel := PanelContainer.new()
 	panel.name = "DebugPanel"
-	panel.anchor_left = 0.5
-	panel.anchor_right = 0.5
-	panel.offset_left = -166.0
-	panel.offset_right = 166.0
-	panel.offset_top = 90.0
-	panel.offset_bottom = 331.0
+	# Start below DEBUG with a 12px gap; do not overlap its hit area.
+	panel.anchor_left = 0.0
+	panel.anchor_right = 0.0
+	panel.anchor_top = 0.0
+	panel.anchor_bottom = 0.0
+	panel.offset_left = 10.0
+	panel.offset_right = 342.0
+	panel.offset_top = 64.0
+	panel.offset_bottom = 305.0
 	var background := StyleBoxFlat.new()
 	background.bg_color = Color(0.05, 0.08, 0.12, 0.94)
 	background.set_corner_radius_all(10)
