@@ -107,6 +107,9 @@ func equip(index: int) -> bool:
 	if current_visual != null:
 		mount.remove_child(current_visual)
 		current_visual.queue_free()
+	# Godot may auto-rename the newly added holder while the old child
+	# still owns "EquippedWeapon". Restore the stable name after removing it.
+	holder.name = "EquippedWeapon"
 	current_visual = holder
 	current_index = index
 	return true
