@@ -52,8 +52,8 @@ func initialize(model: Node) -> bool:
 	mount = Node3D.new()
 	mount.name = "WeaponMount"
 	attachment.add_child(mount)
-	# This mount has the same identity transform as the approved test sword;
-	# animation pose checks use it as a fixed reference, not the mesh tip.
+	# Keep the same attachment to the right hand. Each weapon restores its own
+	# mount transform in equip(); never rotate the original Ninja mount.
 	return equip(0)
 
 
@@ -62,7 +62,7 @@ func equip(index: int) -> bool:
 		return false
 	# Keep the original Ninja mount and all other weapons unchanged.
 	mount.position = VROID_ONE_HAND_SWORD_GRIP_OFFSET if is_vroid and index in [0, 1] else Vector3.ZERO
-	mount.rotation_degrees = VROID_ONE_HAND_SWORD_GRIP_ROTATION if is_vroid and index == 0 else Vector3.ZERO
+	mount.rotation_degrees = VROID_ONE_HAND_SWORD_GRIP_ROTATION if is_vroid and index in [0, 1] else Vector3.ZERO
 	var specification: Dictionary = WEAPONS[index]
 	var packed := load(String(specification["path"])) as PackedScene
 	if packed == null:
