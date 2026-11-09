@@ -61,8 +61,8 @@ func equip(index: int) -> bool:
 	if mount == null or index < 0 or index >= WEAPONS.size():
 		return false
 	# Keep the original Ninja mount and all other weapons unchanged.
-	mount.position = VROID_SWORD_I_GRIP_OFFSET if is_vroid and index in [0, 1] else Vector3.ZERO
-	mount.rotation_degrees = VROID_SWORD_I_GRIP_ROTATION if is_vroid and index == 0 else Vector3.ZERO
+	mount.position = VROID_ONE_HAND_SWORD_GRIP_OFFSET if is_vroid and index in [0, 1] else Vector3.ZERO
+	mount.rotation_degrees = VROID_ONE_HAND_SWORD_GRIP_ROTATION if is_vroid and index == 0 else Vector3.ZERO
 	var specification: Dictionary = WEAPONS[index]
 	var packed := load(String(specification["path"])) as PackedScene
 	if packed == null:
