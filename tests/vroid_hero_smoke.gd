@@ -247,6 +247,22 @@ func _run() -> void:
 	var heavy_duration := heavy_clip.length / VROID_ANIM.VROID_ATTACK_SPEED
 	if not _check(absf(float(combat.get("attack_duration")) - heavy_duration) < 0.02, "Sword II attack timer must match slowed heavy clip"):
 		return
+	# Diagnostic: identify each imported weapon's actual mesh orientation and
+	# grip anchor before altering artwork-relative offsets. Keep in test logs.
+	for weapon_id in range(WEAPONS.WEAPONS.size()):
+		if not _check(weapon_visuals.equip(weapon_id), "cannot inspect weapon geometry"):
+			return
+		var holder := weapon_visuals.current_visual as Node3D
+		var source := holder.get_child(0) as Node3D
+		var local_bounds: AABB = weapon_visuals._bounds_in_root(holder)
+		print("WEAPON_FIT id=", weapon_id, " name=", WEAPONS.WEAPONS[weapon_id]["name"],
+			" mount=", grip.position, " mount_rotation=", grip.rotation_degrees,
+			" source_rotation=", source.rotation_degrees,
+			" holder_position=", holder.position, " holder_scale=", holder.scale,
+			" mesh_aabb=", local_bounds)
+	if not _check(weapon_visuals.equip(0), "restore Sword I after diagnostics"):
+		return
+	game.call("_update_weapon_display")
 	print("VRoid smoke test OK: 103 bones, ", mesh_count, " mesh nodes, Quaternius Walk/Run, five palm grips, slower regular/heavy attacks")
 	game.queue_free()
 	quit(0)
