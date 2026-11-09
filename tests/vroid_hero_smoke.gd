@@ -73,6 +73,33 @@ func _run() -> void:
 		return
 	if not _check(new_run.length > 0.90 and new_run.length < 1.00, "forward jog must replace overly aggressive sprint"):
 		return
+	# Weapon-safe running only retunes the right arm; verify the original
+	# Quaternius gait, torso and left arm are left identical.
+	var original_run := VROID_ANIM.QUATERNIUS_LOCOMOTION.build_from_reference(animator.get_animation(walk), true, rig)
+	if not _check(original_run != null, "original run data unavailable for regression comparison"):
+		return
+	var carry_changed := 0
+	for index in range(new_run.get_track_count()):
+		var path := new_run.track_get_path(index)
+		var kind := new_run.track_get_type(index)
+		var bone_name := String(path.get_subname(path.get_subname_count() - 1)) if path.get_subname_count() > 0 else ""
+		if kind != Animation.TYPE_ROTATION_3D:
+			continue
+		var time := new_run.length * 0.28
+		var original_pose := original_run.rotation_track_interpolate(index, time)
+		var carried_pose := new_run.rotation_track_interpolate(index, time)
+		var difference := original_pose.angle_to(carried_pose)
+		if VROID_ANIM.RUN_WEAPON_CARRY_BLEND.has(bone_name):
+			if difference > 0.02:
+				carry_changed += 1
+		else:
+			if not _check(difference < 0.001,
+				"weapon-run correction altered accepted legs, torso, or left arm: " + bone_name):
+				return
+	if not _check(carry_changed >= 2,
+		"weapon-run pose must move multiple right-arm bones from head-height swing"):
+		return
+	print("VRoid running weapon carry: changed_right_arm_tracks=", carry_changed)
 	for candidate in [new_walk, new_run]:
 		var new_clip: Animation = candidate as Animation
 		var lower_leg_track := -1
@@ -196,6 +223,26 @@ func _run() -> void:
 		return
 	if not _check(regular_clip.length > 0.40 and regular_clip.length < 0.50 and heavy_clip.length > 0.70 and heavy_clip.length < 0.80, "source attack durations do not match UAL2"):
 		return
+	# Confirm stronger authored arm motion rather than faster weapon visuals.
+	for short_name in ["Sword_Regular_A", "Sword_Heavy_A"]:
+		var original_attack := VROID_ANIM.UAL2_COMBAT.build(short_name, animator.get_animation(walk), rig)
+		var boosted_attack: Animation = regular_clip if short_name == "Sword_Regular_A" else heavy_clip
+		if not _check(original_attack != null and original_attack.get_track_count() == boosted_attack.get_track_count(),
+			"cannot compare authored attack with widened-arc version"):
+			return
+		var arm_amplification := 0.0
+		for track in range(boosted_attack.get_track_count()):
+			var path := boosted_attack.track_get_path(track)
+			var bone := String(path.get_subname(path.get_subname_count() - 1)) if path.get_subname_count() > 0 else ""
+			if bone != "J_Bip_R_UpperArm":
+				continue
+			var sample_time := boosted_attack.length * 0.5
+			arm_amplification = original_attack.rotation_track_interpolate(track, sample_time).angle_to(
+				boosted_attack.rotation_track_interpolate(track, sample_time))
+		if not _check(arm_amplification > 0.045,
+			"wider attack must change the right upper-arm arc: " + short_name):
+			return
+		print("VRoid attack arc ", short_name, ": upper_arm_extra_radians=", arm_amplification)
 	var slash_blend := graph.get_node("SlashChoice") as AnimationNodeBlend2
 	if not _check(slash_blend != null, "UAL2 combat clip selector missing"):
 		return
@@ -307,7 +354,7 @@ func _run() -> void:
 	if not _check(weapon_visuals.equip(0), "restore Sword I after diagnostics"):
 		return
 	game.call("_update_weapon_display")
-	print("VRoid smoke test OK: 103 bones, ", mesh_count, " mesh nodes, Quaternius Walk/Run, heavy Sword I x1.75, one-hand Sword II, Cutlass x0.75 with grip correction, Knife x1.30, dagger grips +4%, left palm offset")
+	print("VRoid smoke test OK: 103 bones, ", mesh_count, " mesh nodes, Quaternius Walk/Run, weapon-safe Run right-arm carry, amplified UAL2 attack arcs, preserved VRoid weapon fitting")
 	game.queue_free()
 	quit(0)
 
