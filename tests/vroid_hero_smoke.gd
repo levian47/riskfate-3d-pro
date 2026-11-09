@@ -48,6 +48,76 @@ func _run() -> void:
 		return
 	if not _check(animator.get_animation(walk).loop_mode == Animation.LOOP_LINEAR and animator.get_animation(jog).loop_mode == Animation.LOOP_LINEAR, "Walk/Jog must loop"):
 		return
+	# Quaternius CC0 locomotion is separate from the preserved original
+	# VRoid Walk/Jog and must be the active clip in the gameplay graph.
+	var new_walk_name := VROID_ANIM.find_clip(animator, "QuaterniusWalk")
+	var new_run_name := VROID_ANIM.find_clip(animator, "QuaterniusRun")
+	if not _check(not new_walk_name.is_empty() and not new_run_name.is_empty(), "new CC0 Walk/Run clips missing"):
+		return
+	var new_walk: Animation = animator.get_animation(new_walk_name)
+	var new_run: Animation = animator.get_animation(new_run_name)
+	if not _check(new_walk.loop_mode == Animation.LOOP_LINEAR and new_run.loop_mode == Animation.LOOP_LINEAR, "new locomotion must loop"):
+		return
+	if not _check(new_walk.get_track_count() == 23 and new_run.get_track_count() == 23, "22 retargeted bones plus hips movement expected"):
+		return
+	if not _check(new_run.length > 0.90 and new_run.length < 1.00, "forward jog must replace overly aggressive sprint"):
+		return
+	for candidate in [new_walk, new_run]:
+		var new_clip: Animation = candidate as Animation
+		var lower_leg_track := -1
+		for index in range(new_clip.get_track_count()):
+			if new_clip.track_get_type(index) != Animation.TYPE_ROTATION_3D:
+				continue
+			var track_path: NodePath = new_clip.track_get_path(index)
+			if track_path.get_subname_count() > 0 and String(track_path.get_subname(track_path.get_subname_count() - 1)) == "J_Bip_L_LowerLeg":
+				lower_leg_track = index
+				break
+		if not _check(lower_leg_track >= 0, "new locomotion clip must animate the left lower leg"):
+			return
+		var start_pose: Quaternion = new_clip.rotation_track_interpolate(lower_leg_track, 0.0)
+		var half_pose: Quaternion = new_clip.rotation_track_interpolate(lower_leg_track, new_clip.length * 0.5)
+		var end_pose: Quaternion = new_clip.rotation_track_interpolate(lower_leg_track, new_clip.length)
+		if not _check(start_pose.angle_to(half_pose) > 0.03, "new locomotion lower leg must actually move"):
+			return
+		if not _check(start_pose.angle_to(end_pose) < 0.02, "new locomotion must have a seamless loop"):
+			return
+	# Regression: Godot 4 bone transform tracks must include bone rest.
+	# Without rest position, hips fall to y≈0; without rest rotations,
+	# limbs collapse into a sideways/T-pose despite a passing basic smoke test.
+	var hips_index := rig.find_bone("J_Bip_C_Hips")
+	var thigh_index := rig.find_bone("J_Bip_L_UpperLeg")
+	if not _check(hips_index >= 0 and thigh_index >= 0, "VRoid hips/thigh rest missing"):
+		return
+	var hips_rest := rig.get_bone_rest(hips_index).origin
+	var thigh_rest := rig.get_bone_rest(thigh_index).basis.get_rotation_quaternion()
+	for candidate in [new_walk, new_run]:
+		var clip: Animation = candidate as Animation
+		var hips_track := -1
+		var thigh_track := -1
+		for index in range(clip.get_track_count()):
+			var path: NodePath = clip.track_get_path(index)
+			if path.get_subname_count() == 0:
+				continue
+			var bone_name := String(path.get_subname(path.get_subname_count() - 1))
+			if bone_name == "J_Bip_C_Hips" and clip.track_get_type(index) == Animation.TYPE_POSITION_3D:
+				hips_track = index
+			if bone_name == "J_Bip_L_UpperLeg" and clip.track_get_type(index) == Animation.TYPE_ROTATION_3D:
+				thigh_track = index
+		if not _check(hips_track >= 0 and thigh_track >= 0, "Quaternius tracks missing hips/thigh"):
+			return
+		var hips_pose := clip.position_track_interpolate(hips_track, 0.0)
+		if not _check(hips_pose.distance_to(hips_rest) < 0.10, "Quaternius hips position omitted Bone Rest"):
+			return
+		var thigh_pose := clip.rotation_track_interpolate(thigh_track, 0.0)
+		if not _check(thigh_pose.angle_to(thigh_rest) < 1.7, "Quaternius thigh rotation omitted Bone Rest"):
+			return
+	var graph := tree.tree_root as AnimationNodeBlendTree
+	if not _check(graph != null, "VRoid AnimationTree root missing"):
+		return
+	var walk_node := graph.get_node("Walk") as AnimationNodeAnimation
+	var run_node := graph.get_node("Run") as AnimationNodeAnimation
+	if not _check(walk_node != null and run_node != null and String(walk_node.animation) == new_walk_name and String(run_node.animation) == new_run_name, "gameplay graph not using new Walk/Run"):
+		return
 	if not _check(not VROID_ANIM.find_clip(animator, "SwordSlash").is_empty(), "combat timing clip missing"):
 		return
 	game.call("_set_locomotion", "Walk", true)
@@ -70,7 +140,7 @@ func _run() -> void:
 	game.call("_start_attack")
 	if not _check(float(game.get("combat_controller").get("attack_time_left")) > 0.0, "attack input/timing broken"):
 		return
-	print("VRoid smoke test OK: 103 bones, ", mesh_count, " mesh nodes, Walk/Jog, weapon mount and attack")
+	print("VRoid smoke test OK: 103 bones, ", mesh_count, " mesh nodes, original Walk/Jog and Quaternius Walk/Run, weapon mount and attack")
 	game.queue_free()
 	quit(0)
 

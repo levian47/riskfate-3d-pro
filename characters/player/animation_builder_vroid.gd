@@ -1,8 +1,11 @@
 extends RefCounted
 # VRoid-only animation graph. The original Ninja graph and its approved
 # animation resources are deliberately left untouched for regression testing.
-# Walk/Jog are supplied by the user. Idle, Jump and attack are provisional
+# Original VRoid Walk/Jog are retained as rollback clips. New Walk/Run come
+# from retargeted CC0 Quaternius motion; Idle, Jump, attack stay provisional.
 # functional placeholders until purpose-made VRoid clips are available.
+
+const QUATERNIUS_LOCOMOTION := preload("res://characters/player/locomotion_quaternius.gd")
 
 const ARM_BONES := [
 	"J_Bip_R_Shoulder", "J_Bip_R_UpperArm", "J_Bip_R_LowerArm",
@@ -84,6 +87,16 @@ static func _add_clip(root: AnimationNodeBlendTree, node_name: String, animation
 	root.add_node(node_name, clip_node)
 
 
+static func _find_skeleton(node: Node) -> Skeleton3D:
+	if node is Skeleton3D:
+		return node as Skeleton3D
+	for child in node.get_children():
+		var found := _find_skeleton(child)
+		if found != null:
+			return found
+	return null
+
+
 static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_speed: float) -> AnimationTree:
 	var walk_name := find_clip(animator, "Walk")
 	var jog_name := find_clip(animator, "Jog")
@@ -100,6 +113,20 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 		push_error("VRoid sword placeholder missing right arm rotation tracks")
 		return null
 	library.add_animation("SwordSlash", swing)
+	# Godot 4 bone animation values include the actual per-bone rest transform.
+	# The previous retarget missed this and collapsed the VRoid pose in gameplay.
+	var skeleton := _find_skeleton(model)
+	if skeleton == null:
+		push_error("Imported VRoid Skeleton3D not found")
+		return null
+	# The original imported Walk/Jog clips are kept intact on the VRoid model.
+	var replacement_walk: Animation = QUATERNIUS_LOCOMOTION.build_from_reference(walk, false, skeleton)
+	var replacement_run: Animation = QUATERNIUS_LOCOMOTION.build_from_reference(walk, true, skeleton)
+	if replacement_walk == null or replacement_run == null:
+		push_error("Failed to retarget Quaternius locomotion to VRoid skeleton")
+		return null
+	library.add_animation("QuaterniusWalk", replacement_walk)
+	library.add_animation("QuaterniusRun", replacement_run)
 	if animator.add_animation_library("vroid", library) != OK:
 		return null
 
@@ -109,7 +136,7 @@ static func setup_animation_tree(model: Node, animator: AnimationPlayer, attack_
 	locomotion.xfade_time = 0.10
 	root.add_node("Locomotion", locomotion)
 	var state_names := ["Idle", "Walk", "Run", "Jump"]
-	var clips := ["vroid/Idle", walk_name, jog_name, "vroid/Jump"]
+	var clips := ["vroid/Idle", "vroid/QuaterniusWalk", "vroid/QuaterniusRun", "vroid/Jump"]
 	for i in range(state_names.size()):
 		var state: String = state_names[i]
 		_add_clip(root, state, clips[i])
