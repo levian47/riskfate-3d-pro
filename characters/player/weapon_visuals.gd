@@ -9,13 +9,13 @@ const WEAPONS := [
 	{"name": "Cutlass", "path": "res://assets/equipment/weapons/quaternius_cutlass_01.fbx", "length": 1.20}
 ]
 
-# Both one-handed sword previews: palm is ~+Y from J_Bip_R_Hand. The VRoid finger
-# bones also extend +Y, while the thumb is on the +Z edge of the hand.
-# Align the weapon's long +Y axis across the palm toward +Z, instead of
-# nearly parallel to the forearm. This is a visual test candidate, not
-# an approved grip. The Ninja and other non-sword weapons keep their mounts.
-const VROID_ONE_HAND_SWORD_GRIP_OFFSET := Vector3(0.0, 0.058, -0.002)
-const VROID_ONE_HAND_SWORD_GRIP_ROTATION := Vector3(90.0, 0.0, -8.0)
+# VRoid right-hand fingers extend local +Y and the thumb lies at +Z.
+# All five weapons need the grip at the palm, with the blade across the palm
+# rather than following the forearm. Sword I/II retain their existing tested
+# placement. Dagger/Knife/Cutlass are provisional visual corrections.
+# The legacy Ninja mount remains unchanged.
+const VROID_WEAPON_GRIP_OFFSET := Vector3(0.0, 0.058, -0.002)
+const VROID_WEAPON_GRIP_ROTATION := Vector3(90.0, 0.0, -8.0)
 
 var is_vroid := false
 var mount: Node3D
@@ -60,9 +60,9 @@ func initialize(model: Node) -> bool:
 func equip(index: int) -> bool:
 	if mount == null or index < 0 or index >= WEAPONS.size():
 		return false
-	# Keep the original Ninja mount and all other weapons unchanged.
-	mount.position = VROID_ONE_HAND_SWORD_GRIP_OFFSET if is_vroid and index in [0, 1] else Vector3.ZERO
-	mount.rotation_degrees = VROID_ONE_HAND_SWORD_GRIP_ROTATION if is_vroid and index in [0, 1] else Vector3.ZERO
+	# Change only the VRoid visual grip; restore identity for the Ninja.
+	mount.position = VROID_WEAPON_GRIP_OFFSET if is_vroid else Vector3.ZERO
+	mount.rotation_degrees = VROID_WEAPON_GRIP_ROTATION if is_vroid else Vector3.ZERO
 	var specification: Dictionary = WEAPONS[index]
 	var packed := load(String(specification["path"])) as PackedScene
 	if packed == null:
