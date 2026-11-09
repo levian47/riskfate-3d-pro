@@ -276,6 +276,9 @@ func _update_weapon_display() -> void:
 	if touch_hud != null:
 		touch_hud.weapon_index = weapon_visuals.current_index + 1
 		touch_hud.queue_redraw()
+	# Grip finger animation is for VRoid Sword I, not the other test weapons.
+	if not use_legacy_hero and animation_tree != null:
+		animation_tree.set("parameters/GripOverlay/blend_amount", 1.0 if weapon_visuals.current_index == 0 else 0.0)
 	var help_label := get_node_or_null("HUD/HelpPanel/HelpText") as Label
 	if help_label != null:
 		help_label.text = HUD_BUILDER.desktop_help_text(weapon_visuals.selected_name(), naruto_run_enabled, use_legacy_hero)
