@@ -81,6 +81,13 @@ func _layout() -> Dictionary:
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
+		# The panel owns touches inside its bounds; do not start a joystick
+		# or action press underneath it on narrow landscape screens.
+		var debug_panel := get_parent().get_node_or_null("DebugPanel") as Control
+		if debug_panel != null and debug_panel.visible and debug_panel.get_global_rect().has_point(event.position):
+			if not event.pressed:
+				_release(event.index)
+			return
 		if portrait_mode:
 			# Keep the fullscreen button accessible before turning the phone.
 			if event.pressed:
