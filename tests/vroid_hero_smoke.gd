@@ -256,6 +256,8 @@ func _run() -> void:
 		var source := holder.get_child(0) as Node3D
 		var local_bounds: AABB = weapon_visuals._bounds_in_root(holder)
 		var hilt_center: Vector3 = weapon_visuals._hilt_anchor_in_root(holder, local_bounds)
+		if weapon_id == 4:
+			hilt_center += WEAPONS.VROID_CUTLASS_HILT_LOCAL_OFFSET
 		var advance := WEAPONS.VROID_GRIP_ADVANCE_FRACTION
 		if weapon_id in [2, 3]:
 			advance += WEAPONS.VROID_DAGGER_EXTRA_GRIP_ADVANCE_FRACTION
@@ -274,8 +276,8 @@ func _run() -> void:
 			return
 		# Check that the anchor is not on the pommel / very end of the grip.
 		var anchor_fraction := (hilt_center.y - local_bounds.position.y) / local_bounds.size.y
-		var min_grip_fraction := 0.21 if weapon_id in [2, 3] else 0.16
-		var max_grip_fraction := 0.29 if weapon_id in [2, 3] else 0.24
+		var min_grip_fraction := 0.25 if weapon_id in [2, 3] else 0.16
+		var max_grip_fraction := 0.34 if weapon_id in [2, 3] else 0.24
 		if not _check(anchor_fraction > min_grip_fraction and anchor_fraction < max_grip_fraction,
 			"weapon grip fraction does not reflect the requested dagger advance"):
 			return
@@ -289,6 +291,13 @@ func _run() -> void:
 			return
 		if not _check(grip.position.z > 0.02, "VRoid weapon must project forward of the palm"):
 			return
+		if not _check(grip.position.x < -0.005 and grip.position.x > -0.03,
+			"VRoid weapon mount must be shifted slightly left of the palm"):
+			return
+		if weapon_id == 3:
+			if not _check(is_equal_approx(float(specification.get("vroid_scale", 1.0)), 1.30),
+				"second dagger (Knife) must be scaled x1.30"):
+				return
 		print("WEAPON_FIT id=", weapon_id, " name=", WEAPONS.WEAPONS[weapon_id]["name"],
 			" mount=", grip.position, " mount_rotation=", grip.rotation_degrees,
 			" source_rotation=", source.rotation_degrees,
@@ -298,7 +307,7 @@ func _run() -> void:
 	if not _check(weapon_visuals.equip(0), "restore Sword I after diagnostics"):
 		return
 	game.call("_update_weapon_display")
-	print("VRoid smoke test OK: 103 bones, ", mesh_count, " mesh nodes, Quaternius Walk/Run, heavy Sword I x1.75, one-hand Sword II, Cutlass x0.75, dagger grips +5%, aligned attack timings")
+	print("VRoid smoke test OK: 103 bones, ", mesh_count, " mesh nodes, Quaternius Walk/Run, heavy Sword I x1.75, one-hand Sword II, Cutlass x0.75 with grip correction, Knife x1.30, dagger grips +4%, left palm offset")
 	game.queue_free()
 	quit(0)
 
