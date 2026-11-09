@@ -37,7 +37,12 @@ static func apply_vertical_velocity(body: CharacterBody3D, grounded: bool, jump_
 	return false
 
 
-static func apply_facing(visual: Node3D, direction: Vector3) -> void:
+static func apply_facing(visual: Node3D, direction: Vector3, delta: float = 0.0) -> void:
 	if direction.length_squared() > 0.01:
-		# Imported rig requires its existing 180-degree correction.
-		visual.rotation.y = atan2(-direction.x, -direction.z) + PI
+		# Keep the imported rig's 180-degree correction. Smooth only the visual
+		# heading; velocity and direction changes remain immediate.
+		var target_y := atan2(-direction.x, -direction.z) + PI
+		if delta > 0.0:
+			visual.rotation.y = lerp_angle(visual.rotation.y, target_y, minf(1.0, delta * 12.0))
+		else:
+			visual.rotation.y = target_y

@@ -7,9 +7,6 @@ signal dash_requested
 signal zoom_requested
 signal fullscreen_requested
 signal weapon_requested
-signal naruto_requested
-signal skeleton_requested
-signal materials_requested
 
 var move_vector := Vector2.ZERO
 var jump_held := false
@@ -20,9 +17,6 @@ var attack_finger := -1
 var zoom_finger := -1
 var fullscreen_finger := -1
 var weapon_finger := -1
-var naruto_finger := -1
-var skeleton_finger := -1
-var materials_finger := -1
 var ninja_visual_controls := true # Disable Ninja-only MAT/RUN buttons for VRoid.
 var naruto_run_enabled := false
 var skeleton_enabled := false
@@ -50,9 +44,6 @@ func _on_resized() -> void:
 		zoom_finger = -1
 		fullscreen_finger = -1
 		weapon_finger = -1
-		naruto_finger = -1
-		skeleton_finger = -1
-		materials_finger = -1
 		move_vector = Vector2.ZERO
 		stick_thumb = Vector2.ZERO
 		jump_held = false
@@ -64,11 +55,19 @@ func _layout() -> Dictionary:
 	var scale := clampf(minf(width / 1280.0, height / 720.0), 0.55, 1.5)
 	var margin := 36.0 * scale
 	var stick_radius := 107.5 * scale # 86 * 1.25
-	var zoom_radius := 43.0 * scale
-	var fullscreen_radius := 43.0 * scale
+	# Secondary controls remain finger-accessible (at least 48px diameter)
+	# while avoiding the oversized debug buttons of the first prototype.
+	var zoom_radius := maxf(24.0, 30.0 * scale)
+	var fullscreen_radius := maxf(24.0, 30.0 * scale)
 	var attack_radius := 70.0 * scale
 	var jump_radius := 46.0 * scale
 	var dash_radius := 46.0 * scale
+	# A single upper-right column: FULL, ZOOM, WPN. Keep at least
+	# 12 scaled pixels between the drawn circles and their tap targets.
+	var secondary_radius := maxf(zoom_radius, fullscreen_radius)
+	var secondary_x := width - margin - secondary_radius
+	var secondary_top := margin + secondary_radius
+	var secondary_step := secondary_radius * 2.7
 	return {
 		"stick": Vector2(maxf(margin + stick_radius, width * 0.17), height - margin - stick_radius),
 		"stick_radius": stick_radius,
@@ -78,22 +77,23 @@ func _layout() -> Dictionary:
 		"jump_radius": jump_radius,
 		"dash": Vector2(width - margin - attack_radius * 2.30 - dash_radius, height - margin - attack_radius * 2.0 - dash_radius),
 		"dash_radius": dash_radius,
-		"zoom": Vector2(width - margin - zoom_radius, margin + zoom_radius),
-		"zoom_radius": zoom_radius,
-		"weapon": Vector2(width - margin - zoom_radius, margin + zoom_radius * 3.6),
-		"weapon_radius": zoom_radius,
-		"materials": Vector2(width - margin - zoom_radius, margin + zoom_radius * 6.2),
-		"materials_radius": zoom_radius,
-		"fullscreen": Vector2(margin + fullscreen_radius, margin + fullscreen_radius),
+		"fullscreen": Vector2(secondary_x, secondary_top),
 		"fullscreen_radius": fullscreen_radius,
-		"naruto": Vector2(margin + fullscreen_radius, margin + fullscreen_radius * 3.6),
-		"naruto_radius": fullscreen_radius,
-		"skeleton": Vector2(margin + fullscreen_radius, margin + fullscreen_radius * 6.2),
-		"skeleton_radius": fullscreen_radius
+		"zoom": Vector2(secondary_x, secondary_top + secondary_step),
+		"zoom_radius": zoom_radius,
+		"weapon": Vector2(secondary_x, secondary_top + secondary_step * 2.0),
+		"weapon_radius": zoom_radius
 	}
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
+		# The panel owns touches inside its bounds; do not start a joystick
+		# or action press underneath it on narrow landscape screens.
+		var debug_panel := get_parent().get_node_or_null("DebugPanel") as Control
+		if debug_panel != null and debug_panel.visible and debug_panel.get_global_rect().has_point(event.position):
+			if not event.pressed:
+				_release(event.index)
+			return
 		if portrait_mode:
 			# Keep the fullscreen button accessible before turning the phone.
 			if event.pressed:
@@ -132,18 +132,6 @@ func _press(finger: int, point: Vector2) -> void:
 		weapon_finger = finger
 		weapon_requested.emit()
 		queue_redraw()
-	elif ninja_visual_controls and materials_finger == -1 and point.distance_to(layout["materials"]) <= layout["materials_radius"] * 1.20:
-		materials_finger = finger
-		materials_requested.emit()
-		queue_redraw()
-	elif ninja_visual_controls and naruto_finger == -1 and point.distance_to(layout["naruto"]) <= layout["naruto_radius"] * 1.20:
-		naruto_finger = finger
-		naruto_requested.emit()
-		queue_redraw()
-	elif skeleton_finger == -1 and point.distance_to(layout["skeleton"]) <= layout["skeleton_radius"] * 1.20:
-		skeleton_finger = finger
-		skeleton_requested.emit()
-		queue_redraw()
 	elif _press_fullscreen(finger, point):
 		pass
 	elif attack_finger == -1 and point.distance_to(layout["attack"]) <= layout["attack_radius"] * 1.18:
@@ -177,12 +165,6 @@ func _release(finger: int) -> void:
 		fullscreen_finger = -1
 	if finger == weapon_finger:
 		weapon_finger = -1
-	if finger == naruto_finger:
-		naruto_finger = -1
-	if finger == skeleton_finger:
-		skeleton_finger = -1
-	if finger == materials_finger:
-		materials_finger = -1
 	queue_redraw()
 
 func _update_stick(point: Vector2) -> void:
@@ -234,22 +216,6 @@ func _draw() -> void:
 	_draw_button(weapon_center, weapon_r, Color(0.33, 0.27, 0.44, 0.94 if weapon_finger != -1 else 0.83), Color(0.90, 0.82, 1.0, 0.96))
 	_draw_label(weapon_center + Vector2(0, -weapon_r * 0.18), "WPN", weapon_r * 0.32)
 	_draw_label(weapon_center + Vector2(0, weapon_r * 0.28), "%d/5" % weapon_index, weapon_r * 0.34)
-	if ninja_visual_controls:
-		var material_center: Vector2 = layout["materials"]
-		var material_radius: float = layout["materials_radius"]
-		_draw_button(material_center, material_radius, Color(0.23, 0.37, 0.31, 0.93 if materials_finger != -1 else 0.77), Color(0.77, 0.96, 0.86, 0.96))
-		_draw_label(material_center + Vector2(0, -material_radius * 0.18), "MAT", material_radius * 0.30)
-		_draw_label(material_center + Vector2(0, material_radius * 0.28), ["O", "A", "B"][material_variant], material_radius * 0.36)
-		var naruto_center: Vector2 = layout["naruto"]
-		var naruto_r: float = layout["naruto_radius"]
-		_draw_button(naruto_center, naruto_r, Color(0.27, 0.45, 0.24, 0.95 if naruto_run_enabled else 0.65), Color(0.82, 0.98, 0.77, 0.94))
-		_draw_label(naruto_center + Vector2(0, -naruto_r * 0.17), "RUN", naruto_r * 0.31)
-		_draw_label(naruto_center + Vector2(0, naruto_r * 0.27), "N4" if naruto_run_enabled else "OFF", naruto_r * 0.27)
-	var skeleton_center: Vector2 = layout["skeleton"]
-	var skeleton_r: float = layout["skeleton_radius"]
-	_draw_button(skeleton_center, skeleton_r, Color(0.16, 0.46, 0.47, 0.92 if skeleton_enabled else 0.70), Color(0.58, 1.0, 0.91, 0.98))
-	_draw_label(skeleton_center + Vector2(0, -skeleton_r * 0.17), "SKEL", skeleton_r * 0.30)
-	_draw_label(skeleton_center + Vector2(0, skeleton_r * 0.29), "ON" if skeleton_enabled else "OFF", skeleton_r * 0.27)
 	_draw_fullscreen_control(layout)
 
 func _draw_fullscreen_control(layout: Dictionary) -> void:
