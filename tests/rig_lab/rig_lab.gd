@@ -635,11 +635,21 @@ func _layout_ui_for_size(viewport_size: Vector2) -> void:
 	var dock_height := clampf(viewport_size.y * 0.37, 138.0, 162.0)
 	var panel_height := maxf(125.0, viewport_size.y - dock_height - margin * 3.0)
 	controls_panel.position = Vector2(margin, margin)
-	controls_panel.size = Vector2(panel_width, panel_height)
-	angle_panel.position = Vector2(margin, viewport_size.y - dock_height - margin)
-	angle_panel.size = Vector2(panel_width, dock_height)
 	handle_panel.position = Vector2(viewport_size.x - panel_width - margin, margin)
-	handle_panel.size = Vector2(panel_width, maxf(150.0, viewport_size.y - margin * 2.0))
+	# On landscape phones, leave the full-height left sidebar for the silhouette.
+	# Move the fixed angle dock below the right sidebar instead of clipping the map.
+	if viewport_size.y < 520.0:
+		controls_panel.size = Vector2(panel_width, viewport_size.y - margin * 2.0)
+		angle_panel.position = Vector2(viewport_size.x - panel_width - margin,
+			viewport_size.y - dock_height - margin)
+		angle_panel.size = Vector2(panel_width, dock_height)
+		handle_panel.size = Vector2(panel_width,
+			maxf(125.0, viewport_size.y - dock_height - margin * 3.0))
+	else:
+		controls_panel.size = Vector2(panel_width, panel_height)
+		angle_panel.position = Vector2(margin, viewport_size.y - dock_height - margin)
+		angle_panel.size = Vector2(panel_width, dock_height)
+		handle_panel.size = Vector2(panel_width, maxf(150.0, viewport_size.y - margin * 2.0))
 	full_button.position = Vector2((viewport_size.x - 110.0) * 0.5, margin)
 	full_button.size = Vector2(110.0, 64.0)
 
