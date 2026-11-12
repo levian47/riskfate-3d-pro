@@ -7,8 +7,15 @@ var rig: Skeleton3D
 var orbit_camera: Camera3D
 var line_mesh: ImmediateMesh
 var line_instance: MeshInstance3D
-var part_picker: OptionButton
-var axis_picker: OptionButton
+var part_name: Label
+var hand_name: Label
+var selected_group_index := -1
+var selected_axis := 2
+var selected_hand := "Left"
+var group_labels: Array[String] = []
+var group_indices: Array[Array] = []
+var axis_buttons: Array[Button] = []
+var finger_buttons: Dictionary = {}
 var angle_slider: HSlider
 var angle_value: Label
 var info_text: Label
@@ -176,34 +183,59 @@ func _setup_ui() -> void:
 	controls.add_child(info_text)
 
 	var part_label := Label.new()
-	part_label.text = "ВИБІР ПАЛЬЦЯ / СУГЛОБА"
+	part_label.text = "ОБЕРИ ПАЛЕЦЬ АБО СУГЛОБ"
 	controls.add_child(part_label)
-	var picker_row := HBoxContainer.new()
-	controls.add_child(picker_row)
-	_make_button("◀", func() -> void: _step_selection(-1), picker_row)
-	part_picker = OptionButton.new()
-	part_picker.name = "BonePicker"
-	part_picker.custom_minimum_size.y = 46
-	part_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	picker_row.add_child(part_picker)
-	_make_button("▶", func() -> void: _step_selection(1), picker_row)
+
+	var hand_row := HBoxContainer.new()
+	controls.add_child(hand_row)
+	var left_button := _make_button("ЛІВА РУКА", Callable(self, "_select_hand").bind("Left"), hand_row)
+	left_button.name = "LeftHandButton"
+	left_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var right_button := _make_button("ПРАВА РУКА", Callable(self, "_select_hand").bind("Right"), hand_row)
+	right_button.name = "RightHandButton"
+	right_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	hand_name = Label.new()
+	hand_name.text = "Ліва рука"
+	controls.add_child(hand_name)
+	var fingers_row := HBoxContainer.new()
+	controls.add_child(fingers_row)
+	var finger_keys := ["Thumb", "Index", "Middle", "Ring", "Pinky"]
+	var finger_titles := ["ВЕЛ", "ВКАЗ", "СЕР", "БЕЗ", "МІЗ"]
+	for finger_index in range(finger_keys.size()):
+		var finger_key: String = finger_keys[finger_index]
+		var button := _make_button(finger_titles[finger_index], Callable(self, "_select_finger").bind(finger_key), fingers_row)
+		button.name = "Finger" + finger_key
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		finger_buttons[finger_key] = button
+	var all_button := _make_button("УСІ ПАЛЬЦІ", Callable(self, "_select_finger").bind("All"), controls)
+	all_button.name = "AllFingersButton"
+
 	_add_groups()
-	part_picker.item_selected.connect(_on_part_changed)
+	var choice_row := HBoxContainer.new()
+	controls.add_child(choice_row)
+	_make_button("◀", func() -> void: _step_selection(-1), choice_row)
+	part_name = Label.new()
+	part_name.name = "SelectedPart"
+	part_name.text = "Кістка не вибрана"
+	part_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	part_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	part_name.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	part_name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	choice_row.add_child(part_name)
+	_make_button("▶", func() -> void: _step_selection(1), choice_row)
 
 	var axis_row := HBoxContainer.new()
 	controls.add_child(axis_row)
 	var axis_label := Label.new()
-	axis_label.text = "ВІСЬ"
+	axis_label.text = "ВІСЬ:"
 	axis_row.add_child(axis_label)
-	axis_picker = OptionButton.new()
-	axis_picker.name = "AxisPicker"
-	axis_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	axis_picker.custom_minimum_size.y = 46
-	for axis_name in ["X", "Y", "Z"]:
-		axis_picker.add_item(axis_name)
-	axis_picker.select(2)
-	axis_picker.item_selected.connect(func(_index: int) -> void: _apply_angle(angle_slider.value))
-	axis_row.add_child(axis_picker)
+	for axis_index in range(3):
+		var axis_title: String = ["X", "Y", "Z"][axis_index]
+		var axis_button := _make_button(axis_title, Callable(self, "_select_axis").bind(axis_index), axis_row)
+		axis_button.name = "Axis" + axis_title
+		axis_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		axis_buttons.append(axis_button)
 
 	angle_value = Label.new()
 	angle_value.text = "Кут: 0°"
@@ -228,7 +260,7 @@ func _setup_ui() -> void:
 	_make_button("ПРАВА", func() -> void: _focus_on(2), views)
 	var hint := Label.new()
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint.text = "◀ ▶ — вибір. Повзунок — згинання. Прокрути панель угору/вниз, щоб побачити всі кнопки."
+	hint.text = "Кнопками обирай руку й палець. ◀ ▶ — інші суглоби. Повзунок — згинання. Панель прокручується."
 	controls.add_child(hint)
 
 	full_button = Button.new()
@@ -239,10 +271,8 @@ func _setup_ui() -> void:
 	ui_root.add_child(full_button)
 	get_viewport().size_changed.connect(_layout_ui)
 	_layout_ui()
-	if part_picker.item_count > 0:
-		var preferred := 1 if part_picker.item_count > 1 else 0
-		part_picker.select(preferred)
-		_on_part_changed(preferred)
+	_select_axis(2)
+	_select_finger("Index")
 
 
 func _layout_ui() -> void:
@@ -258,12 +288,39 @@ func _layout_ui() -> void:
 
 
 func _step_selection(delta: int) -> void:
-	if part_picker == null or part_picker.item_count == 0:
+	if group_labels.is_empty():
 		return
-	var previous := part_picker.selected
-	var next := posmod(previous + delta, part_picker.item_count)
-	part_picker.select(next)
-	_on_part_changed(next)
+	_on_part_changed(posmod(selected_group_index + delta, group_labels.size()))
+
+
+func _select_hand(side: String) -> void:
+	selected_hand = side
+	_select_finger("Index")
+
+
+func _select_finger(finger: String) -> void:
+	var labels := {
+		"Thumb": "великий",
+		"Index": "вказівний",
+		"Middle": "середній",
+		"Ring": "безіменний",
+		"Pinky": "мізинець",
+		"All": "всі пальці"
+	}
+	var hand_prefix := "Ліва" if selected_hand == "Left" else "Права"
+	var label_text: String = hand_prefix + " — " + String(labels.get(finger, "вказівний"))
+	var index := group_labels.find(label_text)
+	if index >= 0:
+		_on_part_changed(index)
+
+
+func _select_axis(axis_index: int) -> void:
+	selected_axis = clampi(axis_index, 0, 2)
+	for i in range(axis_buttons.size()):
+		var title: String = ["X", "Y", "Z"][i]
+		axis_buttons[i].text = ("● " if i == selected_axis else "") + title
+	if angle_slider != null:
+		_apply_angle(angle_slider.value)
 
 
 func _toggle_fullscreen() -> void:
@@ -284,8 +341,8 @@ func _add_part(label_text: String, bone_names: Array) -> void:
 	if matches.size() != bone_names.size():
 		push_warning("Rig Lab: incomplete group " + label_text)
 		return
-	part_picker.add_item(label_text)
-	part_picker.set_item_metadata(part_picker.item_count - 1, matches)
+	group_labels.append(label_text)
+	group_indices.append(matches)
 
 func _add_groups() -> void:
 	for side in ["Left", "Right"]:
@@ -305,13 +362,23 @@ func _add_groups() -> void:
 		_add_part("Суглоб — " + name, ["mixamorig:" + name])
 
 func _on_part_changed(item_index: int) -> void:
+	if item_index < 0 or item_index >= group_labels.size():
+		return
 	_reset_all_bones()
+	selected_group_index = item_index
 	selected.clear()
-	var data = part_picker.get_item_metadata(item_index)
-	for index in data:
-		selected.append(int(index))
+	for bone_index in group_indices[item_index]:
+		selected.append(int(bone_index))
+	var label_text := group_labels[item_index]
+	part_name.text = label_text
+	if label_text.begins_with("Ліва"):
+		selected_hand = "Left"
+	elif label_text.begins_with("Права"):
+		selected_hand = "Right"
+	hand_name.text = "Ліва рука" if selected_hand == "Left" else "Права рука"
 	angle_slider.set_value_no_signal(0.0)
 	angle_value.text = "Кут: 0°"
+
 
 func _reset_all_bones() -> void:
 	if rig == null:
@@ -330,9 +397,9 @@ func _apply_angle(value: float) -> void:
 	_reset_all_bones()
 	angle_value.text = "Кут: %d°" % int(value)
 	var axis := Vector3.RIGHT
-	if axis_picker.selected == 1:
+	if selected_axis == 1:
 		axis = Vector3.UP
-	elif axis_picker.selected == 2:
+	elif selected_axis == 2:
 		axis = Vector3.BACK
 	for bone_index in selected:
 		var bone_name := String(rig.get_bone_name(bone_index))

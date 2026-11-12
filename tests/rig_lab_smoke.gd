@@ -31,19 +31,50 @@ func _run() -> void:
 	var visible_mesh: MeshInstance3D = lab.get("mesh_instance")
 	if not _require(visible_mesh != null and visible_mesh.mesh != null and visible_mesh.visible, "Visible character geometry must be available"):
 		return
-	var popup: OptionButton = lab.get("part_picker")
-	if not _require(popup != null and popup.item_count >= 20, "Finger and joint choices are missing from the touch UI"):
+	var groups: Array = lab.get("group_labels")
+	var group_indices: Array = lab.get("group_indices")
+	if not _require(groups.size() >= 20 and group_indices.size() == groups.size(), "Finger and joint choices are missing"):
 		return
+	if not _require(lab.get("part_name") is Label, "Selected part must have a visible label, not a popup"):
+		return
+	var touch_ui: Node = lab.get("ui_root")
+	if not _require(touch_ui.get_node_or_null("RigControls") != null, "Touch controls are missing"):
+		return
+	var finger_buttons: Dictionary = lab.get("finger_buttons")
+	if not _require(finger_buttons.size() == 5, "Five direct finger buttons must be present"):
+		return
+	for finger_key in ["Thumb", "Index", "Middle", "Ring", "Pinky"]:
+		if not _require((finger_buttons[finger_key] as Button).pressed.is_connected(Callable(lab, "_select_finger").bind(finger_key)), "Unconnected direct finger button: " + finger_key):
+			return
+	var axis_buttons: Array = lab.get("axis_buttons")
+	if not _require(axis_buttons.size() == 3, "X/Y/Z must be plain buttons"):
+		return
+	for axis_button in axis_buttons:
+		if not _require(axis_button is Button, "Axis selector must not open a popup"):
+			return
 	var fullscreen: Button = lab.get("full_button")
 	if not _require(fullscreen != null and fullscreen.visible and fullscreen.pressed.is_connected(Callable(lab, "_toggle_fullscreen")), "FULL button not wired"):
 		return
 	var overlay: MeshInstance3D = lab.get("line_instance")
 	if not _require(overlay != null and not overlay.visible, "Skeleton overlay must start hidden so the model remains visible"):
 		return
+	var previous_label: String = (lab.get("part_name") as Label).text
 	lab.call("_step_selection", 1)
-	if not _require(popup.selected == 2, "Touch navigation must change selected finger"):
+	if not _require((lab.get("part_name") as Label).text != previous_label, "Touch navigation must change selected finger"):
 		return
-	lab.call("_on_part_changed", 1) # Left index: first entry is Left thumb.
+	(finger_buttons["Thumb"] as Button).pressed.emit()
+	if not _require((lab.get("part_name") as Label).text.contains("великий"), "Direct finger tap did not select thumb"):
+		return
+	lab.call("_select_hand", "Right")
+	if not _require((lab.get("part_name") as Label).text.begins_with("Права"), "Right-hand button must change hand"):
+		return
+	lab.call("_select_hand", "Left")
+	(finger_buttons["Index"] as Button).pressed.emit()
+	if not _require((lab.get("part_name") as Label).text.contains("вказівний"), "Index finger direct button must select index"):
+		return
+	lab.call("_select_axis", 1)
+	if not _require(int(lab.get("selected_axis")) == 1, "Axis button did not change axis"):
+		return
 	var index := int(lab.call("_bone_index", "mixamorig:LeftHandIndex1"))
 	var initial := rig.get_bone_pose_rotation(index)
 	lab.call("_apply_angle", 35.0)
