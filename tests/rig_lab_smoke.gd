@@ -40,6 +40,23 @@ func _run() -> void:
 	var touch_ui: Node = lab.get("ui_root")
 	if not _require(touch_ui.get_node_or_null("RigControls") != null, "Touch controls are missing"):
 		return
+	var left_panel := touch_ui.get_node_or_null("RigControls") as PanelContainer
+	var right_panel := touch_ui.get_node_or_null("HandleControls") as PanelContainer
+	var right_scroll := lab.get("handle_scroll") as ScrollContainer
+	if not _require(right_panel != null and right_scroll != null and right_panel.is_ancestor_of(right_scroll),
+		"Handle controls must be scrollable in a separate right sidebar"):
+		return
+	if not _require(left_panel.position.x + left_panel.size.x + 40.0 <= right_panel.position.x
+		and right_panel.position.x + right_panel.size.x <= touch_ui.get_viewport().get_visible_rect().size.x,
+		"Sidebars must leave a visible central viewport without overlap"):
+		return
+	var left_hand_button := touch_ui.find_child("LeftHandButton", true, false) as Button
+	var right_handle_button := touch_ui.find_child("Handle_offset_0_plus", true, false) as Button
+	if not _require(left_hand_button != null and right_handle_button != null
+		and left_hand_button.custom_minimum_size.y >= 64.0
+		and right_handle_button.custom_minimum_size.y >= 64.0,
+		"Left and right controls must offer larger touch targets"):
+		return
 	var finger_buttons: Dictionary = lab.get("finger_buttons")
 	if not _require(finger_buttons.size() == 5, "Five direct finger buttons must be present"):
 		return
@@ -252,6 +269,25 @@ func _run() -> void:
 			var camera: Camera3D = lab.get("orbit_camera")
 			if not _require(camera.global_transform.is_finite() and int(lab.get("focus_mode")) != 0, "Hand camera view must be finite and focused"):
 				return
+	# MMB camera pan must preserve the wrist tracking/focus and remain stable.
+	var orbit_camera := lab.get("orbit_camera") as Camera3D
+	var before_pan := orbit_camera.global_position
+	var mode_before_pan := int(lab.get("focus_mode"))
+	lab.call("_pan_camera", Vector2(46.0, -18.0))
+	var pan_offset: Vector3 = lab.get("camera_pan")
+	if not _require(pan_offset.length() > 0.001
+		and orbit_camera.global_position.distance_to(before_pan) > 0.001
+		and int(lab.get("focus_mode")) == mode_before_pan,
+		"Camera pan must move view without changing the selected focus mode"):
+		return
+	lab.call("_process", 0.0)
+	if not _require((lab.get("camera_pan") as Vector3).is_equal_approx(pan_offset),
+		"Tracked wrist must not cancel manual camera pan each frame"):
+		return
+	lab.call("_hand_view", "ДОЛОНЯ")
+	if not _require((lab.get("camera_pan") as Vector3).is_zero_approx(),
+		"Quick view must reset manual pan to the selected wrist"):
+		return
 	lab.call("_adjust_handle", "diameter", 0, 100.0)
 	if not _require(is_equal_approx(float(lab.call("_handle_parameters")["diameter"]), 0.050), "Diameter upper bound"):
 		return
