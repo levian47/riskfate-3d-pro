@@ -28,6 +28,21 @@ func _run() -> void:
 				var name := "mixamorig:%sHand%s%d" % [side, finger, joint]
 				if not _require(int(lab.call("_bone_index", name)) >= 0, "Missing " + name):
 					return
+	var visible_mesh: MeshInstance3D = lab.get("mesh_instance")
+	if not _require(visible_mesh != null and visible_mesh.mesh != null and visible_mesh.visible, "Visible character geometry must be available"):
+		return
+	var popup: OptionButton = lab.get("part_picker")
+	if not _require(popup != null and popup.item_count >= 20, "Finger and joint choices are missing from the touch UI"):
+		return
+	var fullscreen: Button = lab.get("full_button")
+	if not _require(fullscreen != null and fullscreen.visible and fullscreen.pressed.is_connected(Callable(lab, "_toggle_fullscreen")), "FULL button not wired"):
+		return
+	var overlay: MeshInstance3D = lab.get("line_instance")
+	if not _require(overlay != null and not overlay.visible, "Skeleton overlay must start hidden so the model remains visible"):
+		return
+	lab.call("_step_selection", 1)
+	if not _require(popup.selected == 2, "Touch navigation must change selected finger"):
+		return
 	lab.call("_on_part_changed", 1) # Left index: first entry is Left thumb.
 	var index := int(lab.call("_bone_index", "mixamorig:LeftHandIndex1"))
 	var initial := rig.get_bone_pose_rotation(index)
