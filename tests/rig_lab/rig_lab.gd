@@ -569,10 +569,13 @@ func _on_part_changed(item_index: int) -> void:
 		selected.append(int(bone_index))
 	var label_text := group_labels[item_index]
 	part_name.text = label_text
+	var previous_hand := selected_hand
 	if label_text.begins_with("Ліва"):
 		selected_hand = "Left"
 	elif label_text.begins_with("Права"):
 		selected_hand = "Right"
+	if selected_hand != previous_hand:
+		_position_handle()
 	hand_name.text = "Ліва рука" if selected_hand == "Left" else "Права рука"
 	# Switching selection must NOT reset the other joints' saved grip pose.
 	var finger_label := {

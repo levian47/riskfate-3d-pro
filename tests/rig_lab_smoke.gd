@@ -192,6 +192,20 @@ func _run() -> void:
 	if not _require(grip_rotations.is_empty() and grip_handle.visible,
 		"Reset must open the hand without hiding the test cylinder"):
 		return
-	print("Rig Lab grip smoke passed: attached handle, 14-joint pose, independent tuning, both hands")
+	# The handle must move with the actual wrist, not merely have a bone name.
+	var left_hand_index := int(lab.call("_bone_index", "mixamorig:LeftHand"))
+	var wrist_original := rig.get_bone_pose_rotation(left_hand_index)
+	await process_frame
+	var handle_before := grip_handle.global_position
+	rig.set_bone_pose_rotation(left_hand_index,
+		wrist_original * Quaternion(Vector3.UP, deg_to_rad(40.0)))
+	await process_frame
+	var travel := handle_before.distance_to(grip_handle.global_position)
+	if not _require(travel > 0.001 and travel < 1.0,
+		"BoneAttachment3D handle must physically follow wrist movement"):
+		return
+	rig.set_bone_pose_rotation(left_hand_index, wrist_original)
+	await process_frame
+	print("Rig Lab grip smoke passed: attached moving handle, 14-joint pose, independent tuning, both hands")
 	print("Rig Lab smoke passed: 52 bones, 28 finger bones, mirrored thumb flexion, pose/reset")
 	quit(0)
