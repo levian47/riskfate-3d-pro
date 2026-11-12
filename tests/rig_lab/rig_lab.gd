@@ -217,7 +217,7 @@ func _position_handle() -> void:
 		normal = -normal
 	var unit := maxf((rig.global_transform * wrist_rest).basis.x.length(), 0.0001)
 	# Seat near the distal palm, displaced toward the closing fingers.
-	center = center * 0.85 + normal * (0.011 / unit)
+	center += along * (0.015 / unit) + normal * (0.015 / unit)
 	var x_axis := across.cross(normal).normalized()
 	var basis := Basis(x_axis, across, x_axis.cross(across).normalized())
 	var settings := _handle_parameters()
