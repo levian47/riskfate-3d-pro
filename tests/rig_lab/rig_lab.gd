@@ -23,6 +23,7 @@ var handle_cylinder: MeshInstance3D
 # Corrections use wrist-local axes, metres and degrees; retained for this session.
 var handle_settings: Dictionary = {}
 var handle_readout: Label
+var handle_side_label: Label
 var handle_on := true
 var handle_toggle: Button
 var handle_status: Label
@@ -268,7 +269,8 @@ func _reset_handle() -> void:
 
 func _setup_handle_controls(controls: VBoxContainer) -> void:
 	handle_readout = Label.new()
-	handle_readout.add_theme_font_size_override("font_size", 14)
+	handle_readout.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	handle_readout.add_theme_font_size_override("font_size", 16)
 	controls.add_child(handle_readout)
 	for kind in ["offset", "angles", "diameter"]:
 		var title := Label.new()
@@ -282,7 +284,7 @@ func _setup_handle_controls(controls: VBoxContainer) -> void:
 				var button := _make_button(caption, _adjust_handle.bind(kind, axis, direction), row)
 				button.name = "Handle_%s_%d_%s" % [kind, axis, "minus" if direction < 0 else "plus"]
 				button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_make_button("СКИНУТИ РУКОЯТЬ ЦІЄЇ РУКИ", _reset_handle, controls)
+	_make_button("СКИНУТИ РУКОЯТЬ", _reset_handle, controls)
 	_position_handle()
 
 
@@ -570,6 +572,10 @@ func _setup_handle_panel() -> void:
 	heading.text = "РУКОЯТЬ — НАЛАШТУВАННЯ"
 	heading.add_theme_font_size_override("font_size", 18)
 	controls.add_child(heading)
+	handle_side_label = Label.new()
+	handle_side_label.text = "АКТИВНА: ЛІВА РУКА"
+	handle_side_label.add_theme_font_size_override("font_size", 18)
+	controls.add_child(handle_side_label)
 	var hint := Label.new()
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint.text = "Параметри окремі для лівої та правої рук. Руку обирай ліворуч."
@@ -615,6 +621,8 @@ func _select_hand(side: String) -> void:
 	if selected_hand != side:
 		_reset_pose()
 	selected_hand = side
+	if handle_side_label != null:
+		handle_side_label.text = "АКТИВНА: ЛІВА РУКА" if side == "Left" else "АКТИВНА: ПРАВА РУКА"
 	_position_handle()
 	_select_finger("Index")
 	if focus_mode != 0:
