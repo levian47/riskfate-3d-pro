@@ -139,5 +139,55 @@ func _run() -> void:
 		"Positive X thumb flexion must be mirrored anatomically on both hands"):
 		return
 	lab.call("_reset_pose")
+
+	# Grip Lab regression: a neutral cylinder follows the selected hand via
+	# BoneAttachment3D, and a preset affects all 14 independent finger joints.
+	var grip_attachment: BoneAttachment3D = lab.get("handle_attachment")
+	var grip_handle: MeshInstance3D = lab.get("handle_cylinder")
+	if not _require(grip_attachment != null and grip_handle != null
+		and grip_handle.get_parent() == grip_attachment
+		and grip_handle.mesh is CylinderMesh and grip_handle.visible,
+		"Grip cylinder must be visible and parented to a BoneAttachment3D"):
+		return
+	if not _require(grip_attachment.bone_name.contains("RightHand"),
+		"Test handle must be attached to the currently selected right hand"):
+		return
+	var grip_buttons: Array = lab.get("finger_joint_buttons")
+	if not _require(grip_buttons.size() == 3, "Independent digit-joint buttons are missing"):
+		return
+	lab.call("_set_grip_pose")
+	var grip_rotations: Dictionary = lab.get("saved_rotations")
+	if not _require(grip_rotations.size() == 14, "Grip candidate must rotate exactly 14 joints of the selected hand"):
+		return
+	var ring_index := int(lab.call("_bone_index", "mixamorig:RightHandRing1"))
+	var ring_candidate := rig.get_bone_pose_rotation(ring_index)
+	lab.call("_select_finger", "Index")
+	(grip_buttons[0] as Button).pressed.emit()
+	var independently_selected: Array = lab.get("selected")
+	if not _require(independently_selected.size() == 1
+		and independently_selected[0] == int(lab.call("_bone_index", "mixamorig:RightHandIndex1")),
+		"Joint 1 button must select only the requested joint"):
+		return
+	angle_slider.value = 10.0
+	if not _require(rig.get_bone_pose_rotation(ring_index).angle_to(ring_candidate) < 0.001
+		and grip_rotations.size() == 14,
+		"Per-joint tuning must preserve the other fingers' grip"):
+		return
+	var right_hand_idx := int(lab.call("_bone_index", "mixamorig:RightHand"))
+	if not _require(grip_attachment.bone_name == rig.get_bone_name(right_hand_idx),
+		"Grip must remain attached to the selected wrist"):
+		return
+	lab.call("_select_hand", "Left")
+	if not _require(grip_attachment.bone_name.contains("LeftHand"),
+		"Grip attachment must follow hand switching"):
+		return
+	lab.call("_set_grip_pose")
+	if not _require(grip_rotations.size() == 14, "Left-hand grip must use its own 14 joints"):
+		return
+	lab.call("_reset_pose")
+	if not _require(grip_rotations.is_empty() and grip_handle.visible,
+		"Reset must open the hand without hiding the test cylinder"):
+		return
+	print("Rig Lab grip smoke passed: attached handle, 14-joint pose, independent tuning, both hands")
 	print("Rig Lab smoke passed: 52 bones, 28 finger bones, mirrored thumb flexion, pose/reset")
 	quit(0)
