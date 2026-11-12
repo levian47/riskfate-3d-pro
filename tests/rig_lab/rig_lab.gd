@@ -20,7 +20,7 @@ var selected_hand := "Left"
 var group_labels: Array[String] = []
 var group_indices: Array[Array] = []
 var axis_buttons: Array[Button] = []
-var finger_buttons: Dictionary = {}
+var hand_tools: VBoxContainer
 var current_finger := "Index"
 var finger_joint_buttons: Array[Button] = []
 var handle_attachment: BoneAttachment3D
@@ -57,6 +57,7 @@ var distance := 3.4
 var focus := Vector3(0.0, 1.0, 0.0)
 var camera_pan := Vector3.ZERO
 var focus_mode := 0
+var tracked_bone_index := -1
 var show_lines := false
 
 func _ready() -> void:
@@ -86,8 +87,7 @@ func _ready() -> void:
 	_setup_camera()
 	_setup_handle()
 	_setup_ui()
-	_hand_view("ДОЛОНЯ")
-	_update_camera()
+	_focus_on(0)
 	print("Rig Lab: loaded ", rig.get_bone_count(), " bones and ", mesh_instance.mesh.get_surface_count(), " mesh surfaces")
 
 func _bone_index(requested: String) -> int:
@@ -365,6 +365,7 @@ func _choose_finger_joint(joint: int) -> void:
 	var degrees := float(saved_angles.get(index, 0.0))
 	angle_slider.set_value_no_signal(degrees)
 	angle_value.text = "Кут: %d° (суглоб %d)" % [int(degrees), joint]
+	_focus_on_bone(index, 0.22)
 
 
 func _setup_ui() -> void:
@@ -407,8 +408,7 @@ func _setup_ui() -> void:
 	info_text.text = "52 кістки | рухи без анімацій"
 	controls.add_child(info_text)
 
-	# A vector anatomy map is the primary navigation; the original quick controls
-	# remain below it for precision tuning and regression compatibility.
+	# Clickable vector anatomy is the only body/hand/finger selector.
 	map_title = Label.new()
 	map_title.name = "AnatomyMapTitle"
 	map_title.text = "ОБЕРИ ЧАСТИНУ ТІЛА"
@@ -429,75 +429,46 @@ func _setup_ui() -> void:
 	map_hint.text = "Торкнись області силуету. Для пальців вибери кисть."
 	controls.add_child(map_hint)
 
-	var part_label := Label.new()
-	part_label.text = "ОБЕРИ ПАЛЕЦЬ АБО СУГЛОБ"
-	controls.add_child(part_label)
 
-	var hand_row := HBoxContainer.new()
-	controls.add_child(hand_row)
-	var left_button := _make_button("ЛІВА", Callable(self, "_select_hand").bind("Left"), hand_row)
-	left_button.name = "LeftHandButton"
-	left_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var right_button := _make_button("ПРАВА", Callable(self, "_select_hand").bind("Right"), hand_row)
-	right_button.name = "RightHandButton"
-	right_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-
+	hand_tools = VBoxContainer.new()
+	hand_tools.name = "HandTools"
+	hand_tools.add_theme_constant_override("separation", 7)
+	hand_tools.visible = false
+	controls.add_child(hand_tools)
 	hand_name = Label.new()
 	hand_name.text = "Ліва рука"
-	controls.add_child(hand_name)
-	var views := GridContainer.new()
-	views.columns = 2
-	controls.add_child(views)
-	_make_button("ТІЛО", func() -> void: _focus_on(0), views)
-	_make_button("ЛІВА", func() -> void: _focus_on(1), views)
-	_make_button("ПРАВА", func() -> void: _focus_on(2), views)
+	hand_tools.add_child(hand_name)
 	var hand_views := GridContainer.new()
 	hand_views.columns = 2
-	controls.add_child(hand_views)
+	hand_tools.add_child(hand_views)
 	for view in ["ДОЛОНЯ", "ТИЛ", "ЗБОКУ"]:
 		var button := _make_button(view, _hand_view.bind(view), hand_views)
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# The "all fingers" action adjusts a group, not a duplicate finger selector.
+	var all_button := _make_button("УСІ ПАЛЬЦІ", _select_finger.bind("All"), hand_tools)
+	all_button.name = "AllFingersButton"
+	var joint_label := Label.new()
+	joint_label.text = "ОКРЕМИЙ СУГЛОБ"
+	hand_tools.add_child(joint_label)
+	var joints := HBoxContainer.new()
+	hand_tools.add_child(joints)
+	for n in range(1, 4):
+		var button := _make_button(str(n), _choose_finger_joint.bind(n), joints)
+		button.name = "Joint" + str(n)
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		finger_joint_buttons.append(button)
 	var zoom := HBoxContainer.new()
 	controls.add_child(zoom)
 	_make_button("ZOOM +", _zoom.bind(0.8), zoom)
 	_make_button("ZOOM −", _zoom.bind(1.25), zoom)
-	var fingers_row := GridContainer.new()
-	fingers_row.columns = 3
-	controls.add_child(fingers_row)
-	var finger_keys := ["Thumb", "Index", "Middle", "Ring", "Pinky"]
-	var finger_titles := ["ВЕЛ", "ВКАЗ", "СЕР", "БЕЗ", "МІЗ"]
-	for finger_index in range(finger_keys.size()):
-		var finger_key: String = finger_keys[finger_index]
-		var button := _make_button(finger_titles[finger_index], Callable(self, "_select_finger").bind(finger_key), fingers_row)
-		button.name = "Finger" + finger_key
-		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		finger_buttons[finger_key] = button
-	var all_button := _make_button("УСІ ПАЛЬЦІ", Callable(self, "_select_finger").bind("All"), controls)
-	all_button.name = "AllFingersButton"
-	var joint_label := Label.new()
-	joint_label.text = "ВИБРАТИ ОДИН СУГЛОБ:"
-	controls.add_child(joint_label)
-	var joints := HBoxContainer.new()
-	controls.add_child(joints)
-	for n in range(1, 4):
-		var button := _make_button(str(n), Callable(self, "_choose_finger_joint").bind(n), joints)
-		button.name = "Joint" + str(n)
-		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		finger_joint_buttons.append(button)
-
 	_add_groups()
-	var choice_row := HBoxContainer.new()
-	controls.add_child(choice_row)
-	_make_button("◀", func() -> void: _step_selection(-1), choice_row)
+
 	part_name = Label.new()
 	part_name.name = "SelectedPart"
-	part_name.text = "Кістка не вибрана"
-	part_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	part_name.text = "Обери область на силуеті"
 	part_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	part_name.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	part_name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	choice_row.add_child(part_name)
-	_make_button("▶", func() -> void: _step_selection(1), choice_row)
+	controls.add_child(part_name)
 
 	var axis_row := HBoxContainer.new()
 	controls.add_child(axis_row)
@@ -654,18 +625,12 @@ func _layout_ui_for_size(viewport_size: Vector2) -> void:
 	full_button.size = Vector2(110.0, 64.0)
 
 
-func _step_selection(delta: int) -> void:
-	if group_labels.is_empty():
-		return
-	_on_part_changed(posmod(selected_group_index + delta, group_labels.size()))
-
-
-
 func _show_body_map() -> void:
 	part_map.set_view("body")
 	map_back.visible = false
 	map_title.text = "ОБЕРИ ЧАСТИНУ ТІЛА"
 	map_hint.text = "Торкнись області силуету. Для пальців вибери кисть."
+	hand_tools.visible = false
 	_focus_on(0)
 
 
@@ -674,6 +639,7 @@ func _show_hand_map(side: String) -> void:
 	map_back.visible = true
 	map_title.text = "ЛІВА КИСТЬ — ПАЛЬЦІ" if side == "Left" else "ПРАВА КИСТЬ — ПАЛЬЦІ"
 	map_hint.text = "Торкнись пальця. Суглоб 1–3 обирай нижче."
+	hand_tools.visible = true
 	part_map.mark_region(current_finger)
 
 
@@ -682,33 +648,40 @@ func _map_select_body(region: String) -> void:
 		var side := "Left" if region == "LeftHand" else "Right"
 		_select_hand(side)
 		_show_hand_map(side)
+		_focus_on(1 if side == "Left" else 2)
 		return
+	# Torso and pelvis are camera targets until their dedicated controls exist.
+	var bone_name := region
+	if region == "Torso":
+		bone_name = "Spine2"
+	elif region == "Pelvis":
+		bone_name = "Hips"
+	var bone := _bone_index("mixamorig:" + bone_name)
+	if bone >= 0:
+		var closeup := 0.68 if region == "Head" or region == "Neck" else 1.0
+		_focus_on_bone(bone, closeup)
 	var index := group_labels.find("Суглоб — " + region)
 	if index < 0:
 		selected.clear()
 		selected_group_index = -1
-		part_name.text = "Область %s: редактор не реалізовано" % region
-		map_hint.text = "Для цієї області поки немає налаштувань кісток."
+		part_name.text = "Область %s — налаштувань поки немає" % region
+		map_hint.text = "Камеру наближено. Для цієї області редактор ще не реалізований."
 		angle_slider.editable = false
 		angle_minus_button.disabled = true
 		angle_plus_button.disabled = true
 		return
 	_on_part_changed(index)
-	map_hint.text = "Обрана область: %s. Кут і вісь — у налаштуваннях." % region
-	var bone := _bone_index("mixamorig:" + region)
-	if bone >= 0:
-		focus_mode = 0
-		focus = rig.to_global(rig.get_bone_global_pose(bone).origin)
-		camera_pan = Vector3.ZERO
-		distance = 0.75 if region == "Head" or region == "Neck" else 1.1
-		_update_camera()
+	map_hint.text = "Обрана область: %s. Налаштовуй вісь і кут." % region
 
 
 func _map_select_finger(finger: String) -> void:
 	_select_finger(finger)
 	part_map.mark_region(finger)
-	map_hint.text = "Обрано палець: %s. Точний суглоб — кнопки 1/2/3 нижче." % finger
-
+	map_hint.text = "Обрано %s. Вибери суглоб 1–3 або змінюй кут." % finger
+	var bone := _bone_index("mixamorig:%sHand%s2" % [selected_hand, finger])
+	if bone < 0:
+		bone = _bone_index("mixamorig:%sHand%s1" % [selected_hand, finger])
+	_focus_on_bone(bone, 0.24)
 
 
 func _select_hand(side: String) -> void:
@@ -876,8 +849,20 @@ func _toggle_overlay() -> void:
 	line_instance.visible = show_lines
 	overlay_button.text = "КІСТКИ: УВІМКНЕНО" if show_lines else "КІСТКИ: ВИМКНЕНО"
 
+func _focus_on_bone(bone_index: int, target_distance: float) -> void:
+	if bone_index < 0:
+		return
+	tracked_bone_index = bone_index
+	focus_mode = 3
+	camera_pan = Vector3.ZERO
+	focus = rig.to_global(rig.get_bone_global_pose(bone_index).origin)
+	distance = clampf(target_distance, 0.18, 7.0)
+	_update_camera()
+
+
 func _focus_on(mode: int) -> void:
 	focus_mode = mode
+	tracked_bone_index = -1
 	camera_pan = Vector3.ZERO
 	if mode == 0:
 		distance = 3.4
@@ -889,6 +874,7 @@ func _focus_on(mode: int) -> void:
 			focus = rig.to_global(rig.get_bone_global_pose(index) * handle_cylinder.position)
 		distance = 0.43
 	_update_camera()
+
 
 func _zoom(factor: float) -> void:
 	distance = clampf(distance * factor, 0.18, 7.0)
@@ -954,7 +940,10 @@ func _unhandled_input(event: InputEvent) -> void:
 func _process(_delta: float) -> void:
 	if rig == null:
 		return
-	if focus_mode != 0:
+	if focus_mode == 3 and tracked_bone_index >= 0:
+		focus = rig.to_global(rig.get_bone_global_pose(tracked_bone_index).origin)
+		_update_camera()
+	elif focus_mode == 1 or focus_mode == 2:
 		var wrist := _bone_index("mixamorig:LeftHand" if focus_mode == 1 else "mixamorig:RightHand")
 		focus = rig.to_global(rig.get_bone_global_pose(wrist) * handle_cylinder.position)
 		_update_camera()
