@@ -112,5 +112,32 @@ func _run() -> void:
 	lab.call("_reset_pose")
 	if not _require(rig.get_bone_pose_rotation(index).angle_to(initial) < 0.001, "Reset did not restore finger"):
 		return
-	print("Rig Lab smoke passed: 52 bones, 28 finger bones, basic pose/reset")
+
+	# Mirrored thumb anatomy regression: +30° bends both thumb joints toward
+	# equivalent mirrored targets rather than sending the right thumb away.
+	var left_distal := int(lab.call("_bone_index", "mixamorig:LeftHandThumb2"))
+	var right_distal := int(lab.call("_bone_index", "mixamorig:RightHandThumb2"))
+	lab.call("_select_hand", "Left")
+	lab.call("_select_finger", "Thumb")
+	if not _require(int(lab.get("selected_axis")) == 0, "Thumb selection must activate anatomical X flexion"):
+		return
+	var left_rest := rig.get_bone_global_pose(left_distal).origin
+	angle_slider.value = 30.0
+	var left_delta := rig.get_bone_global_pose(left_distal).origin - left_rest
+	lab.call("_reset_pose")
+	lab.call("_select_hand", "Right")
+	lab.call("_select_finger", "Thumb")
+	if not _require(int(lab.get("selected_axis")) == 0, "Right thumb must use anatomical X flexion"):
+		return
+	var right_rest := rig.get_bone_global_pose(right_distal).origin
+	angle_slider.value = 30.0
+	var right_delta := rig.get_bone_global_pose(right_distal).origin - right_rest
+	if not _require(left_delta.length() > 0.001 and right_delta.length() > 0.001
+		and absf(left_delta.x + right_delta.x) < 0.005
+		and absf(left_delta.y - right_delta.y) < 0.005
+		and absf(left_delta.z - right_delta.z) < 0.005,
+		"Positive X thumb flexion must be mirrored anatomically on both hands"):
+		return
+	lab.call("_reset_pose")
+	print("Rig Lab smoke passed: 52 bones, 28 finger bones, mirrored thumb flexion, pose/reset")
 	quit(0)

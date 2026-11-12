@@ -257,7 +257,7 @@ func _setup_ui() -> void:
 	_make_button("ПРАВА", func() -> void: _focus_on(2), views)
 	var hint := Label.new()
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint.text = "Кнопками обирай руку й палець. ◀ ▶ — інші суглоби. Кут — в окремій нижній панелі."
+	hint.text = "Великий палець: X для згинання, дзеркальний напрям на правій руці. Кут — у нижній панелі."
 	controls.add_child(hint)
 
 	# Keep the drag-sensitive HSlider OUTSIDE ScrollContainer; on phones, vertical
@@ -416,6 +416,10 @@ func _on_part_changed(item_index: int) -> void:
 	hand_name.text = "Ліва рука" if selected_hand == "Left" else "Права рука"
 	angle_slider.set_value_no_signal(0.0)
 	angle_value.text = "Кут: 0°"
+	# Thumb bending is primarily checked on the X hinge. On a mirrored hand,
+	# the same positive X angle needs the opposite local rotation sign.
+	if label_text.ends_with(" — великий"):
+		_select_axis(0)
 
 
 func _adjust_angle(delta: int) -> void:
@@ -452,7 +456,13 @@ func _apply_angle(value: float) -> void:
 			joint_factor = 0.85
 		elif bone_name.ends_with("3"):
 			joint_factor = 0.70
-		var rotation := Quaternion(axis, deg_to_rad(value * joint_factor))
+		var direction := 1.0
+		# The right thumb X hinge is mirrored relative to the left: positive
+		# test angles must flex toward the palm on both sides. Do not alter
+		# other axes, other fingers, bone rests, or imported skin weights.
+		if selected_axis == 0 and bone_name.contains("RightHandThumb"):
+			direction = -1.0
+		var rotation := Quaternion(axis, deg_to_rad(value * joint_factor * direction))
 		rig.set_bone_pose_rotation(bone_index, original_rotations[bone_index] * rotation)
 
 func _toggle_overlay() -> void:
