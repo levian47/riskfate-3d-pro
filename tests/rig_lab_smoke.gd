@@ -26,10 +26,10 @@ func _run() -> void:
 			var digits := 2 if finger == "Thumb" else 3
 			for joint in range(1, digits + 1):
 				var name := "mixamorig:%sHand%s%d" % [side, finger, joint]
-				if not _require(rig.find_bone(name) >= 0, "Missing " + name):
+				if not _require(int(lab.call("_bone_index", name)) >= 0, "Missing " + name):
 					return
 	lab.call("_on_part_changed", 1) # Left index: first entry is Left thumb.
-	var index := rig.find_bone("mixamorig:LeftHandIndex1")
+	var index := int(lab.call("_bone_index", "mixamorig:LeftHandIndex1"))
 	var initial := rig.get_bone_pose_rotation(index)
 	lab.call("_apply_angle", 35.0)
 	if not _require(rig.get_bone_pose_rotation(index).angle_to(initial) > 0.1, "Finger did not rotate"):

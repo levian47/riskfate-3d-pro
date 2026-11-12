@@ -41,6 +41,18 @@ func _ready() -> void:
 	_update_camera()
 	print("Rig Lab: loaded ", rig.get_bone_count(), " bones")
 
+func _bone_index(requested: String) -> int:
+	# Godot glTF importer may normalize Mixamo namespace separators in bone names.
+	var exact := rig.find_bone(requested)
+	if exact >= 0:
+		return exact
+	var simple := requested.get_slice(":", requested.get_slice_count(":") - 1)
+	for index in range(rig.get_bone_count()):
+		var found := String(rig.get_bone_name(index))
+		if found == simple or found.ends_with(":" + simple) or found.ends_with("_" + simple):
+			return index
+	return -1
+
 func _find_skeleton(node: Node) -> Skeleton3D:
 	if node is Skeleton3D:
 		return node as Skeleton3D
@@ -172,7 +184,7 @@ func _setup_ui() -> void:
 func _add_part(label_text: String, bone_names: Array) -> void:
 	var matches: Array[int] = []
 	for value in bone_names:
-		var index := rig.find_bone(String(value))
+		var index := _bone_index(String(value))
 		if index >= 0:
 			matches.append(index)
 	if matches.size() != bone_names.size():
@@ -250,7 +262,7 @@ func _focus_on(mode: int) -> void:
 		focus = Vector3(0.0, 1.0, 0.0)
 	else:
 		var name := "mixamorig:LeftHand" if mode == 1 else "mixamorig:RightHand"
-		var index := rig.find_bone(name)
+		var index := _bone_index(name)
 		if index >= 0:
 			focus = rig.to_global(rig.get_bone_global_pose(index).origin)
 		distance = 0.43
