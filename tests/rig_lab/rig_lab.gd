@@ -408,10 +408,10 @@ func _setup_ui() -> void:
 
 	var hand_row := HBoxContainer.new()
 	controls.add_child(hand_row)
-	var left_button := _make_button("ЛІВА РУКА", Callable(self, "_select_hand").bind("Left"), hand_row)
+	var left_button := _make_button("ЛІВА", Callable(self, "_select_hand").bind("Left"), hand_row)
 	left_button.name = "LeftHandButton"
 	left_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var right_button := _make_button("ПРАВА РУКА", Callable(self, "_select_hand").bind("Right"), hand_row)
+	var right_button := _make_button("ПРАВА", Callable(self, "_select_hand").bind("Right"), hand_row)
 	right_button.name = "RightHandButton"
 	right_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
@@ -569,7 +569,7 @@ func _setup_handle_panel() -> void:
 	controls.add_theme_constant_override("separation", 9)
 	margin.add_child(controls)
 	var heading := Label.new()
-	heading.text = "РУКОЯТЬ — НАЛАШТУВАННЯ"
+	heading.text = "РУКОЯТЬ | XYZ / Ø"
 	heading.add_theme_font_size_override("font_size", 18)
 	controls.add_child(heading)
 	handle_side_label = Label.new()
@@ -592,12 +592,18 @@ func _setup_handle_panel() -> void:
 
 
 func _layout_ui() -> void:
+	_layout_ui_for_size(get_viewport().get_visible_rect().size)
+
+
+func _layout_ui_for_size(viewport_size: Vector2) -> void:
 	if controls_panel == null or handle_panel == null or angle_panel == null or full_button == null:
 		return
-	var viewport_size := get_viewport().get_visible_rect().size
 	var margin := 12.0
-	# Keep both columns visible in landscape; leave the centre free for the hands.
+	# Respect the UI's actual minimum width before positioning the right column.
 	var panel_width := clampf(viewport_size.x * 0.29, 226.0, 360.0)
+	var min_required := maxf(controls_panel.get_combined_minimum_size().x,
+		handle_panel.get_combined_minimum_size().x)
+	panel_width = maxf(panel_width, min_required)
 	panel_width = minf(panel_width, maxf(160.0, (viewport_size.x - 180.0) * 0.5))
 	var dock_height := clampf(viewport_size.y * 0.37, 138.0, 162.0)
 	var panel_height := maxf(125.0, viewport_size.y - dock_height - margin * 3.0)
