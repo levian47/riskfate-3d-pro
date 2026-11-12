@@ -33,7 +33,7 @@ func set_view(next_mode: String, side: String = "Left") -> void:
 	hover_region = ""
 	custom_minimum_size.y = 240.0 if mode == "hand" else 310.0
 	_rebuild()
-	minimum_size_changed()
+	update_minimum_size()
 	queue_redraw()
 
 
