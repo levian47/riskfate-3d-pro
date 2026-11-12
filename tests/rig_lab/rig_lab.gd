@@ -9,7 +9,7 @@ var orbit_camera: Camera3D
 var line_mesh: ImmediateMesh
 var line_instance: MeshInstance3D
 var part_name: Label
-var part_map: Control
+var part_map
 var map_title: Label
 var map_back: Button
 var map_hint: Label
