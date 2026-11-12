@@ -89,16 +89,19 @@ func _rebuild() -> void:
 				item["polygon"] = flipped
 
 
-func _canvas_transform() -> Transform2D:
+func _map_scale() -> float:
 	var design := HAND_SIZE if mode == "hand" else BODY_SIZE
-	var factor := minf(size.x / design.x, size.y / design.y)
-	return Transform2D(0.0, Vector2.ONE * factor, (size - design * factor) * 0.5)
+	return minf(size.x / design.x, size.y / design.y)
+
+
+func _map_origin() -> Vector2:
+	var design := HAND_SIZE if mode == "hand" else BODY_SIZE
+	return (size - design * _map_scale()) * 0.5
 
 
 func _draw() -> void:
 	var design := HAND_SIZE if mode == "hand" else BODY_SIZE
-	var frame := _canvas_transform()
-	draw_set_transform(frame.origin, 0.0, frame.x.length() * Vector2.ONE)
+	draw_set_transform(_map_origin(), 0.0, _map_scale() * Vector2.ONE)
 	# Subtle technical guides frame the illustration without obscuring anatomy.
 	for x in [24.0, 100.0, 176.0]:
 		draw_line(Vector2(x, 4), Vector2(x, design.y - 4), Color(0.33, 0.49, 0.60, 0.13), 1.0)
@@ -132,7 +135,7 @@ func _draw() -> void:
 
 
 func _region_at(position: Vector2) -> String:
-	var p := _canvas_transform().affine_inverse() * position
+	var p := (position - _map_origin()) / maxf(_map_scale(), 0.001)
 	for index in range(regions.size() - 1, -1, -1):
 		var item: Dictionary = regions[index]
 		if Geometry2D.is_point_in_polygon(p, item["polygon"]):
