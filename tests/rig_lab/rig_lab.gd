@@ -20,6 +20,9 @@ var current_finger := "Index"
 var finger_joint_buttons: Array[Button] = []
 var handle_attachment: BoneAttachment3D
 var handle_cylinder: MeshInstance3D
+# Corrections use wrist-local axes, metres and degrees; retained for this session.
+var handle_settings: Dictionary = {}
+var handle_readout: Label
 var handle_on := true
 var handle_toggle: Button
 var handle_status: Label
@@ -51,6 +54,8 @@ func _ready() -> void:
 	# Only this isolated test scene needs pointer emulation for dragging sliders on mobile Web.
 	# Keep the project's gameplay input settings unchanged.
 	Input.emulate_mouse_from_touch = true
+	# Use physical viewport pixels so 46 px touch targets stay usable on phones.
+	get_window().content_scale_size = Vector2i.ZERO
 	var model := SOURCE.instantiate() as Node3D
 	if model == null:
 		push_error("Rig Lab: GLB did not instantiate")
@@ -72,6 +77,7 @@ func _ready() -> void:
 	_setup_camera()
 	_setup_handle()
 	_setup_ui()
+	_hand_view("ДОЛОНЯ")
 	_update_camera()
 	print("Rig Lab: loaded ", rig.get_bone_count(), " bones and ", mesh_instance.mesh.get_surface_count(), " mesh surfaces")
 
@@ -194,17 +200,86 @@ func _position_handle() -> void:
 	if wrist < 0 or finger_roots.size() != 4:
 		handle_cylinder.visible = false
 		return
+	var wrist_rest: Transform3D = rig.get_bone_global_rest(wrist)
+	var inverse := wrist_rest.affine_inverse()
 	var center := Vector3.ZERO
 	for point in finger_roots:
-		center += point
+		center += inverse * point
 	center /= 4.0
-	var wrist_rest: Transform3D = rig.get_bone_global_rest(wrist)
-	center = center.lerp(wrist_rest.origin, 0.35)
-	var across := (finger_roots[3] - finger_roots[0]).normalized()
-	var target := Transform3D(Basis(Quaternion(Vector3.UP, across)), center)
+	var across := (inverse * finger_roots[3] - inverse * finger_roots[0]).normalized()
+	var along := (center - across * center.dot(across)).normalized()
+	var normal := across.cross(along).normalized()
+	# Positive local X flexion sends a finger's +Y toward its +Z.
+	# Use the imported index frame to choose the palmar side on either hand.
+	var index_root := _bone_index("mixamorig:%sHandIndex1" % selected_hand)
+	var curl := inverse.basis * rig.get_bone_global_rest(index_root).basis.z
+	if normal.dot(curl) < 0.0:
+		normal = -normal
+	var unit := maxf((rig.global_transform * wrist_rest).basis.x.length(), 0.0001)
+	# Seat near the distal palm, displaced toward the closing fingers.
+	center = center * 0.85 + normal * (0.011 / unit)
+	var x_axis := across.cross(normal).normalized()
+	var basis := Basis(x_axis, across, x_axis.cross(across).normalized())
+	var settings := _handle_parameters()
+	var offset: Vector3 = settings["offset"]
+	var angles: Vector3 = settings["angles"]
 	handle_attachment.bone_name = rig.get_bone_name(wrist)
-	handle_cylinder.transform = wrist_rest.affine_inverse() * target
+	handle_cylinder.transform = Transform3D(Basis.from_euler(angles * PI / 180.0) * basis,
+		center + offset / unit)
+	var cylinder := handle_cylinder.mesh as CylinderMesh
+	cylinder.height = 0.18 / unit
+	cylinder.top_radius = float(settings["diameter"]) * 0.5 / unit
+	cylinder.bottom_radius = cylinder.top_radius
 	handle_cylinder.visible = handle_on
+	if handle_readout != null:
+		var local_m := handle_cylinder.position * unit
+		handle_readout.text = ("Кисть XYZ, мм: %.1f / %.1f / %.1f\nПоправка XYZ, °: %.0f / %.0f / %.0f\nДіаметр: %.0f мм (сесія)"
+			% [local_m.x * 1000.0, local_m.y * 1000.0, local_m.z * 1000.0,
+			angles.x, angles.y, angles.z, float(settings["diameter"]) * 1000.0])
+
+
+func _handle_parameters() -> Dictionary:
+	if not handle_settings.has(selected_hand):
+		handle_settings[selected_hand] = {"offset": Vector3.ZERO, "angles": Vector3.ZERO, "diameter": 0.026}
+	return handle_settings[selected_hand]
+
+
+func _adjust_handle(kind: String, axis: int, direction: float) -> void:
+	var settings := _handle_parameters()
+	if kind == "diameter":
+		settings[kind] = clampf(float(settings[kind]) + direction * 0.002, 0.012, 0.050)
+	else:
+		var value: Vector3 = settings[kind]
+		var step := 0.002 if kind == "offset" else 5.0
+		var limit := 0.10 if kind == "offset" else 180.0
+		value[axis] = clampf(value[axis] + direction * step, -limit, limit)
+		settings[kind] = value
+	_position_handle()
+
+
+func _reset_handle() -> void:
+	handle_settings.erase(selected_hand)
+	_position_handle()
+
+
+func _setup_handle_controls(controls: VBoxContainer) -> void:
+	handle_readout = Label.new()
+	handle_readout.add_theme_font_size_override("font_size", 14)
+	controls.add_child(handle_readout)
+	for kind in ["offset", "angles", "diameter"]:
+		var title := Label.new()
+		title.text = {"offset": "ЗСУВ КИСТІ ±2 мм", "angles": "ПОВОРОТ КИСТІ ±5°", "diameter": "ДІАМЕТР ±2 мм"}[kind]
+		controls.add_child(title)
+		for axis in range(1 if kind == "diameter" else 3):
+			var row := HBoxContainer.new()
+			controls.add_child(row)
+			for direction in [-1.0, 1.0]:
+				var caption: String = ("− " if direction < 0 else "+ ") + ("Ø" if kind == "diameter" else ["X", "Y", "Z"][axis])
+				var button := _make_button(caption, _adjust_handle.bind(kind, axis, direction), row)
+				button.name = "Handle_%s_%d_%s" % [kind, axis, "minus" if direction < 0 else "plus"]
+				button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_make_button("СКИНУТИ РУКОЯТЬ ЦІЄЇ РУКИ", _reset_handle, controls)
+	_position_handle()
 
 
 func _toggle_handle() -> void:
@@ -246,9 +321,6 @@ func _set_grip_pose() -> void:
 		"Ring": [48.0, 52.0, 34.0],
 		"Pinky": [42.0, 46.0, 28.0]
 	}
-	saved_rotations.clear()
-	saved_angles.clear()
-	saved_axes.clear()
 	for finger in angles:
 		var values: Array = angles[finger]
 		for i in range(values.size()):
@@ -340,6 +412,20 @@ func _setup_ui() -> void:
 	hand_name = Label.new()
 	hand_name.text = "Ліва рука"
 	controls.add_child(hand_name)
+	var views := HBoxContainer.new()
+	controls.add_child(views)
+	_make_button("ТІЛО", func() -> void: _focus_on(0), views)
+	_make_button("ЛІВА", func() -> void: _focus_on(1), views)
+	_make_button("ПРАВА", func() -> void: _focus_on(2), views)
+	var hand_views := HBoxContainer.new()
+	controls.add_child(hand_views)
+	for view in ["ДОЛОНЯ", "ТИЛ", "ЗБОКУ"]:
+		var button := _make_button(view, _hand_view.bind(view), hand_views)
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var zoom := HBoxContainer.new()
+	controls.add_child(zoom)
+	_make_button("ZOOM +", _zoom.bind(0.8), zoom)
+	_make_button("ZOOM −", _zoom.bind(1.25), zoom)
 	var fingers_row := HBoxContainer.new()
 	controls.add_child(fingers_row)
 	var finger_keys := ["Thumb", "Index", "Middle", "Ring", "Pinky"]
@@ -373,6 +459,7 @@ func _setup_ui() -> void:
 	handle_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	handle_status.text = "Поза ще не налаштована; це візуальна перевірка."
 	controls.add_child(handle_status)
+	_setup_handle_controls(controls)
 
 	_add_groups()
 	var choice_row := HBoxContainer.new()
@@ -407,11 +494,6 @@ func _setup_ui() -> void:
 	overlay_button = _make_button("КІСТКИ: ВИМКНЕНО", _toggle_overlay, controls)
 	overlay_button.name = "SkeletonToggle"
 
-	var views := HBoxContainer.new()
-	controls.add_child(views)
-	_make_button("ТІЛО", func() -> void: _focus_on(0), views)
-	_make_button("ЛІВА", func() -> void: _focus_on(1), views)
-	_make_button("ПРАВА", func() -> void: _focus_on(2), views)
 	var hint := Label.new()
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint.text = "Хват — початкова поза. Оглянь рукоять з усіх боків. Кнопки 1–3 дозволяють змінити окремий суглоб."
@@ -494,6 +576,8 @@ func _select_hand(side: String) -> void:
 	selected_hand = side
 	_position_handle()
 	_select_finger("Index")
+	if focus_mode != 0:
+		_hand_view("ДОЛОНЯ")
 
 
 func _select_finger(finger: String) -> void:
@@ -651,9 +735,28 @@ func _focus_on(mode: int) -> void:
 		var name := "mixamorig:LeftHand" if mode == 1 else "mixamorig:RightHand"
 		var index := _bone_index(name)
 		if index >= 0:
-			focus = rig.to_global(rig.get_bone_global_pose(index).origin)
+			focus = rig.to_global(rig.get_bone_global_pose(index) * handle_cylinder.position)
 		distance = 0.43
 	_update_camera()
+
+func _zoom(factor: float) -> void:
+	distance = clampf(distance * factor, 0.18, 7.0)
+	_update_camera()
+
+
+func _hand_view(view: String) -> void:
+	_focus_on(1 if selected_hand == "Left" else 2)
+	# Cylinder Y runs across the palm; Z points toward the fingers' curl.
+	var wrist := _bone_index("mixamorig:%sHand" % selected_hand)
+	var frame := rig.global_basis * rig.get_bone_global_pose(wrist).basis * handle_cylinder.basis
+	var normal := frame.z.normalized()
+	var direction := normal if view == "ДОЛОНЯ" else -normal
+	if view == "ЗБОКУ":
+		direction = frame.y.normalized()
+	orbit_pitch = asin(clampf(direction.y, -0.98, 0.98))
+	orbit_yaw = atan2(direction.x, direction.z)
+	_update_camera()
+
 
 func _update_camera() -> void:
 	if orbit_camera == null:
@@ -661,6 +764,10 @@ func _update_camera() -> void:
 	var radius := cos(orbit_pitch) * distance
 	orbit_camera.global_position = focus + Vector3(sin(orbit_yaw) * radius, sin(orbit_pitch) * distance, cos(orbit_yaw) * radius)
 	orbit_camera.look_at(focus, Vector3.UP)
+	if controls_panel != null:
+		var screen_width := get_viewport().get_visible_rect().size.x
+		# Perspective h_offset translates the view; preserve the wrist as orbit focus.
+		orbit_camera.h_offset = -distance * tan(deg_to_rad(orbit_camera.fov * 0.5)) * orbit_camera.get_viewport().get_visible_rect().size.aspect() * controls_panel.size.x / screen_width
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventScreenDrag:
@@ -680,7 +787,13 @@ func _unhandled_input(event: InputEvent) -> void:
 			_update_camera()
 
 func _process(_delta: float) -> void:
-	if rig == null or not show_lines:
+	if rig == null:
+		return
+	if focus_mode != 0:
+		var wrist := _bone_index("mixamorig:LeftHand" if focus_mode == 1 else "mixamorig:RightHand")
+		focus = rig.to_global(rig.get_bone_global_pose(wrist) * handle_cylinder.position)
+		_update_camera()
+	if not show_lines:
 		return
 	line_mesh.clear_surfaces()
 	line_mesh.surface_begin(Mesh.PRIMITIVE_LINES)

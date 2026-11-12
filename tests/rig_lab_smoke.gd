@@ -206,6 +206,59 @@ func _run() -> void:
 		return
 	rig.set_bone_pose_rotation(left_hand_index, wrist_original)
 	await process_frame
+	# Calibrate by actual UI signals; values survive pose/reset/toggle and hand switches.
+	lab.call("_select_hand", "Left")
+	var base_transform := grip_handle.transform
+	var base_diameter := (grip_handle.mesh as CylinderMesh).top_radius * 2.0
+	var move_button := touch_ui.find_child("Handle_offset_0_plus", true, false) as Button
+	if not _require(move_button != null, "Touch handle translation control missing"):
+		return
+	move_button.pressed.emit()
+	lab.call("_adjust_handle", "angles", 2, 1.0)
+	lab.call("_adjust_handle", "diameter", 0, 1.0)
+	var tuned := grip_handle.transform
+	if not _require(tuned.origin.distance_to(base_transform.origin) > 0.001
+		and not tuned.basis.is_equal_approx(base_transform.basis)
+		and (grip_handle.mesh as CylinderMesh).top_radius * 2.0 > base_diameter,
+		"Translation, rotation and diameter must change geometry"):
+		return
+	lab.call("_reset_pose")
+	lab.call("_toggle_handle")
+	lab.call("_toggle_handle")
+	lab.call("_select_hand", "Right")
+	var right_base := grip_handle.transform
+	lab.call("_adjust_handle", "offset", 1, -1.0)
+	lab.call("_reset_handle")
+	if not _require(grip_handle.transform.is_equal_approx(right_base), "Reset must restore automatic right-hand placement"):
+		return
+	lab.call("_select_hand", "Left")
+	if not _require(grip_handle.transform.is_equal_approx(tuned), "Hand calibration must survive selection/reset and remain independent"):
+		return
+	for side in ["Left", "Right"]:
+		lab.call("_select_hand", side)
+		lab.call("_reset_handle")
+		await process_frame
+		var wrist_idx := int(lab.call("_bone_index", "mixamorig:%sHand" % side))
+		var index_idx := int(lab.call("_bone_index", "mixamorig:%sHandIndex1" % side))
+		var pinky_idx := int(lab.call("_bone_index", "mixamorig:%sHandPinky1" % side))
+		var across := (rig.get_bone_global_rest(index_idx).origin - rig.get_bone_global_rest(pinky_idx).origin).normalized()
+		var handle_axis := (rig.get_bone_global_rest(wrist_idx).basis * grip_handle.basis.y).normalized()
+		var actual_diameter := (grip_handle.mesh as CylinderMesh).top_radius * 2.0 * grip_handle.global_basis.x.length()
+		if not _require(absf(across.dot(handle_axis)) > 0.99 and absf(actual_diameter - 0.026) < 0.0001,
+			"Handle must run across each palm and retain 26 mm world diameter despite GLB scale"):
+			return
+		for view in ["ДОЛОНЯ", "ТИЛ", "ЗБОКУ"]:
+			lab.call("_hand_view", view)
+			var camera: Camera3D = lab.get("orbit_camera")
+			if not _require(camera.global_transform.is_finite() and int(lab.get("focus_mode")) != 0, "Hand camera view must be finite and focused"):
+				return
+	lab.call("_adjust_handle", "diameter", 0, 100.0)
+	if not _require(is_equal_approx(float(lab.call("_handle_parameters")["diameter"]), 0.050), "Diameter upper bound"):
+		return
+	lab.call("_adjust_handle", "diameter", 0, -100.0)
+	if not _require(is_equal_approx(float(lab.call("_handle_parameters")["diameter"]), 0.012), "Diameter lower bound"):
+		return
+	print("Rig Lab calibration smoke passed: independent hands, local controls, scale, reset, camera views")
 	print("Rig Lab grip smoke passed: attached moving handle, 14-joint pose, independent tuning, both hands")
 	print("Rig Lab smoke passed: 52 bones, 28 finger bones, mirrored thumb flexion, pose/reset")
 	quit(0)
