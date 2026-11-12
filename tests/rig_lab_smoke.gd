@@ -46,12 +46,15 @@ func _run() -> void:
 	if not _require(right_panel != null and right_scroll != null and right_panel.is_ancestor_of(right_scroll),
 		"Handle controls must be scrollable in a separate right sidebar"):
 		return
-	if not _require(left_panel.position.x + left_panel.size.x + 40.0 <= right_panel.position.x
-		and right_panel.position.x + right_panel.size.x <= touch_ui.get_viewport().get_visible_rect().size.x,
-		"Sidebars must leave a visible central viewport without overlap; left=%s %s right=%s %s viewport=%s"
-			% [str(left_panel.position), str(left_panel.size), str(right_panel.position), str(right_panel.size),
-				str(touch_ui.get_viewport().get_visible_rect().size)]):
-		return
+	# The CI headless viewport is only 64x64. Validate actual landscape sizes instead.
+	for screen_size in [Vector2(844, 390), Vector2(1280, 720)]:
+		lab.call("_layout_ui_for_size", screen_size)
+		if not _require(left_panel.position.x + left_panel.size.x + 40.0 <= right_panel.position.x
+			and right_panel.position.x + right_panel.size.x <= screen_size.x,
+			"Sidebars overlap/overflow at %s: left=%s %s right=%s %s"
+				% [str(screen_size), str(left_panel.position), str(left_panel.size), str(right_panel.position),
+					str(right_panel.size)]):
+			return
 	var left_hand_button := touch_ui.find_child("LeftHandButton", true, false) as Button
 	var right_handle_button := touch_ui.find_child("Handle_offset_0_plus", true, false) as Button
 	if not _require(left_hand_button != null and right_handle_button != null
