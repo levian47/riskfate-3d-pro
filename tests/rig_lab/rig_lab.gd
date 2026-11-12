@@ -35,10 +35,12 @@ var info_text: Label
 var overlay_button: Button
 var full_button: Button
 var controls_panel: PanelContainer
+var handle_panel: PanelContainer
 var angle_panel: PanelContainer
 var angle_minus_button: Button
 var angle_plus_button: Button
 var controls_scroll: ScrollContainer
+var handle_scroll: ScrollContainer
 var ui_root: Control
 var mesh_instance: MeshInstance3D
 var selected: Array[int] = []
@@ -47,6 +49,7 @@ var orbit_yaw := 0.0
 var orbit_pitch := 0.12
 var distance := 3.4
 var focus := Vector3(0.0, 1.0, 0.0)
+var camera_pan := Vector3.ZERO
 var focus_mode := 0
 var show_lines := false
 
@@ -160,7 +163,8 @@ func _setup_overlay() -> void:
 func _make_button(text_value: String, cb: Callable, box: Container) -> Button:
 	var b := Button.new()
 	b.text = text_value
-	b.custom_minimum_size.y = 46
+	b.custom_minimum_size.y = 64
+	b.add_theme_font_size_override("font_size", 18)
 	b.pressed.connect(cb)
 	box.add_child(b)
 	return b
@@ -412,12 +416,14 @@ func _setup_ui() -> void:
 	hand_name = Label.new()
 	hand_name.text = "Ліва рука"
 	controls.add_child(hand_name)
-	var views := HBoxContainer.new()
+	var views := GridContainer.new()
+	views.columns = 2
 	controls.add_child(views)
 	_make_button("ТІЛО", func() -> void: _focus_on(0), views)
 	_make_button("ЛІВА", func() -> void: _focus_on(1), views)
 	_make_button("ПРАВА", func() -> void: _focus_on(2), views)
-	var hand_views := HBoxContainer.new()
+	var hand_views := GridContainer.new()
+	hand_views.columns = 2
 	controls.add_child(hand_views)
 	for view in ["ДОЛОНЯ", "ТИЛ", "ЗБОКУ"]:
 		var button := _make_button(view, _hand_view.bind(view), hand_views)
@@ -426,7 +432,8 @@ func _setup_ui() -> void:
 	controls.add_child(zoom)
 	_make_button("ZOOM +", _zoom.bind(0.8), zoom)
 	_make_button("ZOOM −", _zoom.bind(1.25), zoom)
-	var fingers_row := HBoxContainer.new()
+	var fingers_row := GridContainer.new()
+	fingers_row.columns = 3
 	controls.add_child(fingers_row)
 	var finger_keys := ["Thumb", "Index", "Middle", "Ring", "Pinky"]
 	var finger_titles := ["ВЕЛ", "ВКАЗ", "СЕР", "БЕЗ", "МІЗ"]
@@ -448,18 +455,6 @@ func _setup_ui() -> void:
 		button.name = "Joint" + str(n)
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		finger_joint_buttons.append(button)
-	var grip_label := Label.new()
-	grip_label.text = "ТЕСТ ХВАТУ (БЕЗ ФІЗИКИ)"
-	controls.add_child(grip_label)
-	handle_toggle = _make_button("РУКОЯТЬ: ПОКАЗАНО", _toggle_handle, controls)
-	handle_toggle.name = "HandleToggle"
-	var grip_button := _make_button("СТИСНУТИ РУКОЯТЬ", _set_grip_pose, controls)
-	grip_button.name = "GripPoseButton"
-	handle_status = Label.new()
-	handle_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	handle_status.text = "Поза ще не налаштована; це візуальна перевірка."
-	controls.add_child(handle_status)
-	_setup_handle_controls(controls)
 
 	_add_groups()
 	var choice_row := HBoxContainer.new()
@@ -496,7 +491,7 @@ func _setup_ui() -> void:
 
 	var hint := Label.new()
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint.text = "Хват — початкова поза. Оглянь рукоять з усіх боків. Кнопки 1–3 дозволяють змінити окремий суглоб."
+	hint.text = "ЛКМ: обертання; СКМ: переміщення; колесо: масштаб. Рукоять і її параметри — праворуч."
 	controls.add_child(hint)
 
 	# Keep the drag-sensitive HSlider OUTSIDE ScrollContainer; on phones, vertical
@@ -540,28 +535,74 @@ func _setup_ui() -> void:
 	full_button = Button.new()
 	full_button.name = "FullscreenButton"
 	full_button.text = "FULL"
-	full_button.custom_minimum_size = Vector2(104, 46)
+	full_button.custom_minimum_size = Vector2(110, 64)
+	full_button.add_theme_font_size_override("font_size", 18)
 	full_button.pressed.connect(_toggle_fullscreen)
 	ui_root.add_child(full_button)
+	_setup_handle_panel()
 	get_viewport().size_changed.connect(_layout_ui)
 	_layout_ui()
 	_select_axis(2)
 	_select_finger("Index")
 
 
+func _setup_handle_panel() -> void:
+	# Separate scrollable right column: all grip/handle calibration stays together.
+	handle_panel = PanelContainer.new()
+	handle_panel.name = "HandleControls"
+	handle_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	ui_root.add_child(handle_panel)
+	handle_scroll = ScrollContainer.new()
+	handle_scroll.name = "HandleScroll"
+	handle_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	handle_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	handle_scroll.follow_focus = true
+	handle_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	handle_panel.add_child(handle_scroll)
+	var margin := MarginContainer.new()
+	for side in ["left", "right", "top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, 10)
+	handle_scroll.add_child(margin)
+	var controls := VBoxContainer.new()
+	controls.add_theme_constant_override("separation", 9)
+	margin.add_child(controls)
+	var heading := Label.new()
+	heading.text = "РУКОЯТЬ — НАЛАШТУВАННЯ"
+	heading.add_theme_font_size_override("font_size", 18)
+	controls.add_child(heading)
+	var hint := Label.new()
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hint.text = "Параметри окремі для лівої та правої рук. Руку обирай ліворуч."
+	controls.add_child(hint)
+	handle_toggle = _make_button("РУКОЯТЬ: ПОКАЗАНО", _toggle_handle, controls)
+	handle_toggle.name = "HandleToggle"
+	var grip_button := _make_button("СТИСНУТИ РУКОЯТЬ", _set_grip_pose, controls)
+	grip_button.name = "GripPoseButton"
+	handle_status = Label.new()
+	handle_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	handle_status.text = "Поза ще не налаштована; це візуальна перевірка."
+	controls.add_child(handle_status)
+	_setup_handle_controls(controls)
+
+
 func _layout_ui() -> void:
-	if controls_panel == null or angle_panel == null or full_button == null:
+	if controls_panel == null or handle_panel == null or angle_panel == null or full_button == null:
 		return
 	var viewport_size := get_viewport().get_visible_rect().size
-	var panel_width := minf(326.0, maxf(230.0, viewport_size.x * 0.48))
-	var dock_height := 152.0
-	var panel_height := maxf(138.0, viewport_size.y - dock_height - 36.0)
-	controls_panel.position = Vector2(12.0, 12.0)
+	var margin := 12.0
+	# Keep both columns visible in landscape; leave the centre free for the hands.
+	var panel_width := clampf(viewport_size.x * 0.29, 226.0, 360.0)
+	panel_width = minf(panel_width, maxf(160.0, (viewport_size.x - 180.0) * 0.5))
+	var dock_height := clampf(viewport_size.y * 0.37, 138.0, 162.0)
+	var panel_height := maxf(125.0, viewport_size.y - dock_height - margin * 3.0)
+	controls_panel.position = Vector2(margin, margin)
 	controls_panel.size = Vector2(panel_width, panel_height)
-	angle_panel.position = Vector2(12.0, viewport_size.y - dock_height - 12.0)
+	angle_panel.position = Vector2(margin, viewport_size.y - dock_height - margin)
 	angle_panel.size = Vector2(panel_width, dock_height)
-	full_button.position = Vector2(viewport_size.x - 114.0, 12.0)
-	full_button.size = Vector2(102.0, 46.0)
+	handle_panel.position = Vector2(viewport_size.x - panel_width - margin, margin)
+	handle_panel.size = Vector2(panel_width, maxf(150.0, viewport_size.y - margin * 2.0))
+	full_button.position = Vector2((viewport_size.x - 110.0) * 0.5, margin)
+	full_button.size = Vector2(110.0, 64.0)
 
 
 func _step_selection(delta: int) -> void:
@@ -728,6 +769,7 @@ func _toggle_overlay() -> void:
 
 func _focus_on(mode: int) -> void:
 	focus_mode = mode
+	camera_pan = Vector3.ZERO
 	if mode == 0:
 		distance = 3.4
 		focus = Vector3(0.0, 1.0, 0.0)
@@ -761,23 +803,37 @@ func _hand_view(view: String) -> void:
 func _update_camera() -> void:
 	if orbit_camera == null:
 		return
+	var center := focus + camera_pan
 	var radius := cos(orbit_pitch) * distance
-	orbit_camera.global_position = focus + Vector3(sin(orbit_yaw) * radius, sin(orbit_pitch) * distance, cos(orbit_yaw) * radius)
-	orbit_camera.look_at(focus, Vector3.UP)
-	if controls_panel != null:
-		var screen_width := get_viewport().get_visible_rect().size.x
-		# Perspective h_offset translates the view; preserve the wrist as orbit focus.
-		orbit_camera.h_offset = -distance * tan(deg_to_rad(orbit_camera.fov * 0.5)) * orbit_camera.get_viewport().get_visible_rect().size.aspect() * controls_panel.size.x / screen_width
+	orbit_camera.global_position = center + Vector3(sin(orbit_yaw) * radius, sin(orbit_pitch) * distance, cos(orbit_yaw) * radius)
+	orbit_camera.look_at(center, Vector3.UP)
+	# Matching left/right sidebars keep the available centre symmetric.
+	orbit_camera.h_offset = 0.0
+
+
+func _pan_camera(relative: Vector2) -> void:
+	if orbit_camera == null:
+		return
+	var viewport_height := get_viewport().get_visible_rect().size.y
+	if viewport_height <= 0.0:
+		return
+	var units_per_pixel := 2.0 * distance * tan(deg_to_rad(orbit_camera.fov * 0.5)) / viewport_height
+	camera_pan -= orbit_camera.global_basis.x * relative.x * units_per_pixel
+	camera_pan += orbit_camera.global_basis.y * relative.y * units_per_pixel
+	_update_camera()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventScreenDrag:
 		orbit_yaw -= event.relative.x * 0.008
 		orbit_pitch = clampf(orbit_pitch + event.relative.y * 0.005, -0.8, 0.8)
 		_update_camera()
-	elif event is InputEventMouseMotion and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		orbit_yaw -= event.relative.x * 0.008
-		orbit_pitch = clampf(orbit_pitch + event.relative.y * 0.005, -0.8, 0.8)
-		_update_camera()
+	elif event is InputEventMouseMotion:
+		if Input.is_mouse_button_pressed(MOUSE_BUTTON_MIDDLE):
+			_pan_camera(event.relative)
+		elif Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+			orbit_yaw -= event.relative.x * 0.008
+			orbit_pitch = clampf(orbit_pitch + event.relative.y * 0.005, -0.8, 0.8)
+			_update_camera()
 	elif event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			distance = maxf(0.18, distance * 0.9)
