@@ -2,12 +2,17 @@ extends Node3D
 ## Isolated interactive rig examination. No gameplay / authored animations.
 
 const SOURCE := preload("res://assets/characters/Riskfate_Male_FingerRig52_WEBPREVIEW.glb")
+const PART_MAP_SCRIPT := preload("res://tests/rig_lab/rig_part_map.gd")
 
 var rig: Skeleton3D
 var orbit_camera: Camera3D
 var line_mesh: ImmediateMesh
 var line_instance: MeshInstance3D
 var part_name: Label
+var part_map: Control
+var map_title: Label
+var map_back: Button
+var map_hint: Label
 var hand_name: Label
 var selected_group_index := -1
 var selected_axis := 2
@@ -402,6 +407,28 @@ func _setup_ui() -> void:
 	info_text.text = "52 кістки | рухи без анімацій"
 	controls.add_child(info_text)
 
+	# A vector anatomy map is the primary navigation; the original quick controls
+	# remain below it for precision tuning and regression compatibility.
+	map_title = Label.new()
+	map_title.name = "AnatomyMapTitle"
+	map_title.text = "ОБЕРИ ЧАСТИНУ ТІЛА"
+	map_title.add_theme_font_size_override("font_size", 18)
+	controls.add_child(map_title)
+	map_back = _make_button("← ДО СИЛУЕТУ", _show_body_map, controls)
+	map_back.name = "AnatomyMapBack"
+	map_back.visible = false
+	part_map = PART_MAP_SCRIPT.new()
+	part_map.name = "InteractivePartMap"
+	part_map.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	part_map.body_selected.connect(_map_select_body)
+	part_map.finger_selected.connect(_map_select_finger)
+	controls.add_child(part_map)
+	map_hint = Label.new()
+	map_hint.name = "AnatomyMapHint"
+	map_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	map_hint.text = "Торкнись області силуету. Для пальців вибери кисть."
+	controls.add_child(map_hint)
+
 	var part_label := Label.new()
 	part_label.text = "ОБЕРИ ПАЛЕЦЬ АБО СУГЛОБ"
 	controls.add_child(part_label)
@@ -623,10 +650,63 @@ func _step_selection(delta: int) -> void:
 	_on_part_changed(posmod(selected_group_index + delta, group_labels.size()))
 
 
+
+func _show_body_map() -> void:
+	part_map.set_view("body")
+	map_back.visible = false
+	map_title.text = "ОБЕРИ ЧАСТИНУ ТІЛА"
+	map_hint.text = "Торкнись області силуету. Для пальців вибери кисть."
+	_focus_on(0)
+
+
+func _show_hand_map(side: String) -> void:
+	part_map.set_view("hand", side)
+	map_back.visible = true
+	map_title.text = "ЛІВА КИСТЬ — ПАЛЬЦІ" if side == "Left" else "ПРАВА КИСТЬ — ПАЛЬЦІ"
+	map_hint.text = "Торкнись пальця. Суглоб 1–3 обирай нижче."
+	part_map.mark_region(current_finger)
+
+
+func _map_select_body(region: String) -> void:
+	if region == "LeftHand" or region == "RightHand":
+		var side := "Left" if region == "LeftHand" else "Right"
+		_select_hand(side)
+		_show_hand_map(side)
+		return
+	var index := group_labels.find("Суглоб — " + region)
+	if index < 0:
+		selected.clear()
+		selected_group_index = -1
+		part_name.text = "Область %s: редактор не реалізовано" % region
+		map_hint.text = "Для цієї області поки немає налаштувань кісток."
+		angle_slider.editable = false
+		angle_minus_button.disabled = true
+		angle_plus_button.disabled = true
+		return
+	_on_part_changed(index)
+	map_hint.text = "Обрана область: %s. Кут і вісь — у налаштуваннях." % region
+	var bone := _bone_index("mixamorig:" + region)
+	if bone >= 0:
+		focus_mode = 0
+		focus = rig.to_global(rig.get_bone_global_pose(bone).origin)
+		camera_pan = Vector3.ZERO
+		distance = 0.75 if region == "Head" or region == "Neck" else 1.1
+		_update_camera()
+
+
+func _map_select_finger(finger: String) -> void:
+	_select_finger(finger)
+	part_map.mark_region(finger)
+	map_hint.text = "Обрано палець: %s. Точний суглоб — кнопки 1/2/3 нижче." % finger
+
+
+
 func _select_hand(side: String) -> void:
 	if selected_hand != side:
 		_reset_pose()
 	selected_hand = side
+	if part_map != null and part_map.mode == "hand":
+		_show_hand_map(side)
 	if handle_side_label != null:
 		handle_side_label.text = "АКТИВНА: ЛІВА РУКА" if side == "Left" else "АКТИВНА: ПРАВА РУКА"
 	_position_handle()
@@ -637,6 +717,8 @@ func _select_hand(side: String) -> void:
 
 func _select_finger(finger: String) -> void:
 	current_finger = finger
+	if part_map != null and part_map.mode == "hand":
+		part_map.mark_region(finger)
 	var labels := {
 		"Thumb": "великий",
 		"Index": "вказівний",
@@ -703,6 +785,9 @@ func _on_part_changed(item_index: int) -> void:
 	if item_index < 0 or item_index >= group_labels.size():
 		return
 	selected_group_index = item_index
+	angle_slider.editable = true
+	angle_minus_button.disabled = false
+	angle_plus_button.disabled = false
 	selected.clear()
 	for bone_index in group_indices[item_index]:
 		selected.append(int(bone_index))
