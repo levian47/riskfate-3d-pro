@@ -48,7 +48,9 @@ func _run() -> void:
 		return
 	if not _require(left_panel.position.x + left_panel.size.x + 40.0 <= right_panel.position.x
 		and right_panel.position.x + right_panel.size.x <= touch_ui.get_viewport().get_visible_rect().size.x,
-		"Sidebars must leave a visible central viewport without overlap"):
+		"Sidebars must leave a visible central viewport without overlap; left=%s %s right=%s %s viewport=%s"
+			% [str(left_panel.position), str(left_panel.size), str(right_panel.position), str(right_panel.size),
+				str(touch_ui.get_viewport().get_visible_rect().size)]):
 		return
 	var left_hand_button := touch_ui.find_child("LeftHandButton", true, false) as Button
 	var right_handle_button := touch_ui.find_child("Handle_offset_0_plus", true, false) as Button
