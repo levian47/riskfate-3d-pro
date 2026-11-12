@@ -22,6 +22,9 @@ var info_text: Label
 var overlay_button: Button
 var full_button: Button
 var controls_panel: PanelContainer
+var angle_panel: PanelContainer
+var angle_minus_button: Button
+var angle_plus_button: Button
 var controls_scroll: ScrollContainer
 var ui_root: Control
 var mesh_instance: MeshInstance3D
@@ -35,6 +38,9 @@ var focus_mode := 0
 var show_lines := false
 
 func _ready() -> void:
+	# Only this isolated test scene needs pointer emulation for dragging sliders on mobile Web.
+	# Keep the project's gameplay input settings unchanged.
+	Input.emulate_mouse_from_touch = true
 	var model := SOURCE.instantiate() as Node3D
 	if model == null:
 		push_error("Rig Lab: GLB did not instantiate")
@@ -237,18 +243,9 @@ func _setup_ui() -> void:
 		axis_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		axis_buttons.append(axis_button)
 
-	angle_value = Label.new()
-	angle_value.text = "Кут: 0°"
-	controls.add_child(angle_value)
-	angle_slider = HSlider.new()
-	angle_slider.name = "AngleSlider"
-	angle_slider.min_value = -90
-	angle_slider.max_value = 90
-	angle_slider.step = 1
-	angle_slider.custom_minimum_size = Vector2(190, 42)
-	angle_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	angle_slider.value_changed.connect(_apply_angle)
-	controls.add_child(angle_slider)
+	var angle_hint := Label.new()
+	angle_hint.text = "КУТ — ПОВЗУНОК ЗНИЗУ"
+	controls.add_child(angle_hint)
 	_make_button("СКИНУТИ ПОЗУ", _reset_pose, controls)
 	overlay_button = _make_button("КІСТКИ: ВИМКНЕНО", _toggle_overlay, controls)
 	overlay_button.name = "SkeletonToggle"
@@ -260,8 +257,46 @@ func _setup_ui() -> void:
 	_make_button("ПРАВА", func() -> void: _focus_on(2), views)
 	var hint := Label.new()
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint.text = "Кнопками обирай руку й палець. ◀ ▶ — інші суглоби. Повзунок — згинання. Панель прокручується."
+	hint.text = "Кнопками обирай руку й палець. ◀ ▶ — інші суглоби. Кут — в окремій нижній панелі."
 	controls.add_child(hint)
+
+	# Keep the drag-sensitive HSlider OUTSIDE ScrollContainer; on phones, vertical
+	# scroll gesture handling can capture the movement before HSlider receives it.
+	angle_panel = PanelContainer.new()
+	angle_panel.name = "FixedAnglePanel"
+	angle_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	ui_root.add_child(angle_panel)
+	var angle_margin := MarginContainer.new()
+	angle_margin.add_theme_constant_override("margin_left", 12)
+	angle_margin.add_theme_constant_override("margin_right", 12)
+	angle_margin.add_theme_constant_override("margin_top", 7)
+	angle_margin.add_theme_constant_override("margin_bottom", 7)
+	angle_panel.add_child(angle_margin)
+	var angle_controls := VBoxContainer.new()
+	angle_controls.add_theme_constant_override("separation", 4)
+	angle_margin.add_child(angle_controls)
+	angle_value = Label.new()
+	angle_value.name = "AngleValue"
+	angle_value.text = "Кут: 0°"
+	angle_controls.add_child(angle_value)
+	angle_slider = HSlider.new()
+	angle_slider.name = "AngleSlider"
+	angle_slider.min_value = -90.0
+	angle_slider.max_value = 90.0
+	angle_slider.step = 1.0
+	angle_slider.custom_minimum_size = Vector2(200, 44)
+	angle_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	angle_slider.mouse_filter = Control.MOUSE_FILTER_STOP
+	angle_slider.value_changed.connect(_apply_angle)
+	angle_controls.add_child(angle_slider)
+	var step_row := HBoxContainer.new()
+	angle_controls.add_child(step_row)
+	angle_minus_button = _make_button("−15°", func() -> void: _adjust_angle(-15), step_row)
+	angle_minus_button.name = "AngleMinus15"
+	angle_minus_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	angle_plus_button = _make_button("+15°", func() -> void: _adjust_angle(15), step_row)
+	angle_plus_button.name = "AnglePlus15"
+	angle_plus_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 	full_button = Button.new()
 	full_button.name = "FullscreenButton"
@@ -276,13 +311,16 @@ func _setup_ui() -> void:
 
 
 func _layout_ui() -> void:
-	if controls_panel == null or full_button == null:
+	if controls_panel == null or angle_panel == null or full_button == null:
 		return
 	var viewport_size := get_viewport().get_visible_rect().size
 	var panel_width := minf(326.0, maxf(230.0, viewport_size.x * 0.48))
-	var panel_height := maxf(170.0, viewport_size.y - 24.0)
+	var dock_height := 152.0
+	var panel_height := maxf(138.0, viewport_size.y - dock_height - 36.0)
 	controls_panel.position = Vector2(12.0, 12.0)
 	controls_panel.size = Vector2(panel_width, panel_height)
+	angle_panel.position = Vector2(12.0, viewport_size.y - dock_height - 12.0)
+	angle_panel.size = Vector2(panel_width, dock_height)
 	full_button.position = Vector2(viewport_size.x - 114.0, 12.0)
 	full_button.size = Vector2(102.0, 46.0)
 
@@ -378,6 +416,12 @@ func _on_part_changed(item_index: int) -> void:
 	hand_name.text = "Ліва рука" if selected_hand == "Left" else "Права рука"
 	angle_slider.set_value_no_signal(0.0)
 	angle_value.text = "Кут: 0°"
+
+
+func _adjust_angle(delta: int) -> void:
+	if angle_slider == null:
+		return
+	angle_slider.value = clampf(angle_slider.value + float(delta), angle_slider.min_value, angle_slider.max_value)
 
 
 func _reset_all_bones() -> void:

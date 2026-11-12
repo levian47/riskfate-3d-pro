@@ -75,8 +75,37 @@ func _run() -> void:
 	lab.call("_select_axis", 1)
 	if not _require(int(lab.get("selected_axis")) == 1, "Axis button did not change axis"):
 		return
+	var angle_slider: HSlider = lab.get("angle_slider")
+	var angle_panel: PanelContainer = lab.get("angle_panel")
+	var controls_scroll: ScrollContainer = lab.get("controls_scroll")
+	if not _require(angle_slider != null and angle_panel != null
+		and not controls_scroll.is_ancestor_of(angle_slider)
+		and angle_panel.is_ancestor_of(angle_slider), "Angle slider must be independent from scrollable controls"):
+		return
+	if not _require(Input.emulate_mouse_from_touch, "Touch-to-mouse emulation must be enabled inside Rig Lab"):
+		return
+	var plus: Button = lab.get("angle_plus_button")
+	var minus: Button = lab.get("angle_minus_button")
+	if not _require(plus != null and minus != null and plus.visible and minus.visible,
+		"Separate accessible angle buttons are missing"):
+		return
 	var index := int(lab.call("_bone_index", "mixamorig:LeftHandIndex1"))
 	var initial := rig.get_bone_pose_rotation(index)
+	plus.pressed.emit()
+	if not _require(is_equal_approx(angle_slider.value, 15.0)
+		and rig.get_bone_pose_rotation(index).angle_to(initial) > 0.1,
+		"+15 button must move the slider and rotate selected finger"):
+		return
+	minus.pressed.emit()
+	if not _require(is_zero_approx(angle_slider.value)
+		and rig.get_bone_pose_rotation(index).angle_to(initial) < 0.001,
+		"-15 button must return slider and finger to rest pose"):
+		return
+	angle_slider.value = 35.0
+	if not _require(is_equal_approx(angle_slider.value, 35.0)
+		and rig.get_bone_pose_rotation(index).angle_to(initial) > 0.1,
+		"Dragging slider value must be connected to finger rotation"):
+		return
 	lab.call("_apply_angle", 35.0)
 	if not _require(rig.get_bone_pose_rotation(index).angle_to(initial) > 0.1, "Finger did not rotate"):
 		return
