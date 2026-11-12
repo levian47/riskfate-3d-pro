@@ -82,6 +82,11 @@ jobs:
         run: |
           "$GODOT_BIN" --headless --path . --script res://tests/vroid_hero_smoke.gd
 
+      - name: Smoke-test experimental Rig Lab (test branch only)
+        if: github.event_name == 'pull_request' && github.head_ref == 'test/male-finger-rig52-lab'
+        run: |
+          "$GODOT_BIN" --headless --path . --script res://tests/rig_lab_smoke.gd
+
       - name: Export Web build
         run: |
           mkdir -p dist
