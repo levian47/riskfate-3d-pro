@@ -40,6 +40,30 @@ func _run() -> void:
 	var touch_ui: Node = lab.get("ui_root")
 	if not _require(touch_ui.get_node_or_null("RigControls") != null, "Touch controls are missing"):
 		return
+	var part_map := lab.get("part_map") as Control
+	if not _require(part_map != null and part_map.has_signal("body_selected")
+		and part_map.has_signal("finger_selected"),
+		"Clickable body/finger diagram missing"):
+		return
+	# The diagram must select real controls, not act as a decorative image.
+	lab.call("_map_select_body", "RightHand")
+	if not _require(String(part_map.get("mode")) == "hand"
+		and String(lab.get("selected_hand")) == "Right",
+		"Selecting right palm should open the finger diagram"):
+		return
+	lab.call("_map_select_finger", "Pinky")
+	if not _require(String(lab.get("current_finger")) == "Pinky"
+		and (lab.get("part_name") as Label).text.contains("мізинець"),
+		"Finger diagram must select the existing rig group"):
+		return
+	lab.call("_show_body_map")
+	if not _require(String(part_map.get("mode")) == "body", "Back should restore the body silhouette"):
+		return
+	lab.call("_map_select_body", "Head")
+	if not _require((lab.get("part_name") as Label).text.contains("Head"),
+		"Body diagram should select an available skeletal bone"):
+		return
+
 	var left_panel := touch_ui.get_node_or_null("RigControls") as PanelContainer
 	var right_panel := touch_ui.get_node_or_null("HandleControls") as PanelContainer
 	var right_scroll := lab.get("handle_scroll") as ScrollContainer
