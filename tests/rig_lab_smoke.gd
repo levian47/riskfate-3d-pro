@@ -79,19 +79,21 @@ func _run() -> void:
 				% [str(screen_size), str(left_panel.position), str(left_panel.size), str(right_panel.position),
 					str(right_panel.size)]):
 			return
-	var left_hand_button := touch_ui.find_child("LeftHandButton", true, false) as Button
-	var right_handle_button := touch_ui.find_child("Handle_offset_0_plus", true, false) as Button
-	if not _require(left_hand_button != null and right_handle_button != null
-		and left_hand_button.custom_minimum_size.y >= 64.0
-		and right_handle_button.custom_minimum_size.y >= 64.0,
-		"Left and right controls must offer larger touch targets"):
-		return
-	var finger_buttons: Dictionary = lab.get("finger_buttons")
-	if not _require(finger_buttons.size() == 5, "Five direct finger buttons must be present"):
-		return
-	for finger_key in ["Thumb", "Index", "Middle", "Ring", "Pinky"]:
-		if not _require((finger_buttons[finger_key] as Button).pressed.is_connected(Callable(lab, "_select_finger").bind(finger_key)), "Unconnected direct finger button: " + finger_key):
+	# The body map replaces former left/right hand, finger, body-focus and
+	# previous/next selector buttons. Keep adjustment controls, not duplicates.
+	for removed in ["LeftHandButton", "RightHandButton", "FingerThumb",
+		"FingerIndex", "FingerMiddle", "FingerRing", "FingerPinky"]:
+		if not _require(touch_ui.find_child(removed, true, false) == null,
+			"Redundant selector should not exist: " + removed):
 			return
+	var right_handle_button := touch_ui.find_child("Handle_offset_0_plus", true, false) as Button
+	if not _require(right_handle_button != null and right_handle_button.custom_minimum_size.y >= 64.0,
+		"Grip adjustments must keep usable touch targets"):
+		return
+	var hand_tools := lab.get("hand_tools") as VBoxContainer
+	if not _require(hand_tools != null and not hand_tools.visible,
+		"Hand-specific tools should be hidden while browsing the body"):
+		return
 	var axis_buttons: Array = lab.get("axis_buttons")
 	if not _require(axis_buttons.size() == 3, "X/Y/Z must be plain buttons"):
 		return
@@ -104,20 +106,45 @@ func _run() -> void:
 	var overlay: MeshInstance3D = lab.get("line_instance")
 	if not _require(overlay != null and not overlay.visible, "Skeleton overlay must start hidden so the model remains visible"):
 		return
-	var previous_label: String = (lab.get("part_name") as Label).text
-	lab.call("_step_selection", 1)
-	if not _require((lab.get("part_name") as Label).text != previous_label, "Touch navigation must change selected finger"):
+	lab.call("_show_body_map")
+	part_map.emit_signal("body_selected", "Head")
+	if not _require((lab.get("part_name") as Label).text.contains("Head")
+		and int(lab.get("focus_mode")) == 3
+		and float(lab.get("distance")) < 1.0,
+		"Tapping head must zoom to the head bone"):
 		return
-	(finger_buttons["Thumb"] as Button).pressed.emit()
-	if not _require((lab.get("part_name") as Label).text.contains("великий"), "Direct finger tap did not select thumb"):
+	part_map.emit_signal("body_selected", "RightHand")
+	if not _require(String(part_map.get("mode")) == "hand"
+		and String(lab.get("selected_hand")) == "Right"
+		and hand_tools.visible
+		and int(lab.get("focus_mode")) == 2
+		and float(lab.get("distance")) < 0.6,
+		"Tapping a palm must zoom and open its finger diagram"):
 		return
-	lab.call("_select_hand", "Right")
-	if not _require((lab.get("part_name") as Label).text.begins_with("Права"), "Right-hand button must change hand"):
+	part_map.emit_signal("finger_selected", "Pinky")
+	if not _require(String(lab.get("current_finger")) == "Pinky"
+		and (lab.get("part_name") as Label).text.contains("мізинець")
+		and int(lab.get("focus_mode")) == 3
+		and float(lab.get("distance")) < 0.3,
+		"Tapping finger must zoom to its actual joint"):
 		return
-	lab.call("_select_hand", "Left")
-	(finger_buttons["Index"] as Button).pressed.emit()
-	if not _require((lab.get("part_name") as Label).text.contains("вказівний"), "Index finger direct button must select index"):
+	lab.call("_choose_finger_joint", 2)
+	if not _require((lab.get("part_name") as Label).text.contains("суглоб 2")
+		and int(lab.get("tracked_bone_index")) == int(lab.call("_bone_index", "mixamorig:RightHandPinky2")),
+		"Tapping joint 2 must track the chosen joint"):
 		return
+	lab.call("_show_body_map")
+	if not _require(String(part_map.get("mode")) == "body"
+		and not hand_tools.visible and int(lab.get("focus_mode")) == 0,
+		"Back should restore whole body view and hide finger tools"):
+		return
+	lab.call("_map_select_body", "Torso")
+	if not _require(float(lab.get("distance")) < 1.2
+		and not (lab.get("angle_slider") as HSlider).editable,
+		"Noneditable torso should still zoom without pretending to support adjustment"):
+		return
+	lab.call("_map_select_body", "LeftHand")
+	lab.call("_map_select_finger", "Index")
 	lab.call("_select_axis", 1)
 	if not _require(int(lab.get("selected_axis")) == 1, "Axis button did not change axis"):
 		return
