@@ -16,6 +16,14 @@ var group_labels: Array[String] = []
 var group_indices: Array[Array] = []
 var axis_buttons: Array[Button] = []
 var finger_buttons: Dictionary = {}
+var current_finger := "Index"
+var finger_joint_buttons: Array[Button] = []
+var handle_attachment: BoneAttachment3D
+var handle_cylinder: MeshInstance3D
+var handle_on := true
+var handle_toggle: Button
+var handle_status: Label
+var saved_rotations: Dictionary = {}
 var angle_slider: HSlider
 var angle_value: Label
 var info_text: Label
@@ -60,6 +68,7 @@ func _ready() -> void:
 	_setup_environment()
 	_setup_overlay()
 	_setup_camera()
+	_setup_handle()
 	_setup_ui()
 	_update_camera()
 	print("Rig Lab: loaded ", rig.get_bone_count(), " bones and ", mesh_instance.mesh.get_surface_count(), " mesh surfaces")
@@ -148,6 +157,121 @@ func _make_button(text_value: String, cb: Callable, box: Container) -> Button:
 	box.add_child(b)
 	return b
 
+# Test-only neutral handle. All points are calculated from imported bone REST.
+# The handle does not prevent mesh clipping: the user inspects the overlap.
+func _setup_handle() -> void:
+	handle_attachment = BoneAttachment3D.new()
+	handle_attachment.name = "TestGripAttachment"
+	rig.add_child(handle_attachment)
+	handle_cylinder = MeshInstance3D.new()
+	handle_cylinder.name = "TestGripCylinder"
+	var unit := maxf(rig.global_transform.basis.x.length(), 0.0001)
+	var cylinder := CylinderMesh.new()
+	cylinder.height = 0.18 / unit
+	cylinder.top_radius = 0.013 / unit
+	cylinder.bottom_radius = 0.013 / unit
+	cylinder.radial_segments = 12
+	handle_cylinder.mesh = cylinder
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(0.48, 0.29, 0.11)
+	material.roughness = 1.0
+	handle_cylinder.material_override = material
+	handle_attachment.add_child(handle_cylinder)
+	_position_handle()
+
+
+func _position_handle() -> void:
+	if handle_attachment == null:
+		return
+	var wrist := _bone_index("mixamorig:%sHand" % selected_hand)
+	var finger_roots: Array[Vector3] = []
+	for finger in ["Pinky", "Ring", "Middle", "Index"]:
+		var index := _bone_index("mixamorig:%sHand%s1" % [selected_hand, finger])
+		if index >= 0:
+			finger_roots.append(rig.get_bone_global_rest(index).origin)
+	if wrist < 0 or finger_roots.size() != 4:
+		handle_cylinder.visible = false
+		return
+	var center := Vector3.ZERO
+	for point in finger_roots:
+		center += point
+	center /= 4.0
+	var wrist_rest: Transform3D = rig.get_bone_global_rest(wrist)
+	center = center.lerp(wrist_rest.origin, 0.35)
+	var across := (finger_roots[3] - finger_roots[0]).normalized()
+	var target := Transform3D(Basis(Quaternion(Vector3.UP, across)), center)
+	handle_attachment.bone_name = rig.get_bone_name(wrist)
+	handle_cylinder.transform = wrist_rest.affine_inverse() * target
+	handle_cylinder.visible = handle_on
+
+
+func _toggle_handle() -> void:
+	handle_on = not handle_on
+	_position_handle()
+	handle_toggle.text = "РУКОЯТЬ: ПОКАЗАНО" if handle_on else "РУКОЯТЬ: СХОВАНО"
+
+
+func _set_test_rotation(index: int, degrees: float, axis_index: int) -> void:
+	var axis := Vector3.RIGHT
+	if axis_index == 1:
+		axis = Vector3.UP
+	elif axis_index == 2:
+		axis = Vector3.BACK
+	var name := String(rig.get_bone_name(index))
+	var sign := -1.0 if axis_index == 0 and name.contains("RightHandThumb") else 1.0
+	if is_zero_approx(degrees):
+		saved_rotations.erase(index)
+	else:
+		saved_rotations[index] = original_rotations[index] * Quaternion(axis, deg_to_rad(degrees * sign))
+
+
+func _update_stored_pose() -> void:
+	_reset_all_bones()
+	for bone_index in saved_rotations:
+		rig.set_bone_pose_rotation(int(bone_index), saved_rotations[bone_index])
+
+
+func _set_grip_pose() -> void:
+	# Approximate candidate for visual review; not a collision-solving grasp.
+	var angles := {
+		"Thumb": [24.0, 18.0],
+		"Index": [40.0, 48.0, 30.0],
+		"Middle": [46.0, 52.0, 34.0],
+		"Ring": [48.0, 52.0, 34.0],
+		"Pinky": [42.0, 46.0, 28.0]
+	}
+	saved_rotations.clear()
+	for finger in angles:
+		var values: Array = angles[finger]
+		for i in range(values.size()):
+			var bone_idx := _bone_index("mixamorig:%sHand%s%d" % [selected_hand, finger, i + 1])
+			if bone_idx >= 0:
+				_set_test_rotation(bone_idx, float(values[i]), 0)
+	_update_stored_pose()
+	handle_on = true
+	_position_handle()
+	handle_toggle.text = "РУКОЯТЬ: ПОКАЗАНО"
+	handle_status.text = "Тестова поза: %d суглобів. Перевір перетини." % saved_rotations.size()
+	angle_slider.set_value_no_signal(0.0)
+	angle_value.text = "Кут: 0° (поправка)"
+
+
+func _choose_finger_joint(joint: int) -> void:
+	if current_finger == "All":
+		return
+	var limit := 2 if current_finger == "Thumb" else 3
+	if joint < 1 or joint > limit:
+		return
+	var index := _bone_index("mixamorig:%sHand%s%d" % [selected_hand, current_finger, joint])
+	if index < 0:
+		return
+	selected.clear()
+	selected.append(index)
+	part_name.text = ("%s %s — суглоб %d" % [selected_hand, current_finger, joint])
+	angle_slider.set_value_no_signal(0.0)
+	angle_value.text = "Кут: 0° (поправка)"
+
+
 func _setup_ui() -> void:
 	var layer := CanvasLayer.new()
 	layer.layer = 10
@@ -216,6 +340,27 @@ func _setup_ui() -> void:
 		finger_buttons[finger_key] = button
 	var all_button := _make_button("УСІ ПАЛЬЦІ", Callable(self, "_select_finger").bind("All"), controls)
 	all_button.name = "AllFingersButton"
+	var joint_label := Label.new()
+	joint_label.text = "ВИБРАТИ ОДИН СУГЛОБ:"
+	controls.add_child(joint_label)
+	var joints := HBoxContainer.new()
+	controls.add_child(joints)
+	for n in range(1, 4):
+		var button := _make_button(str(n), Callable(self, "_choose_finger_joint").bind(n), joints)
+		button.name = "Joint" + str(n)
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		finger_joint_buttons.append(button)
+	var grip_label := Label.new()
+	grip_label.text = "ТЕСТ ХВАТУ (БЕЗ ФІЗИКИ)"
+	controls.add_child(grip_label)
+	handle_toggle = _make_button("РУКОЯТЬ: ПОКАЗАНО", _toggle_handle, controls)
+	handle_toggle.name = "HandleToggle"
+	var grip_button := _make_button("СТИСНУТИ РУКОЯТЬ", _set_grip_pose, controls)
+	grip_button.name = "GripPoseButton"
+	handle_status = Label.new()
+	handle_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	handle_status.text = "Поза ще не налаштована; це візуальна перевірка."
+	controls.add_child(handle_status)
 
 	_add_groups()
 	var choice_row := HBoxContainer.new()
@@ -257,7 +402,7 @@ func _setup_ui() -> void:
 	_make_button("ПРАВА", func() -> void: _focus_on(2), views)
 	var hint := Label.new()
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint.text = "Великий палець: X для згинання, дзеркальний напрям на правій руці. Кут — у нижній панелі."
+	hint.text = "Хват — початкова поза. Оглянь рукоять з усіх боків. Кнопки 1–3 дозволяють змінити окремий суглоб."
 	controls.add_child(hint)
 
 	# Keep the drag-sensitive HSlider OUTSIDE ScrollContainer; on phones, vertical
@@ -333,10 +478,12 @@ func _step_selection(delta: int) -> void:
 
 func _select_hand(side: String) -> void:
 	selected_hand = side
+	_position_handle()
 	_select_finger("Index")
 
 
 func _select_finger(finger: String) -> void:
+	current_finger = finger
 	var labels := {
 		"Thumb": "великий",
 		"Index": "вказівний",
@@ -402,7 +549,6 @@ func _add_groups() -> void:
 func _on_part_changed(item_index: int) -> void:
 	if item_index < 0 or item_index >= group_labels.size():
 		return
-	_reset_all_bones()
 	selected_group_index = item_index
 	selected.clear()
 	for bone_index in group_indices[item_index]:
@@ -435,35 +581,27 @@ func _reset_all_bones() -> void:
 		rig.set_bone_pose_rotation(index, original_rotations[index])
 
 func _reset_pose() -> void:
+	saved_rotations.clear()
 	_reset_all_bones()
 	angle_slider.set_value_no_signal(0.0)
 	angle_value.text = "Кут: 0°"
+	if handle_status != null:
+		handle_status.text = "Відкрита кисть. Хват скинуто."
 
 func _apply_angle(value: float) -> void:
 	if rig == null:
 		return
-	_reset_all_bones()
 	angle_value.text = "Кут: %d°" % int(value)
-	var axis := Vector3.RIGHT
-	if selected_axis == 1:
-		axis = Vector3.UP
-	elif selected_axis == 2:
-		axis = Vector3.BACK
-	for bone_index in selected:
-		var bone_name := String(rig.get_bone_name(bone_index))
-		var joint_factor := 1.0
-		if bone_name.ends_with("2"):
-			joint_factor = 0.85
-		elif bone_name.ends_with("3"):
-			joint_factor = 0.70
-		var direction := 1.0
-		# The right thumb X hinge is mirrored relative to the left: positive
-		# test angles must flex toward the palm on both sides. Do not alter
-		# other axes, other fingers, bone rests, or imported skin weights.
-		if selected_axis == 0 and bone_name.contains("RightHandThumb"):
-			direction = -1.0
-		var rotation := Quaternion(axis, deg_to_rad(value * joint_factor * direction))
-		rig.set_bone_pose_rotation(bone_index, original_rotations[bone_index] * rotation)
+	for bone_idx in selected:
+		var name := String(rig.get_bone_name(bone_idx))
+		var factor := 1.0
+		if name.ends_with("2"):
+			factor = 0.85
+		elif name.ends_with("3"):
+			factor = 0.70
+		_set_test_rotation(bone_idx, value * factor, selected_axis)
+	_update_stored_pose()
+
 
 func _toggle_overlay() -> void:
 	show_lines = not show_lines
