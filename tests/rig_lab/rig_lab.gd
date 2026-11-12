@@ -24,6 +24,8 @@ var handle_on := true
 var handle_toggle: Button
 var handle_status: Label
 var saved_rotations: Dictionary = {}
+var saved_angles: Dictionary = {}
+var saved_axes: Dictionary = {}
 var angle_slider: HSlider
 var angle_value: Label
 var info_text: Label
@@ -221,8 +223,12 @@ func _set_test_rotation(index: int, degrees: float, axis_index: int) -> void:
 	var sign := -1.0 if axis_index == 0 and name.contains("RightHandThumb") else 1.0
 	if is_zero_approx(degrees):
 		saved_rotations.erase(index)
+		saved_angles.erase(index)
+		saved_axes.erase(index)
 	else:
 		saved_rotations[index] = original_rotations[index] * Quaternion(axis, deg_to_rad(degrees * sign))
+		saved_angles[index] = degrees
+		saved_axes[index] = axis_index
 
 
 func _update_stored_pose() -> void:
@@ -241,6 +247,8 @@ func _set_grip_pose() -> void:
 		"Pinky": [42.0, 46.0, 28.0]
 	}
 	saved_rotations.clear()
+	saved_angles.clear()
+	saved_axes.clear()
 	for finger in angles:
 		var values: Array = angles[finger]
 		for i in range(values.size()):
@@ -253,7 +261,7 @@ func _set_grip_pose() -> void:
 	handle_toggle.text = "РУКОЯТЬ: ПОКАЗАНО"
 	handle_status.text = "Тестова поза: %d суглобів. Перевір перетини." % saved_rotations.size()
 	angle_slider.set_value_no_signal(0.0)
-	angle_value.text = "Кут: 0° (поправка)"
+	angle_value.text = "Кут: 0° (вибери суглоб для корекції)"
 
 
 func _choose_finger_joint(joint: int) -> void:
@@ -266,10 +274,14 @@ func _choose_finger_joint(joint: int) -> void:
 	if index < 0:
 		return
 	selected.clear()
+	# Temporarily empty the selection while changing axis: the axis button
+	# handler would otherwise overwrite a previously tuned grip rotation.
+	_select_axis(int(saved_axes.get(index, 0)))
 	selected.append(index)
 	part_name.text = ("%s %s — суглоб %d" % [selected_hand, current_finger, joint])
-	angle_slider.set_value_no_signal(0.0)
-	angle_value.text = "Кут: 0° (поправка)"
+	var degrees := float(saved_angles.get(index, 0.0))
+	angle_slider.set_value_no_signal(degrees)
+	angle_value.text = "Кут: %d° (суглоб %d)" % [int(degrees), joint]
 
 
 func _setup_ui() -> void:
@@ -477,6 +489,8 @@ func _step_selection(delta: int) -> void:
 
 
 func _select_hand(side: String) -> void:
+	if selected_hand != side:
+		_reset_pose()
 	selected_hand = side
 	_position_handle()
 	_select_finger("Index")
@@ -560,12 +574,27 @@ func _on_part_changed(item_index: int) -> void:
 	elif label_text.begins_with("Права"):
 		selected_hand = "Right"
 	hand_name.text = "Ліва рука" if selected_hand == "Left" else "Права рука"
-	angle_slider.set_value_no_signal(0.0)
-	angle_value.text = "Кут: 0°"
-	# Thumb bending is primarily checked on the X hinge. On a mirrored hand,
-	# the same positive X angle needs the opposite local rotation sign.
+	# Switching selection must NOT reset the other joints' saved grip pose.
+	var finger_label := {
+		"великий":"Thumb", "вказівний":"Index", "середній":"Middle",
+		"безіменний":"Ring", "мізинець":"Pinky", "всі пальці":"All"
+	}
+	for key in finger_label:
+		if label_text.ends_with(" — " + String(key)):
+			current_finger = String(finger_label[key])
+			break
+	var chosen := selected[0] if not selected.is_empty() else -1
+	var axis := int(saved_axes.get(chosen, 0)) if chosen >= 0 and not label_text.begins_with("Суглоб") else selected_axis
+	selected_axis = axis
+	for i in range(axis_buttons.size()):
+		axis_buttons[i].text = ("● " if i == selected_axis else "") + ["X","Y","Z"][i]
+	var degrees := float(saved_angles.get(chosen, 0.0))
+	angle_slider.set_value_no_signal(degrees)
+	angle_value.text = "Кут: %d°" % int(degrees)
 	if label_text.ends_with(" — великий"):
-		_select_axis(0)
+		selected_axis = 0
+		for i in range(axis_buttons.size()):
+			axis_buttons[i].text = ("● " if i == selected_axis else "") + ["X","Y","Z"][i]
 
 
 func _adjust_angle(delta: int) -> void:
@@ -582,6 +611,8 @@ func _reset_all_bones() -> void:
 
 func _reset_pose() -> void:
 	saved_rotations.clear()
+	saved_angles.clear()
+	saved_axes.clear()
 	_reset_all_bones()
 	angle_slider.set_value_no_signal(0.0)
 	angle_value.text = "Кут: 0°"

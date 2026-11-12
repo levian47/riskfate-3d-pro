@@ -168,10 +168,14 @@ func _run() -> void:
 		and independently_selected[0] == int(lab.call("_bone_index", "mixamorig:RightHandIndex1")),
 		"Joint 1 button must select only the requested joint"):
 		return
-	angle_slider.value = 10.0
-	if not _require(rig.get_bone_pose_rotation(ring_index).angle_to(ring_candidate) < 0.001
+	var before_angle := angle_slider.value
+	if not _require(before_angle > 30.0, "Selected joint must load its preset angle"):
+		return
+	plus.pressed.emit()
+	if not _require(is_equal_approx(angle_slider.value, before_angle + 15.0)
+		and rig.get_bone_pose_rotation(ring_index).angle_to(ring_candidate) < 0.001
 		and grip_rotations.size() == 14,
-		"Per-joint tuning must preserve the other fingers' grip"):
+		"Per-joint +15 must adjust from preset without changing other fingers"):
 		return
 	var right_hand_idx := int(lab.call("_bone_index", "mixamorig:RightHand"))
 	if not _require(grip_attachment.bone_name == rig.get_bone_name(right_hand_idx),
